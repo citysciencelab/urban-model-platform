@@ -1,0 +1,66 @@
+version: "3"
+
+services:
+  nginx:
+    image: nginx:stable
+    ports:
+      - "3000:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+
+  api:
+    build: ./api
+    command: "bash ./scripts/entrypoint.sh"
+    env_file:
+      - ./api/configs/prod_environment
+      - ./geoserver/configs/postgis
+    volumes:
+      - ./api:/usr/src/app
+      - ./api/data:/usr/src/.local
+    depends_on:
+      - geoserver
+      - nginx
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.modelplatform.entrypoints=https"
+      - "traefik.http.routers.modelplatform.tls=true"
+      - "traefik.http.routers.modelplatform.tls.certresolver=lets-encr"
+      - "traefik.http.routers.modelplatform.rule=Host(`ump.domain.de`)"
+      - "traefik.http.services.modelplatform.loadbalancer.server.port=5001"
+    networks:
+      - proxy
+      - urban-model-platform
+
+  geoserver:
+    image: kartoza/geoserver:2.22.0
+    depends_on:
+      - postgis
+    volumes:
+      - ./geoserver/data/geoserver:/opt/geoserver/data_dir
+    env_file:
+      - ./geoserver/configs/geoserver
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ump-geoserver.entrypoints=https"
+      - "traefik.http.routers.ump-geoserver.tls=true"
+      - "traefik.http.routers.ump-geoserver.tls.certresolver=lets-encr"
+      - "traefik.http.routers.ump-geoserver.rule=Host(`ump-geoserver.domain.de`)"
+    networks:
+      - proxy
+      - urban-model-platform
+
+  postgis:
+    image: postgis/postgis:14-3.3
+    volumes:
+      - ./api/initializers/db:/docker-entrypoint-initdb.d:delegated
+      - ./geoserver/data/pg_data:/var/lib/postgresql/data
+    env_file:
+      - ./geoserver/configs/postgis
+    networks:
+      - urban-model-platform
+
+networks:
+    proxy:
+        external: true
+    urban-model-platform:
+        external: true
