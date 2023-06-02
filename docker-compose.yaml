@@ -15,8 +15,8 @@ services:
       - ./api/configs/dev_environment
       - ./geoserver/configs/postgis
     volumes:
-      - ./api:/home/python/workspace
-      - ./api/data:/home/python/.local
+      - ./api:/usr/src/app
+      - ./api/data:/usr/src/.local
     depends_on:
       - geoserver
       - nginx

@@ -5,17 +5,16 @@
 # then provide https://example.org/rest/api as url.
 # This file should be considered as a secret.
 
-# Look for "CUT" in 1password for credentials (stored in "team")
-cut:
-  url: "https://api-processes.cut.hcu-hamburg.de"
-  user: "cut"
+modelserver-1:
+  url: "https://modelserver1.de"
+  user: "user"
   password: "password"
   timeout:  1800
   exclude:
-    - "abm-test-model"
+    - "model-1"
 
-modelplatform:
-  url: "https://modelplatform.cut.hcu-hamburg.de"
-  user: "cut"
+modelserver-2:
+  url: "https://modelserver2.de"
+  user: "user"
   password: "password"
   timeout:  1800
