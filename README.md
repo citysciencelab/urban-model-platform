@@ -1,4 +1,4 @@
-![Urban Model Platform](https://github.com/citysciencelab/urban-model-platform/assets/61881523/262b510c-acd6-4374-9bfd-5e39160d0c54)
+![Urban Model Platform](https://github.com/citysciencelab/urban-model-platform/assets/61881523/262b510c-acd6-4374-9bfd-5e39160d0c54 | width=400))
 
 # Urban Model Platform
 The repository contains a Python implementation of the OGC API Processes standard that can be used as a "system of systems" open platform. In the context of digital urban twins, such a platform can provide the infrastructure to integrate and combine domain-specific models ranging from simple regression models to advanced simulation or AI models. 
