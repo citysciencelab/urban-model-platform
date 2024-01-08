@@ -1,4 +1,4 @@
-FROM python:3
+FROM python:3.11
 
 RUN apt update && apt upgrade -y
 RUN apt install -qq -y --no-install-recommends \
