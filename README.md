@@ -72,11 +72,9 @@ A production ready container for the frontend is configured under `frontend_prod
 ## Routes
 If not configured differently in nginx/default.conf, then:
 
-The **frontend** is available under localhost:3000. Click on the link "portal" -> "simulation" and then choose "Werkzeuge" -> "Simulation Tool".
-
 The **Geoserver** is available under localhost:3000/geoserver. Choose "Layer previews" in the menu to see the list of uploaded layers. If you click on OpenLayers then the data will be displayed in a new tab.
 
-The **backend api** is available under localhost:3000/api.
+The **backend api** is available under localhost:3000/api. The processes from the different model servers connected are available under localhost:3000/api/processes
 
 ## Deployment
 After configurations are done for production, for deployment you can run
