@@ -156,7 +156,7 @@ class Process():
 
       if response.ok and response.headers:
         # Retrieve the job id from the simulation model server from the location header:
-        match = re.search('http.*/jobs/(.*)$', response.headers["location"])
+        match = re.search('http.*/jobs/(.*)$', response.headers["location"]) or re.search('.*/jobs/(.*)$', response.headers["location"])
         if match:
           remote_job_id = match.group(1)
 
