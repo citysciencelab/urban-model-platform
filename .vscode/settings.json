@@ -1,0 +1,24 @@
+{
+
+    "black-formatter.args": [
+        "--line-length",
+        "88",
+        "--preview"
+    ],
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": true
+        }
+    },
+    "python.formatting.provider": "none",
+    "isort.check": true,
+    "isort.args": [
+        "--profile",
+        "black"
+    ],
+    "ruff.importStrategy": "fromEnvironment",
+    "black-formatter.importStrategy": "fromEnvironment",
+    "black-formatter.showNotification": "on"
+}

@@ -1,0 +1,14 @@
+secrets:
+  MY_SECRET1:
+    file: ./secrets/my_secret_1.txt
+
+services:
+  app:
+    image: lgvudh.azurecr.io/analytics/
+    secrets:
+      - MY_SECRET1
+    restart: "unless_stopped"
+    environment:
+      MY_ENV_VAR1: example
+    ports:
+      - 12345:12345

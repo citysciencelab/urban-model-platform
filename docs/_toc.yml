@@ -1,0 +1,38 @@
+# Table of contents
+# Learn more at https://jupyterbook.org/customize/toc.html
+
+format: jb-book
+root: content/index.md
+parts:
+  - caption: User Guide
+    chapters:
+      - file: content/user_guide/deployment overview.md
+      - file: content/user_guide/configuration_options.md
+      - file: content/user_guide/setup_docker_compose.md
+        # sections:
+        # - file: start/overview
+
+  - caption: Technical background
+    chapters:
+      - file: content/technical_background/requirements.md
+      - file: content/technical_background/implementation.md
+        # sections:
+        # - file: start/overview
+
+  - caption: Developer zone
+    chapters:
+      - title: Setup development environment.md
+        file: content/developers/dev_environment_setup.md
+
+      - title: Some useful commands.md
+        file: content/developers/useful_commands.md
+
+      - title: API reference
+        file: autoapi/index # this directory is virtual!
+
+  - caption: About
+    chapters:
+      # - file: start/your-first-book
+      # sections:
+      - file: content/about/project_description.md
+      - file: content/about/authors.md

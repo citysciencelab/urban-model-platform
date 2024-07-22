@@ -1,0 +1,20 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v0.0.29
+_src_path: git+https://StefanSchuhart@bitbucket.org/geowerkstatt-hamburg/python_project_template
+author_email: stefan.schuhart@gv.hamburg.de
+author_fullname: Stefan Schuhart
+author_git_username: StefanSchuhart
+create_global_environment: false
+create_project_environment: true
+docker_image_distribution: bookworm
+initial_commit: true
+is_datascience_project: false
+package_manager: poetry
+project_description: server federation api, OGC Api Processes-based to connect model
+    servers and centralize access to them
+project_name: urban-model-platform
+python_package_distribution_name: urban-model-platform
+python_package_import_name: urban_model_platform
+python_version: '3.11'
+repository_namespace: geowerkstatt-hamburg
+repository_provider: github.com

@@ -1,0 +1,14 @@
+secrets:
+  MY_SECRET1:
+    file: ./secrets/my_secret_1.txt
+services:
+  app:
+    image: ${CONTAINER_REGISTRY}/analytics/${IMAGE_NAME}:${IMAGE_TAG}
+    secrets:
+      - MY_SECRET1
+    restart: "unless-stopped"
+    environment:
+      MY_ENV_VAR1: ${MY_ENV_VAR1}
+    ports:
+      - ${WEBAPP_PORT_CONTAINER}:${WEBAPP_PORT}
+    command: ['src/app.py']
