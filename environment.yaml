@@ -1,0 +1,7 @@
+name: shared-mobility-data-etl
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - poetry=1.8
+  - copier=9
