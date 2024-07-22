@@ -1,6 +1,6 @@
-from src.db_handler import DBHandler
-from src.job_status import JobStatus
-from src.job import Job
+from ump.api.db_handler import DBHandler
+from ump.api.job_status import JobStatus
+from ump.api.job import Job
 import re
 
 def get_jobs(args):

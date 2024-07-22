@@ -1,17 +1,22 @@
 from datetime import datetime
 import uuid
 import json
-import configs.config as config
-from src.db_handler import DBHandler
-from src.job_status import JobStatus
+import ump.config as config
+from ump.api.db_handler import DBHandler
+from ump.api.job_status import JobStatus
 import requests
 import logging
 import yaml
 import geopandas as gpd
 import re
-from src.errors import InvalidUsage, CustomException
+from ump.errors import InvalidUsage, CustomException
 
-PROVIDERS = yaml.safe_load(open('./configs/providers.yml'))
+PROVIDERS: dict = {}
+
+with open(config.PROVIDERS_FILE) as file:
+  PROVIDERS.update(
+    yaml.safe_load(file)
+  )
 
 class Job:
   DISPLAYED_ATTRIBUTES = [

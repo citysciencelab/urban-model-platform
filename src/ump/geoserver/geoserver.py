@@ -3,8 +3,8 @@ import geopandas as gpd
 from sqlalchemy import create_engine
 from psycopg2.sql import Identifier
 
-import configs.config as config
-from src.errors import GeoserverException
+import ump.config as config
+from ump.errors import GeoserverException
 
 import os
 import shutil

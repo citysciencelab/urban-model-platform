@@ -4,9 +4,9 @@ from werkzeug.exceptions import HTTPException
 
 import json
 import os
-from routes.processes import processes
-from routes.jobs import jobs
-from src.errors import CustomException
+from ump.api.processes import processes
+from ump.api.routes.jobs import jobs
+from ump.errors import CustomException
 from logging.config import dictConfig
 
 dictConfig({

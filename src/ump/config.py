@@ -1,5 +1,7 @@
 import os
 
+PROVIDERS_FILE = os.environ.get("PROVIDERS_FILE", "providers.yml")
+
 api_server_url = os.environ.get("API_SERVER_URL", "localhost:3000")
 
 # DATABASE
