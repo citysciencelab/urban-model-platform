@@ -5,7 +5,11 @@ build-backend = "poetry.core.masonry.api"
 [project]
 name = "urban-model-platform"
 description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
-authors = [{name = "Stefan Schuhart", email = "stefan.schuhart@gv.hamburg.de"}]
+authors = [
+    { name = "Rico Herzog", email = "rico.herzog@hcu-hamburg.de"},
+    { name = "Maja Richter", email = "maja.richter@gv.hamburg.de" },
+    { name = "Stefan Schuhart", email = "stefan.schuhart@gv.hamburg.de" }
+]
 readme = "README.md"
 requires-python = ">=3.10"
 keywords = []
@@ -16,10 +20,9 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Analytics",
+    "Topic :: Urban Modelling",
     "Topic :: Software Development",
     "Topic :: Utilities",
     "Typing :: Typed",
@@ -27,10 +30,10 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://geowerkstatt-hamburg.github.io/urban-model-platform"
-Documentation = "https://geowerkstatt-hamburg.github.io/urban-model-platform"
-Changelog = "https://geowerkstatt-hamburg.github.io/urban-model-platform/changelog"
-Repository = "https://github.com/geowerkstatt-hamburg/urban-model-platform"
+Homepage = "https://citysciencelab.github.io/urban-model-platform"
+Documentation = "https://github.com/citysciencelab/urban-model-platform"
+Changelog = "https://github.com/citysciencelab/urban-model-platform/changelog.md"
+Repository = "https://github.com/citysciencelab/urban-model-platform"
 
 [tool.ruff]
 # Enable the pycodestyle (`E`) and Pyflakes (`F`) rules by default.
@@ -40,7 +43,7 @@ select = ["E", "F"]
 # same as isort, black
 line-length = 88
 # Assume Python 3.8
-target-version = "py310"
+target-version = "py311"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
@@ -67,14 +70,23 @@ exclude = [
 ]
 
 [tool.poetry]
-name = "urban-model-platform"
-version = "0.1.0"
+name = "ump"
+version = "1.1.0"
 description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
 authors = ["Stefan Schuhart <stefan.schuhart@gv.hamburg.de>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<4.0"
+python = ">=3.11,<3.13"
+werkzeug = "^3.0.3"
+flask = "^3.0.3"
+flask-cors = "^4.0.1"
+requests = "^2.32.3"
+aiohttp = "^3.9.5"
+psycopg2-binary = "^2.9.9"
+numpy = "~=1.26.4"
+geopandas = "^1.0.1"
+geoalchemy2 = "^0.15.2"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests
@@ -110,5 +122,5 @@ multi_line_output = 3
 force_single_line = false
 balanced_wrapping = true
 default_section = "THIRDPARTY"
-known_first_party = "urban-model-platform"
+known_first_party = "ump"
 include_trailing_comma = true
