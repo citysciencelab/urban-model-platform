@@ -19,6 +19,13 @@ ENV POETRY_NO_INTERACTION=1 \
 COPY pyproject.toml poetry.lock ./
 RUN --mount=type=cache,target=$POETRY_CACHE_DIR poetry install --without=dev --no-root
 
+# maybe needed for psycopg2
+# RUN apt update \
+#     && apt upgrade -y \
+#     && apt install -qq -y --no-install-recommends \
+#     libpq-dev gdal-bin libgdal-dev \
+#     && apt clean
+
 COPY src ./src
 RUN touch README.md \
     && poetry build \
