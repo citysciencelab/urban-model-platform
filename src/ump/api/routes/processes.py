@@ -1,6 +1,6 @@
 from flask import Response, Blueprint, request
-from src.processes import all_processes
-from src.process import Process
+from ump.api.processes import all_processes
+from ump.api.process import Process
 import json
 import asyncio
 
