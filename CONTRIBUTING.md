@@ -3,13 +3,21 @@
 Contributions are welcome, and they are greatly appreciated!
 Every little bit helps, and credit will always be given.
 
-## Initial dev environment setup
+If you have a suggestion for improvements, please fork the repo and create a pull request. You can also simply open an issue. Don't forget to rate the project! Thanks again!
+
+1. Fork the Project
+1. Create your Feature Branch (git checkout -b feature/AmazingFeature)
+1. Commit your Changes (git commit -m 'Add some AmazingFeature')
+1. Push to the Branch (git push origin feature/AmazingFeature)
+1. Open a Pull Request
+
+## Dev environment setup
 
 ### Initial setup
 You only need two tools, [Poetry](https://github.com/python-poetry/poetry)
 and [Copier](https://github.com/copier-org/copier).
 
-Poetry is used an a package manager. Copier is used for the project structure (scaffolding).
+Poetry is used as a package manager. Copier is used for the project structure (scaffolding).
 
 Install with pip:
 ```bash
