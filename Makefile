@@ -45,3 +45,8 @@ install_prod:
 	sudo docker compose -f docker-compose.prod.yaml build api
 	sudo docker compose -f docker-compose.prod.yaml run --rm api pip install --user --upgrade --no-cache-dir -r requirements.txt
 	
+build-docs:
+	jupyter-book build docs
+
+clean-docs:
+	jupyter-book clean docs
