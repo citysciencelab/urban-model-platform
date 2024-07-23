@@ -1,11 +1,2 @@
-# How to setup your development environment
-
-## create python environment
-
+```{include} ../../../CONTRIBUTING.md
 ```
-poetry init
-poetry add xxx
-poetry install
-```
-
-##

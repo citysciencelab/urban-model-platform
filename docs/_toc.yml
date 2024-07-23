@@ -21,7 +21,7 @@ parts:
 
   - caption: Developer zone
     chapters:
-      - title: Setup development environment.md
+      - title: Setup development environment
         file: content/developers/dev_environment_setup.md
 
       - title: Some useful commands.md
