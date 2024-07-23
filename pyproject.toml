@@ -106,8 +106,8 @@ pre-commit = ">=3.4.0,<4"
 optional = true
 
 [tool.poetry.group.docs.dependencies]
-jupyter-book = "^0.15"
-sphinx-autoapi = "^2"
+jupyter-book = "^1"
+sphinx-autoapi = "^3"
 sphinxcontrib-autoyaml = "^1.1"
 
 [tool.black]
