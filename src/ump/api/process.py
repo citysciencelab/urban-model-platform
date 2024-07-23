@@ -7,6 +7,7 @@ from multiprocessing import dummy
 
 import requests
 import yaml
+
 import ump.config as config
 from ump.api.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
@@ -17,10 +18,9 @@ logging.basicConfig(level=logging.INFO)
 PROVIDERS: dict = {}
 
 with open(config.PROVIDERS_FILE) as file:
-  if content:=yaml.safe_load(file):
-    PROVIDERS.update(
-        content
-  )
+    if content := yaml.safe_load(file):
+        PROVIDERS.update(content)
+
 
 class Process:
     def __init__(self, process_id_with_prefix=None):
