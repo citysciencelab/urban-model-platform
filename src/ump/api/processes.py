@@ -8,8 +8,9 @@ import yaml
 PROVIDERS: dict = {}
 
 with open(config.PROVIDERS_FILE) as file:
-  PROVIDERS.update(
-    yaml.safe_load(file)
+  if content:=yaml.safe_load(file):
+    PROVIDERS.update(
+        content
   )
 
 
