@@ -317,9 +317,6 @@ class Process:
     def is_finished(self, job_details):
         finished = False
 
-        if "job_end_datetime" in job_details and job_details["job_end_datetime"]:
-            finished = True
-
         if "finished" in job_details and job_details["finished"]:
             finished = True
 
