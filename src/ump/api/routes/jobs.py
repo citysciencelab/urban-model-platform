@@ -1,6 +1,6 @@
 from flask import Response, Blueprint, request
-from src.job import Job
-from src.jobs import get_jobs
+from ump.api.job import Job
+from ump.api.jobs import get_jobs
 import json
 
 jobs = Blueprint('jobs', __name__)
