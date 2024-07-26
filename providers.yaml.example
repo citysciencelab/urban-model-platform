@@ -1,0 +1,14 @@
+# This is the configuration file for setting up simulation servers.
+# The servers should provide an OGC processes api which will be retrieved
+# on the fly to provide all existing processes via this api. Please provide the base url
+# of the api, e.g. if there is an endpoint https://example.org/rest/api/processes
+# then provide https://example.org/rest/api as url.
+# This file should be considered as a secret.
+
+modelserver:
+    url: "http://localhost:5005"
+    user: "user"
+    password: "password"
+    timeout:  1800
+    exclude:
+      - "model-1"

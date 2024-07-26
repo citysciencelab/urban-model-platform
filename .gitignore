@@ -2,6 +2,9 @@
 */.DS_Store
 .DS_Store
 
+# Project-related
+providers.yaml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -19,6 +19,7 @@ and [Copier](https://github.com/copier-org/copier).
 
 Poetry is used as a package manager. Copier is used for the project structure (scaffolding).
 
+
 Install with pip:
 ```bash
 python3 -m pip install --user pipx
@@ -29,10 +30,19 @@ pipx install copier copier-templates-extensions
 Or create a new environment with conda/mamba:
 
 ```bash
-conda install -f environment.yaml -p ./.venv
+conda env create -f environment.yaml -p ./.venv
 ```
 
+If you have a conda environment and want to use the Makefile, use following command: 
+```bash
+make initiate-dev
+``` 
+
 A conda [environment.yaml](./environment.yaml) is provided inside this repo.
+
+In order to create an external docker network to connect your containers to, run:
+`docker network create dev`
+
 
 ### Dev setup
 
@@ -41,6 +51,12 @@ Install the projects code and all dependencies with:
 ```bash
 poetry install
 ```
+In order to run an example modelserver, git submodule is used and needs to be initiated:
+`git submodule init`
+`git submodule update --recursive`
+
+In this folder you can find build instructions to build a container with OGC API Processes compliant example processes based on pygeoapi. Those can be utilized as example processes for the Urban Model Platform. 
+
 
 ## Running tests
 
@@ -60,3 +76,18 @@ make build-docs
 ```
 
 To view the docs copy the content of the [docs/_build](./docs/_build) folder to a webserver or use VSCode and the [Live server extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.live-server).
+
+## Start Flask App
+flask -A src/ump/main.py --debug run
+
+## Package Management
+Poetry is used as a package manager, you can add packages with:
+`poetry add PACKAGE-NAME`
+
+You can remove packages by using:
+`poetry remove PACKAGE-NAME`
+
+Packages can be updated with: 
+`poetry update PACKAGE-NAME`
+
+
