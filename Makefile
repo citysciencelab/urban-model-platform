@@ -4,6 +4,9 @@ SHELL=/bin/bash
 
 config ?= .env
 
+# Überprüfen und erstellen der .env-Datei, falls sie nicht existiert
+$(shell [ -f $(config) ] || cp .env.example $(config))
+
 include $(config)
 export $(shell sed 's/=.*//' $(config))
 
@@ -14,9 +17,13 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD)
 
 
 initiate-dev:
-	conda env create -f environment.yaml -p ./.venv
-	cp providers.yaml.example providers.yaml -n
-	cp .env.example .env -n
+	@if [ ! -d ./.venv ]; then \
+		conda env create -f environment.yaml -p ./.venv; \
+    fi
+
+	[ -f providers.yaml ] || cp providers.yaml.example providers.yaml
+	[ -f .env ] || cp .env.example .env	
+
 
 build-image:
 	@echo 'Building release ${CONTAINER_REGISTRY}/analytics/$(IMAGE_NAME):$(IMAGE_TAG)'
