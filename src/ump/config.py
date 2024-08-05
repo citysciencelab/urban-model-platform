@@ -3,6 +3,7 @@ import os
 PROVIDERS_FILE = os.environ.get("PROVIDERS_FILE", "providers.yaml")
 
 api_server_url = os.environ.get("API_SERVER_URL", "localhost:3000")
+fetch_job_results_interval = os.environ.get("FETCH_JOB_RESULTS_INTERVAL", 5)
 
 # DATABASE
 postgres_db = os.environ.get("POSTGRES_DB", "cut_dev")
@@ -12,7 +13,9 @@ postgres_password = os.environ.get("POSTGRES_PASSWORD", "postgres")
 postgres_port = os.environ.get("POSTGRES_PORT", "5432")
 
 # GEOSERVER
-geoserver_base_url = os.environ.get("GEOSERVER_BASE_URL", "http://geoserver:8080/geoserver")
+geoserver_base_url = os.environ.get(
+    "GEOSERVER_BASE_URL", "http://geoserver:8080/geoserver"
+)
 
 geoserver_rest_url = f"{geoserver_base_url}/rest"
 geoserver_workspaces_url = f"{geoserver_rest_url}/workspaces"
