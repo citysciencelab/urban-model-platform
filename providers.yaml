@@ -1,0 +1,7 @@
+modelserver:
+    url: "http://modelserver:5000"
+    user: "user"
+    password: "password"
+    timeout:  1800
+    exclude:
+      - "model-1"

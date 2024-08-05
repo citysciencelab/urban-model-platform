@@ -1,0 +1,56 @@
+networks:
+  dev:
+    external: true
+    name: ${DOCKER_NETWORK}
+services:
+  app:
+    image: ${CONTAINER_REGISTRY}/${CONTAINER_NAMESPACE}/${IMAGE_NAME}:${IMAGE_TAG}
+    restart: "unless-stopped"
+    env_file:
+    - path: .env
+      required: true # default
+    ports:
+      - ${WEBAPP_PORT_EXTERNAL}:5001
+    command: ['src/app.py']
+    networks:
+      - dev
+  
+  postgis:
+    image: postgis/postgis:14-3.3
+    volumes:
+      - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
+    #   - ./geoserver/data/pg_data:/var/lib/postgresql/data
+    env_file:
+    - path: .env
+      required: true # default
+    networks:
+      - dev
+
+  geoserver:
+    image: kartoza/geoserver:2.22.0
+    depends_on:
+      - postgis
+    # volumes:
+    #   - ./geoserver/data/geoserver:/opt/geoserver/data_dir
+    env_file:
+    - path: .env
+      required: true # default
+    networks:
+      - dev
+
+  modelserver:
+    image: ${CONTAINER_REGISTRY}/${CONTAINER_NAMESPACE}/ogcapi_processes_example:0.0.4
+    env_file:
+    - path: .env
+      required: true # default
+    volumes:
+      - ./modelserver_example/pygeoapi-config.yml:/home/pythonuser/pygeoapi-config.yaml
+      - ./modelserver_example/example-openapi.yml:/home/pythonuser/pygeoapi-openapi.yaml
+    ports:
+      - ${PYGEOAPI_SERVER_PORT_CONTAINER}:${PYGEOAPI_SERVER_PORT}
+    command: [
+      '/bin/bash', '-c',
+      'pygeoapi openapi generate /home/pythonuser/pygeoapi-config.yaml --output-file /home/pythonuser/pygeoapi-openapi.yaml && pygeoapi serve --flask'
+    ]
+    networks:
+      - dev

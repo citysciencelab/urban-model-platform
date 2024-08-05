@@ -1,0 +1,126 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "urban-model-platform"
+description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
+authors = [
+    { name = "Rico Herzog", email = "rico.herzog@hcu-hamburg.de"},
+    { name = "Maja Richter", email = "maja.richter@gv.hamburg.de" },
+    { name = "Stefan Schuhart", email = "stefan.schuhart@gv.hamburg.de" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = []
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Urban Modelling",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://citysciencelab.github.io/urban-model-platform"
+Documentation = "https://github.com/citysciencelab/urban-model-platform"
+Changelog = "https://github.com/citysciencelab/urban-model-platform/changelog.md"
+Repository = "https://github.com/citysciencelab/urban-model-platform"
+
+[tool.ruff]
+# Enable the pycodestyle (`E`) and Pyflakes (`F`) rules by default.
+# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
+# McCabe complexity (`C901`) by default.
+select = ["E", "F"]
+# same as isort, black
+line-length = 88
+# Assume Python 3.8
+target-version = "py311"
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+[tool.poetry]
+name = "ump"
+version = "1.1.0"
+description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
+authors = ["Stefan Schuhart <stefan.schuhart@gv.hamburg.de>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+werkzeug = "^3.0.3"
+flask = "^3.0.3"
+flask-cors = "^4.0.1"
+requests = "^2.32.3"
+aiohttp = "^3.9.5"
+psycopg2-binary = "^2.9.9"
+numpy = "~=1.26.4"
+geopandas = "^1.0.1"
+geoalchemy2 = "^0.15.2"
+
+[tool.poetry.group.dev.dependencies]
+# formatting, quality, tests
+autoflake = ">=1.4"
+black = ">=23.7"
+isort = ">=5.7.0"
+mypy = ">=0.812"
+pytest = ">=6.2.2"
+pytest-cov = ">=2.11.1"
+pytest-randomly = ">=3.5.0"
+pytest-sugar = ">=0.9.4,<1"
+pytest-xdist = ">=2.2.0,<3"
+types-toml = ">=0.10.1,<1"
+pre-commit = ">=3.4.0,<4"
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+jupyter-book = "^1"
+sphinx-autoapi = "^3"
+sphinxcontrib-autoyaml = "^1.1"
+
+[tool.black]
+line-length = 88
+exclude = "tests/fixtures"
+
+[tool.isort]
+profile = "black"
+line_length = 88
+not_skip = "__init__.py"
+multi_line_output = 3
+force_single_line = false
+balanced_wrapping = true
+default_section = "THIRDPARTY"
+known_first_party = "ump"
+include_trailing_comma = true

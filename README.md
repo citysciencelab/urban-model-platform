@@ -86,3 +86,9 @@ It will use the provided docker-compose.prod.yaml file together with the nginx d
 
 ## Reset data in development
 If you are in development and want to reset all PostGis and Geoserver data, you can safely delete the geoserver/data folder completely.
+
+## Try it out
+
+```bash
+curl localhost:5003/api/processes/modelserver:squareroot/execution -H "Content-Type: application/json" -d '{"inputs": {"number": 4}}'
+```

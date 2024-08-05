@@ -1,0 +1,3 @@
+[submodule "modelserver_example"]
+	path = modelserver_example
+	url = https://github.com/StefanSchuhart/modelserver_example
