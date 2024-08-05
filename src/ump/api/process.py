@@ -168,6 +168,7 @@ class Process:
         return result
 
     def start_process_execution(self, params):
+
         params["mode"] = "async"
         p = PROVIDERS[self.provider_prefix]
 
@@ -210,6 +211,9 @@ class Process:
             raise CustomException(f"Job could not be started remotely: {e}")
 
     def _wait_for_results(self, job):
+
+        logging.info(" --> Waiting for results in Thread")
+
         finished = False
         p = PROVIDERS[self.provider_prefix]
         timeout = float(p["timeout"])
@@ -230,6 +234,7 @@ class Process:
                 job_details = response.json()
 
                 finished = self.is_finished(job_details)
+                logging.info(" --> Current Job status: " + str(job_details))
 
                 job.progress = job_details["progress"]
                 job.updated = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -239,6 +244,8 @@ class Process:
                     raise TimeoutError(
                         f"Job did not finish within {timeout/60} minutes. Giving up."
                     )
+
+                time.sleep(config.fetch_job_results_interval)
 
             logging.info(
                 f" --> Remote execution job {job.remote_job_id}: success = {finished}. Took approx. {int((time.time() - start)/60)} minutes."
@@ -320,7 +327,11 @@ class Process:
         if "finished" in job_details and job_details["finished"]:
             finished = True
 
-        if job_details["status"] in [JobStatus.dismissed.value, JobStatus.failed.value]:
+        if job_details["status"] in [
+            JobStatus.dismissed.value,
+            JobStatus.failed.value,
+            JobStatus.successful.value,
+        ]:
             finished = True
 
         return finished
