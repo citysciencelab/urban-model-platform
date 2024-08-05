@@ -34,7 +34,11 @@ upload-image: build-image
 	docker compose -f docker-compose-build.yaml push app
 
 start-dev: stop-dev
-	docker compose -f docker-compose-dev.yaml up geoserver postgis modelserver
+	docker compose -f docker-compose-dev.yaml up geoserver postgis -d
+	flask -A src/ump/main.py --debug run
+
+start-dev-with-modelserver: stop-dev
+	docker compose -f docker-compose-dev.yaml up geoserver postgis modelserver -d
 	flask -A src/ump/main.py --debug run
 
 restart-dev: stop-dev start-dev
