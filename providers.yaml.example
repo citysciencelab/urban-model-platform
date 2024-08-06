@@ -1,14 +1,18 @@
 # This is the configuration file for setting up simulation servers.
 # The servers should provide an OGC processes api which will be retrieved
-# on the fly to provide all existing processes via this api. Please provide the base url
-# of the api, e.g. if there is an endpoint https://example.org/rest/api/processes
-# then provide https://example.org/rest/api as url.
-# This file should be considered as a secret.
+# Only processes listed in this configuration file will also appear on the UMP
+# One can also exclude processes manually by providing the "exclude" attribute
 
-modelserver:
+modelserver-1:
     url: "http://localhost:5005"
-    user: "user"
-    password: "password"
-    timeout:  1800
-    exclude:
-      - "model-1"
+    name: "CSL Test Modelserver"
+    authentication:
+      type: "BasicAuth"
+      user: "user"
+      password: "password"
+    timeout:  60
+    processes:
+      - process-1:
+        - geoserver: True
+      - process-2
+        - exclude: True
