@@ -6,7 +6,6 @@
 modelserver-1:
     url: "http://localhost:5005"
     name: "CSL Test Modelserver"
-    url: "https://modelserver-url.de"
     authentication:
       type: "BasicAuth"
       user: "user"

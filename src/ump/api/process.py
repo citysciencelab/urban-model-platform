@@ -45,9 +45,15 @@ class Process:
     def set_details(self):
         p = PROVIDERS[self.provider_prefix]
 
+        # Check for Authentification
+        auth = None
+        if "authentication" in p:
+            if p["authentication"]["type"] == "BasicAuth":
+                auth = (p["authentication"]["user"], p["authentication"]["password"])
+
         response = requests.get(
             f"{p['url']}/processes/{self.process_id}",
-            auth=(p["user"], p["password"]),
+            auth=auth,
             headers={"Content-type": "application/json", "Accept": "application/json"},
         )
 
@@ -173,10 +179,19 @@ class Process:
         p = PROVIDERS[self.provider_prefix]
 
         try:
+
+            auth = None
+            if "authentication" in p:
+                if p["authentication"]["type"] == "BasicAuth":
+                    auth = (
+                        p["authentication"]["user"],
+                        p["authentication"]["password"],
+                    )
+
             response = requests.post(
                 f"{p['url']}/processes/{self.process_id}/execution",
                 json=params,
-                auth=(p["user"], p["password"]),
+                auth=auth,
                 headers={
                     "Content-type": "application/json",
                     "Accept": "application/json",
