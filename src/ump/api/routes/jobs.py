@@ -1,22 +1,28 @@
-from flask import Response, Blueprint, request
-from ump.api.job import Job
-from ump.api.jobs import get_jobs
+import asyncio
 import json
 
-jobs = Blueprint('jobs', __name__)
+from flask import Blueprint, Response, request
 
-@jobs.route('/', defaults={'page': 'index'})
+from ump.api.job import Job
+from ump.api.jobs import get_jobs
+
+jobs = Blueprint("jobs", __name__)
+
+
+@jobs.route("/", defaults={"page": "index"})
 def index(page):
-  args = request.args.to_dict(flat=False) if request.args else {}
-  result = get_jobs(args)
-  return Response(json.dumps(result), mimetype='application/json')
+    args = request.args.to_dict(flat=False) if request.args else {}
+    result = get_jobs(args)
+    return Response(json.dumps(result), mimetype="application/json")
 
-@jobs.route('/<path:job_id>', methods = ['GET'])
+
+@jobs.route("/<path:job_id>", methods=["GET"])
 def show(job_id=None):
-  job = Job(job_id)
-  return Response(json.dumps(job.display()), mimetype='application/json')
+    job = Job(job_id)
+    return Response(json.dumps(job.display()), mimetype="application/json")
 
-@jobs.route('/<path:job_id>/results', methods = ['GET'])
+
+@jobs.route("/<path:job_id>/results", methods=["GET"])
 def results(job_id=None):
-  job = Job(job_id)
-  return Response(json.dumps(job.results()), mimetype='application/json')
+    job = Job(job_id)
+    return Response(json.dumps(asyncio.run(job.results())), mimetype="application/json")

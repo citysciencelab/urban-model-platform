@@ -12,7 +12,9 @@ modelserver-1:
       password: "password"
     timeout:  60
     processes:
-      - process-1:
-        - geoserver: True
-      - process-2
-        - exclude: True
+      process-1:
+        result-storage: "geoserver"
+      process-2
+        result-storage: "remote"
+      process-3
+        exclude: True

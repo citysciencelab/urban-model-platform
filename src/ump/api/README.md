@@ -11,11 +11,31 @@ https://developer.ogc.org/api/processes/index.html#tag/JobList
 For convenience there is still some documentation below.
 
 ## Setup
-Please copy api/configs/dev_environment.example to api/configs/dev_environment and provide credentials.
+Also the list of providers delivering the OGC API Processes  have to be configured in [providers.yaml](../../../providers.yaml.example) along with the processes that the UMP should provide. The structure looks as following: 
 
-Also the list of providers delivering the OGC processes api have to be configured in providers.yml. See providers.yml.example as example. It contains credentials!
+```
+modelserver-1:
+    url: "http://localhost:5005"
+    name: "CSL Test Modelserver"
+    authentication:
+      type: "BasicAuth"
+      user: "user"
+      password: "password"
+    timeout:  60
+    processes:
+      process-1:
+        result-storage: "geoserver"
+      process-2
+        result-storage: "remote"
+      process-3
+        exclude: True
 
-In order to remove all data and start from scratch you can remove the folder api/data for the geoserver files and the folder ./geoserver/data to erase the postgis data. The data folders will be recreated when the docker containers start up (necessary DB table creation included).
+```
+
+For each process, it is possible to choose from result-storage options. If the attribute `result-storage` is set to `remote`, no results will be stored in the UMP itself, but provided directly from the model server. In case it is set to `geoserver`, UMP will load the geoserver component and tries to store the result data in a specific Geoserver layer. 
+
+
+
 
 ### GET api/jobs
 Example parameters:
@@ -28,7 +48,7 @@ Parameters are optional.
 
 ## Access DB
 We have two DB users:
-- the privileged POSTGRES_USER user configured in geoserver/configs/geoserver
+- the privileged POSTGRES_USER user configured in .env file
 - the user used by the API with privileges on the jobs table (e.g. see api/initializers/db/create_db_user.sh). Its credentials are configured in docker-compose.yml.
 
 ```
@@ -55,5 +75,6 @@ psql -U <username> -d <db_name>
 |  GEOSERVER_ADMIN_PASSWORD | geoserver | |
 |  GEOSERVER_BASE_URL | http://geoserver:8080/geoserver | Url to the geoserver. |
 
+TODO: UPDATE!
 
 
