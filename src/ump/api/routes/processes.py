@@ -1,23 +1,28 @@
-from flask import Response, Blueprint, request
-from ump.api.processes import all_processes
-from ump.api.process import Process
-import json
 import asyncio
+import json
 
-processes = Blueprint('processes', __name__)
+from flask import Blueprint, Response, request
 
-@processes.route('/', defaults={'page': 'index'})
+from ump.api.process import Process
+from ump.api.processes import all_processes
+
+processes = Blueprint("processes", __name__)
+
+
+@processes.route("/", defaults={"page": "index"})
 def index(page):
-  result = asyncio.run(all_processes())
-  return Response(json.dumps(result), mimetype='application/json')
+    result = asyncio.run(all_processes())
+    return Response(json.dumps(result), mimetype="application/json")
 
-@processes.route('/<path:process_id_with_prefix>', methods = ['GET'])
+
+@processes.route("/<path:process_id_with_prefix>", methods=["GET"])
 def show(process_id_with_prefix=None):
-  process = Process(process_id_with_prefix)
-  return Response(process.to_json(), mimetype='application/json')
+    process = Process(process_id_with_prefix)
+    return Response(process.to_json(), mimetype="application/json")
 
-@processes.route('/<path:process_id_with_prefix>/execution', methods = ['POST'])
+
+@processes.route("/<path:process_id_with_prefix>/execution", methods=["POST"])
 def execute(process_id_with_prefix=None):
-  process = Process(process_id_with_prefix)
-  result = process.execute(request.json)
-  return Response(json.dumps(result), status=201, mimetype='application/json')
+    process = Process(process_id_with_prefix)
+    result = process.execute(request.json)
+    return Response(json.dumps(result), status=201, mimetype="application/json")

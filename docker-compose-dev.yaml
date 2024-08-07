@@ -35,6 +35,8 @@ services:
       - postgis
     # volumes:
     #   - ./geoserver/data/geoserver:/opt/geoserver/data_dir
+    ports:
+      - ${GEOSERVER_PORT}:8080
     env_file:
     - path: .env
       required: true # default

@@ -4,29 +4,18 @@ import traceback
 import aiohttp
 import yaml
 
+import ump.api.providers as providers
 import ump.config as config
-
-PROVIDERS: dict = {}
-
-with open(config.PROVIDERS_FILE) as file:
-    if content := yaml.safe_load(file):
-        PROVIDERS.update(content)
 
 
 async def all_processes():
     processes = {}
     async with aiohttp.ClientSession() as session:
-        for provider in PROVIDERS:
+        for provider in providers.PROVIDERS:
             try:
-                p = PROVIDERS[provider]
+                p = providers.PROVIDERS[provider]
 
-                # Check for Authentification
-                auth = None
-                if "authentication" in p:
-                    if p["authentication"]["type"] == "BasicAuth":
-                        auth = aiohttp.BasicAuth(
-                            p["authentication"]["user"], p["authentication"]["password"]
-                        )
+                auth = providers.authenticate_provider(p)
 
                 response = await session.get(
                     f"{p['url']}/processes",
@@ -55,7 +44,7 @@ async def all_processes():
 
 def _processes_list(results):
     processes = []
-    for provider in PROVIDERS:
+    for provider in providers.PROVIDERS:
 
         try:
 
@@ -63,10 +52,10 @@ def _processes_list(results):
             for process in results[provider]:
 
                 logging.debug(
-                    f"Checking  process {process['id']} of provider {PROVIDERS[provider]['name']} "
+                    f"Checking  process {process['id']} of provider {providers.PROVIDERS[provider]['name']} "
                 )
 
-                for provider_process in PROVIDERS[provider]["processes"]:
+                for provider_process in providers.PROVIDERS[provider]["processes"]:
 
                     # Check if process is configured
                     if process["id"] in provider_process.keys():

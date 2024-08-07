@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -5,21 +6,17 @@ import time
 from datetime import datetime
 from multiprocessing import dummy
 
+import aiohttp
 import requests
 import yaml
 
+import ump.api.providers as providers
 import ump.config as config
 from ump.api.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
 from ump.geoserver.geoserver import Geoserver
 
 logging.basicConfig(level=logging.INFO)
-
-PROVIDERS: dict = {}
-
-with open(config.PROVIDERS_FILE) as file:
-    if content := yaml.safe_load(file):
-        PROVIDERS.update(content)
 
 
 class Process:
@@ -35,36 +32,40 @@ class Process:
         self.provider_prefix = match.group(1)
         self.process_id = match.group(2)
 
-        if not self.process_id or not self.provider_prefix in PROVIDERS.keys():
+        if (
+            not self.process_id
+            or not self.provider_prefix in providers.PROVIDERS.keys()
+        ):
             raise InvalidUsage(
                 f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
             )
 
-        self.set_details()
+        asyncio.run(self.set_details())
 
-    def set_details(self):
-        p = PROVIDERS[self.provider_prefix]
+    async def set_details(self):
+        p = providers.PROVIDERS[self.provider_prefix]
 
         # Check for Authentification
-        auth = None
-        if "authentication" in p:
-            if p["authentication"]["type"] == "BasicAuth":
-                auth = (p["authentication"]["user"], p["authentication"]["password"])
+        auth = providers.authenticate_provider(p)
 
-        response = requests.get(
-            f"{p['url']}/processes/{self.process_id}",
-            auth=auth,
-            headers={"Content-type": "application/json", "Accept": "application/json"},
-        )
+        async with aiohttp.ClientSession() as session:
+            response = await session.get(
+                f"{p['url']}/processes/{self.process_id}",
+                auth=auth,
+                headers={
+                    "Content-type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
 
-        if response.ok:
-            process_details = response.json()
+            if response.status != 200:
+                raise InvalidUsage(
+                    f"Model/process not found! {response.status}: {response.reason}. Check /api/processes endpoint for available models/processes."
+                )
+
+            process_details = await response.json()
             for key in process_details:
                 setattr(self, key, process_details[key])
-        else:
-            raise InvalidUsage(
-                f"Model/process not found! {response.status_code}: {response.reason}. Check /api/processes endpoint for available models/processes."
-            )
 
     def validate_params(self, parameters):
         if not self.inputs:
@@ -157,7 +158,7 @@ class Process:
         return False
 
     def execute(self, parameters):
-        p = PROVIDERS[self.provider_prefix]
+        p = providers.PROVIDERS[self.provider_prefix]
 
         self.validate_params(parameters)
 
@@ -165,90 +166,97 @@ class Process:
             f" --> Executing {self.process_id} on model server {p['url']} with params {parameters} as process {self.process_id_with_prefix}"
         )
 
-        job = self.start_process_execution(parameters)
+        job = asyncio.run(self.start_process_execution(parameters))
 
-        _process = dummy.Process(target=self._wait_for_results, args=([job]))
+        _process = dummy.Process(target=self._wait_for_results_async, args=([job]))
         _process.start()
 
         result = {"job_id": job.job_id, "status": job.status}
         return result
 
-    def start_process_execution(self, params):
+    async def start_process_execution(self, params):
 
         params["mode"] = "async"
-        p = PROVIDERS[self.provider_prefix]
+        p = providers.PROVIDERS[self.provider_prefix]
 
         try:
 
-            auth = None
-            if "authentication" in p:
-                if p["authentication"]["type"] == "BasicAuth":
-                    auth = (
-                        p["authentication"]["user"],
-                        p["authentication"]["password"],
-                    )
+            auth = providers.authenticate_provider(p)
 
-            response = requests.post(
-                f"{p['url']}/processes/{self.process_id}/execution",
-                json=params,
-                auth=auth,
-                headers={
-                    "Content-type": "application/json",
-                    "Accept": "application/json",
-                },
-            )
-
-            response.raise_for_status()
-
-            if response.ok and response.headers:
-                # Retrieve the job id from the simulation model server from the location header:
-                match = re.search("http.*/jobs/(.*)$", response.headers["location"])
-                if match:
-                    remote_job_id = match.group(1)
-
-                job = Job()
-                job.create(
-                    remote_job_id=remote_job_id,
-                    process_id_with_prefix=self.process_id_with_prefix,
-                    parameters=params,
-                )
-                job.started = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                job.status = JobStatus.running.value
-                job.save()
-
-                logging.info(
-                    f" --> Job {job.job_id} for model {self.process_id_with_prefix} started running."
-                )
-
-                return job
-
-        except Exception as e:
-            raise CustomException(f"Job could not be started remotely: {e}")
-
-    def _wait_for_results(self, job):
-
-        logging.info(" --> Waiting for results in Thread")
-
-        finished = False
-        p = PROVIDERS[self.provider_prefix]
-        timeout = float(p["timeout"])
-        start = time.time()
-
-        try:
-            while not finished:
-                response = requests.get(
-                    f"{p['url']}/jobs/{job.remote_job_id}",
-                    auth=(p["user"], p["password"]),
+            async with aiohttp.ClientSession() as session:
+                response = await session.post(
+                    f"{p['url']}/processes/{self.process_id}/execution",
+                    json=params,
+                    auth=auth,
                     headers={
                         "Content-type": "application/json",
                         "Accept": "application/json",
                     },
                 )
+
                 response.raise_for_status()
 
-                job_details = response.json()
+                if response.ok and response.headers:
+                    # Retrieve the job id from the simulation model server from the location header:
+                    match = re.search("http.*/jobs/(.*)$", response.headers["location"])
+                    if match:
+                        remote_job_id = match.group(1)
+
+                    job = Job()
+                    job.create(
+                        remote_job_id=remote_job_id,
+                        process_id_with_prefix=self.process_id_with_prefix,
+                        parameters=params,
+                    )
+                    job.started = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    job.status = JobStatus.running.value
+                    job.save()
+
+                    logging.info(
+                        f" --> Job {job.job_id} for model {self.process_id_with_prefix} started running."
+                    )
+
+                    return job
+
+        except Exception as e:
+            raise CustomException(f"Job could not be started remotely: {e}")
+
+    def _wait_for_results_async(self, job):
+        asyncio.run(self._wait_for_results(job))
+
+    async def _wait_for_results(self, job):
+
+        logging.info(" --> Waiting for results in Thread")
+
+        finished = False
+        p = providers.PROVIDERS[self.provider_prefix]
+        timeout = float(p["timeout"])
+        start = time.time()
+
+        try:
+            while not finished:
+
+                job_details = {}
+
+                async with aiohttp.ClientSession() as session:
+
+                    auth = providers.authenticate_provider(p)
+
+                    response = await session.get(
+                        f"{p['url']}/jobs/{job.remote_job_id}",
+                        auth=auth,
+                        headers={
+                            "Content-type": "application/json",
+                            "Accept": "application/json",
+                        },
+                    )
+
+                    response.raise_for_status()
+
+                job_details = await response.json()
 
                 finished = self.is_finished(job_details)
+
                 logging.info(" --> Current Job status: " + str(job_details))
 
                 job.progress = job_details["progress"]
@@ -294,30 +302,35 @@ class Process:
 
             geoserver = Geoserver()
 
-            response = requests.get(
-                f"{p['url']}/jobs/{job.remote_job_id}/results?f=json",
-                auth=(p["user"], p["password"]),
-                headers={
-                    "Content-type": "application/json",
-                    "Accept": "application/json",
-                },
-            )
-            response.raise_for_status()
+            async with aiohttp.ClientSession() as session:
 
-            if not response.ok:
-                job.status = JobStatus.failed.value
-                job.message = f"Could not retrieve results for {job}! {response.status_code}: {response.reason}"
-            else:
-                results = response.json()
+                auth = providers.authenticate_provider(p)
 
-                job.set_results_metadata(results)
+                response = await session.get(
+                    f"{p['url']}/jobs/{job.remote_job_id}/results",
+                    auth=auth,
+                    headers={
+                        "Content-type": "application/json",
+                        "Accept": "application/json",
+                    },
+                )
 
-                geoserver.save_results(job_id=job.job_id, data=results)
+                response.raise_for_status()
 
-            logging.info(
-                f" --> Successfully stored results for job {self.process_id_with_prefix} (={self.process_id})/{job.job_id} to geoserver."
-            )
-            job.status = JobStatus.successful.value
+                if not response.ok:
+                    job.status = JobStatus.failed.value
+                    job.message = f"Could not retrieve results for {job}! {response.status_code}: {response.reason}"
+                else:
+                    results = response.json()
+
+                    job.set_results_metadata(results)
+
+                    geoserver.save_results(job_id=job.job_id, data=results)
+
+                logging.info(
+                    f" --> Successfully stored results for job {self.process_id_with_prefix} (={self.process_id})/{job.job_id} to geoserver."
+                )
+                job.status = JobStatus.successful.value
 
         except CustomException as e:
             logging.error(
