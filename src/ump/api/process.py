@@ -7,7 +7,6 @@ from datetime import datetime
 from multiprocessing import dummy
 
 import aiohttp
-import requests
 import yaml
 
 import ump.api.providers as providers
@@ -32,9 +31,8 @@ class Process:
         self.provider_prefix = match.group(1)
         self.process_id = match.group(2)
 
-        if (
-            not self.process_id
-            or not self.provider_prefix in providers.PROVIDERS.keys()
+        if not providers.check_process_availability(
+            self.provider_prefix, self.process_id
         ):
             raise InvalidUsage(
                 f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
@@ -232,11 +230,10 @@ class Process:
         p = providers.PROVIDERS[self.provider_prefix]
         timeout = float(p["timeout"])
         start = time.time()
+        job_details = {}
 
         try:
             while not finished:
-
-                job_details = {}
 
                 async with aiohttp.ClientSession() as session:
 
@@ -288,6 +285,7 @@ class Process:
                 "Could not retrieve results from simulation model server. {e}"
             )
 
+        # Check if job was successful
         try:
             if job_details["status"] != JobStatus.successful.value:
                 job.status = JobStatus.failed.value
@@ -300,54 +298,28 @@ class Process:
                 job.save()
                 raise CustomException(f"Remote job {job.remote_job_id}: {job.message}")
 
-            geoserver = Geoserver()
-
-            async with aiohttp.ClientSession() as session:
-
-                auth = providers.authenticate_provider(p)
-
-                response = await session.get(
-                    f"{p['url']}/jobs/{job.remote_job_id}/results",
-                    auth=auth,
-                    headers={
-                        "Content-type": "application/json",
-                        "Accept": "application/json",
-                    },
-                )
-
-                response.raise_for_status()
-
-                if not response.ok:
-                    job.status = JobStatus.failed.value
-                    job.message = f"Could not retrieve results for {job}! {response.status_code}: {response.reason}"
-                else:
-                    results = response.json()
-
-                    job.set_results_metadata(results)
-
-                    geoserver.save_results(job_id=job.job_id, data=results)
-
-                logging.info(
-                    f" --> Successfully stored results for job {self.process_id_with_prefix} (={self.process_id})/{job.job_id} to geoserver."
-                )
-                job.status = JobStatus.successful.value
-
         except CustomException as e:
-            logging.error(
-                f" --> Could not store results for job {self.process_id_with_prefix} (={self.process_id})/{job.job_id} to geoserver: {e}"
-            )
-            job.status = JobStatus.failed.value
-            job.message = str(e)
+            logging.error(f" --> An error occurred: {e}")
 
+        job.status = JobStatus.successful.value
         job.finished = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         job.updated = job.finished
         job.progress = 100
         job.save()
 
+        # Check if results should be stored in the geoserver
         try:
-            geoserver.cleanup()
+            if (
+                providers.check_result_storage(self.provider_prefix, self.process_id)
+                == "geoserver"
+            ):
+                await job.results_to_geoserver()
         except Exception as e:
-            pass
+            logging.error(
+                f" --> Could not store results for job {self.process_id_with_prefix} (={self.process_id})/{job.job_id} to geoserver: {e}"
+            )
+            job.message = str(e)
+            job.save()
 
     def is_finished(self, job_details):
         finished = False

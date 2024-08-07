@@ -21,3 +21,21 @@ def authenticate_provider(p):
                 p["authentication"]["user"], p["authentication"]["password"]
             )
     return auth
+
+
+def check_process_availability(provider, process_id):
+
+    available = False
+
+    if provider in PROVIDERS and process_id in PROVIDERS[provider]["processes"]:
+        available = True
+
+        if "exclude" in PROVIDERS[provider]["processes"][process_id]:
+            logging.debug(f"Excluding process {process_id} based on configuration")
+            available = False
+
+    return available
+
+
+def check_result_storage(provider, process_id):
+    return PROVIDERS[provider]["processes"][process_id]["result-storage"]

@@ -55,31 +55,13 @@ def _processes_list(results):
                     f"Checking  process {process['id']} of provider {providers.PROVIDERS[provider]['name']} "
                 )
 
-                for provider_process in providers.PROVIDERS[provider]["processes"]:
+                if providers.check_process_availability(provider, process["id"]):
+                    process["id"] = f"{provider}:{process['id']}"
+                    processes.append(process)
 
-                    # Check if process is configured
-                    if process["id"] in provider_process.keys():
-                        logging.debug(f"Process ID  {process['id']} is configured.")
-
-                        exclude = False
-
-                        # Check if process has special configuration
-                        for config in provider_process[process["id"]]:
-
-                            # Check if process should be excluded
-                            if "exclude" in config and config["exclude"]:
-                                logging.debug(
-                                    f"Excluding process {process['id']} based on configuration"
-                                )
-                                exclude = True
-
-                        if not exclude:
-                            process["id"] = f"{provider}:{process['id']}"
-                            processes.append(process)
-
-                    else:
-                        logging.debug(f"Process ID  {process['id']} is not configured.")
-                        continue
+                else:
+                    logging.debug(f"Process ID  {process['id']} is not configured.")
+                    continue
 
         except Exception as e:
             logging.error(
