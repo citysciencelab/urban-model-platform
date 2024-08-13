@@ -16,7 +16,7 @@ postgres_port = os.environ.get("POSTGRES_PORT", "5432")
 geoserver_base_url = os.environ.get(
     "GEOSERVER_BASE_URL", "http://geoserver:8080/geoserver"
 )
-
+geoserver_postgis_host = os.environ.get("GEOSERVER_POSTGIS_HOST", "postgis")
 geoserver_rest_url = f"{geoserver_base_url}/rest"
 geoserver_workspaces_url = f"{geoserver_rest_url}/workspaces"
 
