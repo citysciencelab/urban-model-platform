@@ -88,6 +88,7 @@ numpy = "~=1.26.4"
 geopandas = "^1.0.1"
 geoalchemy2 = "^0.15.2"
 apiflask = "^2.2.0"
+python-dotenv = "^1.0.1"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests

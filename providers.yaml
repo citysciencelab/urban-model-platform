@@ -1,7 +1,11 @@
 modelserver:
+    name: example
     url: "http://modelserver:5000"
-    user: "user"
-    password: "password"
     timeout:  1800
-    exclude:
-      - "model-1"
+    processes:
+      hello-world:
+        result-storage: "geoserver"
+      squareroot:
+        result-storage: "remote"
+      hello-geo-world:
+        result-storage: "remote"

@@ -3,18 +3,18 @@
 # Only processes listed in this configuration file will also appear on the UMP
 # One can also exclude processes manually by providing the "exclude" attribute
 
-modelserver-1:
-    url: "http://localhost:5005"
-    name: "CSL Test Modelserver"
+modelserver:
+    name: example
+    url: "http://modelserver:5000"
     authentication:
       type: "BasicAuth"
       user: "user"
       password: "password"
-    timeout:  60
+    timeout:  1800
     processes:
-      process-1:
+      hello-world:
         result-storage: "geoserver"
-      process-2
+      squareroot:
         result-storage: "remote"
-      process-3
-        exclude: True
+      hello-geo-world:
+        result-storage: "remote"
