@@ -16,11 +16,11 @@ The components are configured in a docker-compose setup with nginx as a proxy.
 
 To initialize the dev environment:
 
-* run `git submodule --init --recursive` (only needed once)
-* use the top level `.env.example` to see how the top level `.env` should look like
+* run `git submodule update --init --recursive` (only needed once)
+* `cp .env.example .env`
 * in `moduleserver_example`: (only needed once)
-  * copy the `.env.example` to `.env` and set `IMAGE_TAG` to `main`
-  * run `docker compose build`
+  * `cp .env.example .env` and set `IMAGE_TAG` to `main`
+  * run `docker compose -f docker-compose-build.yaml build`
 * on top level, run `docker compose up --build`
 
 After that you can access the app like follows:

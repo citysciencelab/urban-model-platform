@@ -6,6 +6,10 @@ services:
       - 80:80
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - api
+      - geoserver
+      - modelserver
   postgis:
     container_name: ump-postgis
     image: postgis/postgis:14-3.3
