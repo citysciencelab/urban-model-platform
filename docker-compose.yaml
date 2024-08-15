@@ -23,6 +23,8 @@ services:
     build:
       dockerfile: Dockerfile.dev
     env_file: .env
+    ports:
+      - 5678:5678
     volumes:
       - ./:/app/
   geoserver:

@@ -103,6 +103,7 @@ pytest-sugar = ">=0.9.4,<1"
 pytest-xdist = ">=2.2.0,<3"
 types-toml = ">=0.10.1,<1"
 pre-commit = ">=3.4.0,<4"
+debugpy = "^1.8.5"
 
 [tool.poetry.group.docs]
 optional = true
