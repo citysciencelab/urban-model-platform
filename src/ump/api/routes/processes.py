@@ -1,12 +1,13 @@
 import asyncio
 import json
 
-from flask import Blueprint, Response, request
+from apiflask import APIBlueprint
+from flask import Response, request
 
 from ump.api.process import Process
 from ump.api.processes import all_processes
 
-processes = Blueprint("processes", __name__)
+processes = APIBlueprint("processes", __name__)
 
 
 @processes.route("/", defaults={"page": "index"})

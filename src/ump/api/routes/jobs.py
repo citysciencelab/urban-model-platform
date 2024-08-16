@@ -1,12 +1,13 @@
 import asyncio
 import json
 
-from flask import Blueprint, Response, request
+from apiflask import APIBlueprint
+from flask import Response, request
 
 from ump.api.job import Job
 from ump.api.jobs import get_jobs
 
-jobs = Blueprint("jobs", __name__)
+jobs = APIBlueprint("jobs", __name__)
 
 
 @jobs.route("/", defaults={"page": "index"})

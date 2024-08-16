@@ -2,7 +2,8 @@ import json
 import os
 from logging.config import dictConfig
 
-from flask import Blueprint, Flask, jsonify
+from apiflask import APIBlueprint, APIFlask
+from flask import jsonify
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
@@ -29,17 +30,17 @@ dictConfig(
     }
 )
 
-app = Flask(__name__)
+app = APIFlask(__name__)
+
 app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", 0)
 
 CORS(app)
 
-api = Blueprint("api", __name__, url_prefix="/api")
+api = APIBlueprint("api", __name__, url_prefix="/api")
 api.register_blueprint(processes, url_prefix="/processes")
 api.register_blueprint(jobs, url_prefix="/jobs")
 
 app.register_blueprint(api)
-
 
 @app.after_request
 def set_headers(response):
