@@ -21,7 +21,7 @@ To initialize the dev environment:
 * in `moduleserver_example`: (only needed once)
   * `cp .env.example .env` and set `IMAGE_TAG` to `main`
   * run `docker compose -f docker-compose-build.yaml build`
-* on top level, run `docker compose up --build`
+* on top level, run `docker compose -f docker-compose-local.yaml up --build`
 
 After that you can access the app like follows:
 
@@ -32,6 +32,9 @@ Persistent data is stored as follows:
 
 * `postgresql_data` -> contains the postgres db files
 * `geoserver_data` -> contains the Geoserver data dir
+
+## Alternate dev setup
+If you prefer a more native approach running flask locally on your computer, see `CONTRIBUTING.md` for an alternate approach.
 
 ## Geoserver configuration
 
