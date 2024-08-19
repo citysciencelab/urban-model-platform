@@ -79,3 +79,5 @@ After that look up the result urls using the jobs api:
 ```bash
 curl localhost/api/jobs/
 ```
+
+See the swagger docs at http://localhost/docs
