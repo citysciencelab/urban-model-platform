@@ -1,0 +1,68 @@
+services:
+  nginx:
+    container_name: ump-nginx
+    image: nginx:stable
+    ports:
+      - 80:80
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - api
+      - geoserver
+      - modelserver
+  postgis:
+    container_name: ump-postgis
+    image: postgis/postgis:14-3.3
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    volumes:
+      - ./src/ump/initializers/db/:/docker-entrypoint-initdb.d/
+      - ./postgresql_data:/var/lib/postgresql/data/
+  api:
+    container_name: ump-api
+    build:
+      dockerfile: Dockerfile.dev
+    env_file: .env
+    ports:
+      - 5678:5678
+    volumes:
+      - ./:/app/
+  geoserver:
+    container_name: ump-geoserver
+    image: kartoza/geoserver:2.22.0
+    environment:
+      - GEOSERVER_ADMIN_USER=admin
+      - GEOSERVER_ADMIN_PASSWORD=geoserver
+    depends_on:
+      - postgis
+    volumes:
+      - ./geoserver_data:/opt/geoserver/data_dir
+  modelserver:
+    container_name: ump-modelserver
+    image: lgvudh.azurecr.io/analytics/example_ogcapi_processes:main
+    env_file: .env
+    volumes:
+      - ./modelserver_example/pygeoapi-config.yml:/home/pythonuser/pygeoapi-config.yaml
+      - ./modelserver_example/example-openapi.yml:/home/pythonuser/pygeoapi-openapi.yaml
+    command: [
+      '/bin/bash', '-c',
+      'pygeoapi openapi generate /home/pythonuser/pygeoapi-config.yaml --output-file /home/pythonuser/pygeoapi-openapi.yaml && pygeoapi serve --flask'
+    ]
+  keycloak:
+    container_name: ump-keycloak
+    image: quay.io/keycloak/keycloak:25.0
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgis
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME: ${KEYCLOAK_HOST}
+      KC_HOSTNAME_PATH: /auth
+      KC_HTTP_RELATIVE_PATH: /auth
+    depends_on:
+      - postgis
+    command: ['start', '--proxy-headers', 'xforwarded', '--http-enabled', 'true']
