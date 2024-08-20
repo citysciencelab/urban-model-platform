@@ -222,10 +222,10 @@ class Process:
         except Exception as e:
             raise CustomException(f"Job could not be started remotely: {e}")
 
-    def _wait_for_results_async(self, job):
+    def _wait_for_results_async(self, job: Job):
         asyncio.run(self._wait_for_results(job))
 
-    async def _wait_for_results(self, job):
+    async def _wait_for_results(self, job: Job):
 
         logging.info(" --> Waiting for results in Thread")
 
@@ -253,13 +253,14 @@ class Process:
 
                     response.raise_for_status()
 
-                job_details = await response.json()
+                job_details: dict = await response.json()
 
                 finished = self.is_finished(job_details)
 
                 logging.info(" --> Current Job status: " + str(job_details))
 
-                job.progress = job_details["progress"]
+                job.progress = job_details.get("progress")
+
                 job.updated = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                 job.save()
 
