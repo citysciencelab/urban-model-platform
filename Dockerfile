@@ -45,14 +45,19 @@ RUN groupadd --gid $USER_GID $USERNAME && \
     useradd --create-home --no-log-init --gid $USER_GID --uid $USER_UID --shell /bin/bash $USERNAME && \
     chown -R $USERNAME:$USERNAME /home/$USERNAME /usr/local/lib /usr/local/bin
 
+USER $USERNAME
 WORKDIR /home/$USERNAME
 
 ENV VIRTUAL_ENV=/app/.venv \
-    PATH="/home/$USERNAME/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH"
 
 COPY --from=base \
     --chmod=0755 \
     --chown=$USERNAME:$USERNAME \
-    ${VIRTUAL_ENV} ./.venv
+    /app/.venv /app/.venv
 
-ENTRYPOINT [".venv/bin/python", "-u"]
+COPY scripts/entrypoint.sh entrypoint.sh
+
+EXPOSE 5000
+
+ENTRYPOINT [ "/home/pythonuser/entrypoint.sh" ]
