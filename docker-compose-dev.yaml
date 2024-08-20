@@ -10,11 +10,11 @@ services:
     - path: .env
       required: true # default
     ports:
-      - ${WEBAPP_PORT_EXTERNAL}:5001
-    command: ['src/app.py']
+      - ${WEBAPP_PORT_EXTERNAL}:5000
     networks:
       - dev
-      
+    volumes:
+      - ./providers.yaml:/home/pythonuser/providers.yaml
   
   postgis:
     image: postgis/postgis:14-3.3
