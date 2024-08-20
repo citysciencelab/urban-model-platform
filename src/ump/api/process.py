@@ -18,6 +18,10 @@ logging.basicConfig(level=logging.INFO)
 
 class Process:
     def __init__(self, process_id_with_prefix=None):
+
+        self.inputs: dict
+        self.outputs: dict
+
         self.process_id_with_prefix = process_id_with_prefix
 
         match = re.search(r"(.*):(.*)", self.process_id_with_prefix)
