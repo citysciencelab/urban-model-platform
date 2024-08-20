@@ -7,13 +7,11 @@ from datetime import datetime
 from multiprocessing import dummy
 
 import aiohttp
-import yaml
 
 import ump.api.providers as providers
 import ump.config as config
 from ump.api.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
-from ump.geoserver.geoserver import Geoserver
 
 logging.basicConfig(level=logging.INFO)
 
