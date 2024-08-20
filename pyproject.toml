@@ -88,6 +88,7 @@ numpy = "~=1.26.4"
 geopandas = "^1.0.1"
 geoalchemy2 = "^0.15.2"
 apiflask = "^2.2.0"
+python-dotenv = "^1.0.1"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests
@@ -102,6 +103,7 @@ pytest-sugar = ">=0.9.4,<1"
 pytest-xdist = ">=2.2.0,<3"
 types-toml = ">=0.10.1,<1"
 pre-commit = ">=3.4.0,<4"
+debugpy = "^1.8.5"
 
 [tool.poetry.group.docs]
 optional = true

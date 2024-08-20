@@ -1,6 +1,6 @@
 ARG $MAMBA_USER=mambauser
 
-FROM python:3.11-bookworm as base
+FROM python:3.11-bookworm AS base
 
 ENV CACHE_DIR=/app/cache
 
@@ -31,7 +31,7 @@ RUN touch README.md \
     && poetry build \
     && /app/.venv/bin/python -m pip install dist/*.whl --no-deps
 
-FROM python:3.11-slim-bookworm as runtime
+FROM python:3.11-slim-bookworm AS runtime
 
 ARG USER_UID=1000
 ARG USERNAME=pythonuser
@@ -53,6 +53,6 @@ ENV VIRTUAL_ENV=/home/.venv \
 COPY --from=base \
     --chmod=0755 \
     --chown=$USERNAME:$USERNAME \
-    ${VIRTUAL_ENV} ./.venv
+    /app/.venv ./.venv
 
 ENTRYPOINT [".venv/python", "-u"]
