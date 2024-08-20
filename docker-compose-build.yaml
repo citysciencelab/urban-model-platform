@@ -1,0 +1,10 @@
+version: "3.7"
+
+services:
+  app:
+    image: ${CONTAINER_REGISTRY}/analytics/${IMAGE_NAME}:${IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SOURCE_COMMIT:

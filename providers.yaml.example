@@ -1,0 +1,20 @@
+# This is the configuration file for setting up simulation servers.
+# The servers should provide an OGC processes api which will be retrieved
+# Only processes listed in this configuration file will also appear on the UMP
+# One can also exclude processes manually by providing the "exclude" attribute
+
+modelserver:
+    name: example
+    url: "http://modelserver:5000"
+    authentication:
+      type: "BasicAuth"
+      user: "user"
+      password: "password"
+    timeout:  1800
+    processes:
+      hello-world:
+        result-storage: "geoserver"
+      squareroot:
+        result-storage: "remote"
+      hello-geo-world:
+        result-storage: "remote"

@@ -1,0 +1,11 @@
+# ignore all
+*
+
+# except
+!setup.cfg
+!setup.py
+!environment.yml
+!poetry.lock
+!pyproject.toml
+!src
+!scripts

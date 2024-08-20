@@ -12,7 +12,7 @@ services:
     build: ./api
     command: "bash ./scripts/entrypoint.sh"
     env_file:
-      - ./api/configs/dev_environment
+      - ./api/configs/prod_environment
       - ./geoserver/configs/postgis
     volumes:
       - ./api:/usr/src/app
@@ -20,6 +20,16 @@ services:
     depends_on:
       - geoserver
       - nginx
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.modelplatform.entrypoints=https"
+      - "traefik.http.routers.modelplatform.tls=true"
+      - "traefik.http.routers.modelplatform.tls.certresolver=lets-encr"
+      - "traefik.http.routers.modelplatform.rule=Host(`ump.domain.de`)"
+      - "traefik.http.services.modelplatform.loadbalancer.server.port=5001"
+    networks:
+      - proxy
+      - urban-model-platform
 
   geoserver:
     image: kartoza/geoserver:2.22.0
@@ -29,6 +39,15 @@ services:
       - ./geoserver/data/geoserver:/opt/geoserver/data_dir
     env_file:
       - ./geoserver/configs/geoserver
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ump-geoserver.entrypoints=https"
+      - "traefik.http.routers.ump-geoserver.tls=true"
+      - "traefik.http.routers.ump-geoserver.tls.certresolver=lets-encr"
+      - "traefik.http.routers.ump-geoserver.rule=Host(`ump-geoserver.domain.de`)"
+    networks:
+      - proxy
+      - urban-model-platform
 
   postgis:
     image: postgis/postgis:14-3.3
@@ -37,10 +56,11 @@ services:
       - ./geoserver/data/pg_data:/var/lib/postgresql/data
     env_file:
       - ./geoserver/configs/postgis
+    networks:
+      - urban-model-platform
 
-  helper:
-    image: debian:11-slim
-    volumes:
-      - ./api/data:/workspace/api/local
-      - ./api/__pycache__:/workspace/api/pycache
-      - ./geoserver/data/geoserver:/workspace/geoserver
+networks:
+    proxy:
+        external: true
+    urban-model-platform:
+        external: true
