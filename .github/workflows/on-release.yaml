@@ -2,7 +2,7 @@ name: Publish Docker image
 
 on:
   push:
-    branches: ['dev', 'main']
+    branches: ['dev', 'main', 'simplify-dev-setup']
   release:
     types: [published]
 
