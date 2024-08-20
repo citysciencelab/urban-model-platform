@@ -259,6 +259,7 @@ class Process:
 
                 logging.info(" --> Current Job status: " + str(job_details))
 
+                # either remote job has progress info or else we cannot provide it either
                 job.progress = job_details.get("progress")
 
                 job.updated = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -345,6 +346,12 @@ class Process:
         process_dict.pop("process_id")
         process_dict.pop("provider_prefix")
         process_dict["id"] = process_dict.pop("process_id_with_prefix")
+
+        # delete all keys containing None
+        for key,value  in list(process_dict.items()):
+            if value is None:
+                process_dict.pop(key)
+
         return process_dict
 
     def to_json(self):
