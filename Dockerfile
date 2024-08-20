@@ -47,7 +47,7 @@ RUN groupadd --gid $USER_GID $USERNAME && \
 
 WORKDIR /home/$USERNAME
 
-ENV VIRTUAL_ENV=/home/.venv \
+ENV VIRTUAL_ENV=/app/.venv \
     PATH="/home/$USERNAME/.venv/bin:$PATH"
 
 COPY --from=base \
@@ -55,4 +55,4 @@ COPY --from=base \
     --chown=$USERNAME:$USERNAME \
     ${VIRTUAL_ENV} ./.venv
 
-ENTRYPOINT [".venv/python", "-u"]
+ENTRYPOINT [".venv/bin/python", "-u"]
