@@ -245,19 +245,17 @@ class Process:
                 async with aiohttp.ClientSession() as session:
 
                     auth = providers.authenticate_provider(p)
-
-                    response = await session.get(
+                    async with session.get(
                         f"{p['url']}/jobs/{job.remote_job_id}",
                         auth=auth,
                         headers={
                             "Content-type": "application/json",
                             "Accept": "application/json",
                         },
-                    )
+                    ) as response: 
 
-                    response.raise_for_status()
-
-                job_details: dict = await response.json()
+                        response.raise_for_status()
+                        job_details: dict = await response.json()
 
                 finished = self.is_finished(job_details)
 
