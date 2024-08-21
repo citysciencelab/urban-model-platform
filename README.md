@@ -71,6 +71,17 @@ It will use the provided docker-compose.prod.yaml file together with the nginx d
 ## Reset data in development
 If you are in development and want to reset all PostGis and Geoserver data, you can delete the `postgresql_data` and the `geoserver_data` folders.
 
+## DB-Migrations
+Currently the DB uses Flask-Migrate and must be migrated manually using `flask db upgrade` when new migrations are available.
+
+## Keycloak
+In order to configure a dev setup Keycloak initially, log in with admin/admin. Then:
+
+* create a new realm named `UrbanModelPlatform`
+* create a new client in that realm called `ump-client`
+* create a test user called `ump`, set its password to `ump`
+* make sure to set the keycloak host in `.env` to your local hostname or IP address
+
 ## Try it out
 
 ```bash

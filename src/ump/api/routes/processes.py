@@ -2,7 +2,7 @@ import asyncio
 import json
 
 from apiflask import APIBlueprint
-from flask import Response, request
+from flask import Response, g, request
 
 from ump.api.process import Process
 from ump.api.processes import all_processes
@@ -24,6 +24,7 @@ def show(process_id_with_prefix=None):
 
 @processes.route("/<path:process_id_with_prefix>/execution", methods=["POST"])
 def execute(process_id_with_prefix=None):
+    auth = g.get('auth_token')
     process = Process(process_id_with_prefix)
-    result = process.execute(request.json)
+    result = process.execute(request.json, None if auth is None else auth['sub'])
     return Response(json.dumps(result), status=201, mimetype="application/json")

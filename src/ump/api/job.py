@@ -43,7 +43,7 @@ class Job:
         "message",
     ]
 
-    def __init__(self, job_id=None):
+    def __init__(self, job_id = None, user = None):
         self.job_id = job_id
         self.status = None
         self.message = ""
@@ -53,8 +53,9 @@ class Job:
         self.finished = None
         self.updated = None
         self.results_metadata = {}
+        self.user_id = None
 
-        if job_id and not self._init_from_db(job_id):
+        if job_id and not self._init_from_db(job_id, user):
             raise CustomException(f"Job could not be found!")
 
     def create(
@@ -63,12 +64,14 @@ class Job:
         remote_job_id=None,
         process_id_with_prefix=None,
         parameters={},
+        user=None
     ):
         self._set_attributes(
             job_id=job_id,
             remote_job_id=remote_job_id,
             process_id_with_prefix=process_id_with_prefix,
             parameters=parameters,
+            user_id = user
         )
 
         self.status = JobStatus.accepted.value
@@ -77,9 +80,9 @@ class Job:
 
         query = """
       INSERT INTO jobs
-      (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated)
+      (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id)
       VALUES
-      (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s)
+      (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s)
     """
         with DBHandler() as db:
             db.run_query(query, query_params=self._to_dict())
@@ -92,9 +95,11 @@ class Job:
         remote_job_id=None,
         process_id_with_prefix=None,
         parameters={},
+        user_id = None
     ):
         self.job_id = job_id
         self.remote_job_id = remote_job_id
+        self.user_id = user_id
 
         if remote_job_id and not job_id:
             self.job_id = f"job-{remote_job_id}"
@@ -120,10 +125,15 @@ class Job:
         if not self.job_id:
             self.job_id = str(uuid.uuid4())
 
-    def _init_from_db(self, job_id):
+    def _init_from_db(self, job_id, user):
         query = """
       SELECT * FROM jobs WHERE job_id = %(job_id)s
     """
+        if user is None:
+            query += ' and user_id is null'
+        else:
+            query += f" and (user_id = '{user}' or user_id is null)"
+
         with DBHandler() as db:
             job_details = db.run_query(query, query_params={"job_id": job_id})
 
@@ -149,6 +159,7 @@ class Job:
         self.progress = data["progress"]
         self.parameters = data["parameters"]
         self.results_metadata = data["results_metadata"]
+        self.user_id = data['user_id']
 
     def _to_dict(self):
         return {
@@ -166,6 +177,7 @@ class Job:
             "progress": self.progress,
             "parameters": json.dumps(self.parameters),
             "results_metadata": json.dumps(self.results_metadata),
+            "user_id": self.user_id,
         }
 
     def save(self):
