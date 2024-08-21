@@ -171,7 +171,7 @@ class Process:
         _process = dummy.Process(target=self._wait_for_results_async, args=([job]))
         _process.start()
 
-        result = {"job_id": job.job_id, "status": job.status}
+        result = {"jobID": job.job_id, "status": job.status}
         return result
 
     async def start_process_execution(self, params):
