@@ -89,6 +89,8 @@ geopandas = "^1.0.1"
 geoalchemy2 = "^0.15.2"
 apiflask = "^2.2.0"
 python-dotenv = "^1.0.1"
+flask-migrate = "^4.0.7"
+python-keycloak = "^4.3.0"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests

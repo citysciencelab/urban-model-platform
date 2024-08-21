@@ -155,16 +155,16 @@ class Process:
 
         return False
 
-    def execute(self, parameters):
+    def execute(self, parameters, user):
         p = providers.PROVIDERS[self.provider_prefix]
 
         self.validate_params(parameters)
 
         logging.info(
-            f" --> Executing {self.process_id} on model server {p['url']} with params {parameters} as process {self.process_id_with_prefix}"
+            f" --> Executing {self.process_id} on model server {p['url']} with params {parameters} as process {self.process_id_with_prefix} for user {user}"
         )
 
-        job = asyncio.run(self.start_process_execution(parameters))
+        job = asyncio.run(self.start_process_execution(parameters, user))
 
         _process = dummy.Process(target=self._wait_for_results_async, args=([job]))
         _process.start()
@@ -172,13 +172,11 @@ class Process:
         result = {"job_id": job.job_id, "status": job.status}
         return result
 
-    async def start_process_execution(self, params):
-
+    async def start_process_execution(self, params, user):
         params["mode"] = "async"
         p = providers.PROVIDERS[self.provider_prefix]
 
         try:
-
             auth = providers.authenticate_provider(p)
 
             async with aiohttp.ClientSession() as session:
@@ -205,6 +203,7 @@ class Process:
                         remote_job_id=remote_job_id,
                         process_id_with_prefix=self.process_id_with_prefix,
                         parameters=params,
+                        user=user
                     )
                     job.started = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                     job.status = JobStatus.running.value
