@@ -27,6 +27,7 @@ RUN --mount=type=cache,target=$POETRY_CACHE_DIR poetry install --without=dev --n
 #     && apt clean
 
 COPY src ./src
+COPY migrations ./migrations
 RUN touch README.md \
     && poetry build \
     && /app/.venv/bin/python -m pip install dist/*.whl --no-deps
@@ -57,6 +58,7 @@ COPY --from=base \
     /app/.venv /app/.venv
 
 COPY scripts/entrypoint.sh entrypoint.sh
+COPY --from=base /app/migrations migrations
 
 EXPOSE 5000
 
