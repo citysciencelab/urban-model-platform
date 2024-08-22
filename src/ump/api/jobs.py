@@ -1,9 +1,11 @@
-from ump.api.db_handler import DBHandler
-from ump.api.job_status import JobStatus
-from ump.api.job import Job
 import re
 
-def get_jobs(args):
+from ump.api.db_handler import DBHandler
+from ump.api.job import Job
+from ump.api.job_status import JobStatus
+
+
+def get_jobs(args, user = None):
   page  = int(args["page"][0]) if "page" in args else 1
   limit = int(args["limit"][0]) if "limit" in args else None
 
@@ -13,6 +15,11 @@ def get_jobs(args):
   """
   query_params = {}
   conditions = []
+  user = None if user is None else user['sub']
+  if user is not None:
+    conditions.append(f"user_id = '{user}' or user_id is null")
+  else:
+    conditions.append('user_id is null')
 
   if 'processID' in args and args['processID']:
     # this processID is actually the process_id_with_prefix!!!
@@ -53,7 +60,7 @@ def get_jobs(args):
     )
 
   for row in job_ids:
-    job = Job(row['job_id'])
+    job = Job(row['job_id'], user)
     jobs.append(job.display())
 
   count_jobs = count(conditions, query_params)

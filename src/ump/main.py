@@ -1,10 +1,14 @@
 import json
 import os
 from logging.config import dictConfig
+from os import environ as env
 
 from apiflask import APIBlueprint, APIFlask
-from flask import jsonify
+from flask import g, jsonify, request
 from flask_cors import CORS
+from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+from keycloak import KeycloakOpenID
 from werkzeug.exceptions import HTTPException
 
 from ump.api.routes.jobs import jobs
@@ -19,7 +23,6 @@ if (
     os.environ.get("WERKZEUG_RUN_MAIN") != "true" and os.environ.get('FLASK_DEBUG') == '1'
 ):
     import debugpy
-
     debugpy.listen(("0.0.0.0", 5678))
 
 dictConfig(
@@ -44,6 +47,10 @@ dictConfig(
 app = APIFlask(__name__)
 
 app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", 0)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql+psycopg2://postgres:postgres@postgis/cut_dev'
+
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 CORS(app)
 
@@ -52,6 +59,19 @@ api.register_blueprint(processes, url_prefix="/processes")
 api.register_blueprint(jobs, url_prefix="/jobs")
 
 app.register_blueprint(api)
+
+keycloak_openid = KeycloakOpenID(server_url=f"http://{env['KEYCLOAK_HOST']}/auth/",
+                                 client_id="ump-client",
+                                 realm_name="UrbanModelPlatform")
+
+@app.before_request
+def check_jwt():
+    auth = request.authorization
+    if auth is not None:
+        decoded = keycloak_openid.decode_token(auth.token)
+        g.auth_token = decoded
+    else:
+        g.auth_token = None
 
 @app.after_request
 def set_headers(response):
@@ -84,4 +104,4 @@ def handle_http_exception(error):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=False)
+    app.run(host="0.0.0.0")
