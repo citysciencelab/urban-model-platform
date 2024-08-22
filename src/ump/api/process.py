@@ -7,19 +7,21 @@ from datetime import datetime
 from multiprocessing import dummy
 
 import aiohttp
-import yaml
 
 import ump.api.providers as providers
 import ump.config as config
 from ump.api.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
-from ump.geoserver.geoserver import Geoserver
 
 logging.basicConfig(level=logging.INFO)
 
 
 class Process:
     def __init__(self, process_id_with_prefix=None):
+
+        self.inputs: dict
+        self.outputs: dict
+
         self.process_id_with_prefix = process_id_with_prefix
 
         match = re.search(r"(.*):(.*)", self.process_id_with_prefix)
@@ -169,11 +171,14 @@ class Process:
         _process = dummy.Process(target=self._wait_for_results_async, args=([job]))
         _process.start()
 
-        result = {"job_id": job.job_id, "status": job.status}
+        result = {"jobID": job.job_id, "status": job.status}
         return result
 
-    async def start_process_execution(self, params, user):
-        params["mode"] = "async"
+    async def start_process_execution(self, request_body, user):
+        # execution mode:
+        # to maintain backwards compatibility to models using 
+        # pre-1.0.0 versions of OGC api processes
+        request_body["mode"] = "async"
         p = providers.PROVIDERS[self.provider_prefix]
 
         try:
@@ -182,19 +187,26 @@ class Process:
             async with aiohttp.ClientSession() as session:
                 response = await session.post(
                     f"{p['url']}/processes/{self.process_id}/execution",
-                    json=params,
+                    json=request_body,
                     auth=auth,
                     headers={
                         "Content-type": "application/json",
                         "Accept": "application/json",
+                        # execution mode shall be async, if model supports it
+                        "Prefer": "respond-async"
                     },
                 )
 
                 response.raise_for_status()
 
                 if response.ok and response.headers:
-                    # Retrieve the job id from the simulation model server from the location header:
-                    match = re.search("http.*/jobs/(.*)$", response.headers["location"])
+                    # Retrieve the job id from the simulation model server from the 
+                    # location header:
+                    match = re.search(
+                        "http.*/jobs/(.*)$", response.headers["location"]
+                        ) or (
+                        re.search('.*/jobs/(.*)$', response.headers["location"])
+                    )
                     if match:
                         remote_job_id = match.group(1)
 
@@ -202,7 +214,7 @@ class Process:
                     job.create(
                         remote_job_id=remote_job_id,
                         process_id_with_prefix=self.process_id_with_prefix,
-                        parameters=params,
+                        parameters=request_body,
                         user=user
                     )
                     job.started = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -218,10 +230,10 @@ class Process:
         except Exception as e:
             raise CustomException(f"Job could not be started remotely: {e}")
 
-    def _wait_for_results_async(self, job):
+    def _wait_for_results_async(self, job: Job):
         asyncio.run(self._wait_for_results(job))
 
-    async def _wait_for_results(self, job):
+    async def _wait_for_results(self, job: Job):
 
         logging.info(" --> Waiting for results in Thread")
 
@@ -237,25 +249,25 @@ class Process:
                 async with aiohttp.ClientSession() as session:
 
                     auth = providers.authenticate_provider(p)
-
-                    response = await session.get(
+                    async with session.get(
                         f"{p['url']}/jobs/{job.remote_job_id}",
                         auth=auth,
                         headers={
                             "Content-type": "application/json",
                             "Accept": "application/json",
                         },
-                    )
+                    ) as response: 
 
-                    response.raise_for_status()
-
-                job_details = await response.json()
+                        response.raise_for_status()
+                        job_details: dict = await response.json()
 
                 finished = self.is_finished(job_details)
 
                 logging.info(" --> Current Job status: " + str(job_details))
 
-                job.progress = job_details["progress"]
+                # either remote job has progress info or else we cannot provide it either
+                job.progress = job_details.get("progress")
+
                 job.updated = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                 job.save()
 
@@ -340,6 +352,12 @@ class Process:
         process_dict.pop("process_id")
         process_dict.pop("provider_prefix")
         process_dict["id"] = process_dict.pop("process_id_with_prefix")
+
+        # delete all keys containing None
+        for key,value  in list(process_dict.items()):
+            if value is None:
+                process_dict.pop(key)
+
         return process_dict
 
     def to_json(self):
