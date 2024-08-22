@@ -174,9 +174,12 @@ class Process:
         result = {"jobID": job.job_id, "status": job.status}
         return result
 
-    async def start_process_execution(self, params):
+    async def start_process_execution(self, request_body):
+        # execution mode:
+        # to maintain backwards compatibility to models using 
+        # pre-1.0.0 versions of OGC api processes
+        request_body["mode"] = "async"
 
-        params["mode"] = "async"
         p = providers.PROVIDERS[self.provider_prefix]
 
         try:
@@ -186,11 +189,13 @@ class Process:
             async with aiohttp.ClientSession() as session:
                 response = await session.post(
                     f"{p['url']}/processes/{self.process_id}/execution",
-                    json=params,
+                    json=request_body,
                     auth=auth,
                     headers={
                         "Content-type": "application/json",
                         "Accept": "application/json",
+                        # execution mode shall be async, if model supports it
+                        "Prefer": "respond-async"
                     },
                 )
 
@@ -211,7 +216,7 @@ class Process:
                     job.create(
                         remote_job_id=remote_job_id,
                         process_id_with_prefix=self.process_id_with_prefix,
-                        parameters=params,
+                        parameters=request_body,
                     )
                     job.started = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                     job.status = JobStatus.running.value
