@@ -18,11 +18,11 @@ def index(page):
 @jobs.route("/<path:job_id>", methods=["GET"])
 def show(job_id=None):
     auth = g.get('auth_token')
-    job = Job(job_id, None if auth is None else auth['email'])
+    job = Job(job_id, None if auth is None else auth['sub'])
     return Response(json.dumps(job.display()), mimetype="application/json")
 
 @jobs.route("/<path:job_id>/results", methods=["GET"])
 def results(job_id=None):
     auth = g.get('auth_token')
-    job = Job(job_id, None if auth is None else auth['email'])
+    job = Job(job_id, None if auth is None else auth['sub'])
     return Response(json.dumps(asyncio.run(job.results())), mimetype="application/json")
