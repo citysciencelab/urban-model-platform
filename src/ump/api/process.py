@@ -5,6 +5,7 @@ import re
 import time
 from datetime import datetime
 from multiprocessing import dummy
+from flask import g
 
 import aiohttp
 
@@ -36,6 +37,17 @@ class Process:
         if not providers.check_process_availability(
             self.provider_prefix, self.process_id
         ):
+            raise InvalidUsage(
+                f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
+            )
+
+        auth = g.get('auth_token')
+        role = f"{self.provider_prefix}_{self.process_id}"
+        if auth is None or \
+            not self.provider_prefix in auth['realm_access']['roles'] and \
+            not self.provider_prefix in auth['resource_access']['ump-client']['roles'] and \
+            not role in auth['realm_access']['roles'] and \
+            not role in auth['resource_access']['ump-client']['roles']:
             raise InvalidUsage(
                 f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
             )
@@ -176,7 +188,7 @@ class Process:
 
     async def start_process_execution(self, request_body, user):
         # execution mode:
-        # to maintain backwards compatibility to models using 
+        # to maintain backwards compatibility to models using
         # pre-1.0.0 versions of OGC api processes
         request_body["mode"] = "async"
         p = providers.PROVIDERS[self.provider_prefix]
@@ -200,7 +212,7 @@ class Process:
                 response.raise_for_status()
 
                 if response.ok and response.headers:
-                    # Retrieve the job id from the simulation model server from the 
+                    # Retrieve the job id from the simulation model server from the
                     # location header:
                     match = re.search(
                         "http.*/jobs/(.*)$", response.headers["location"]
@@ -256,7 +268,7 @@ class Process:
                             "Content-type": "application/json",
                             "Accept": "application/json",
                         },
-                    ) as response: 
+                    ) as response:
 
                         response.raise_for_status()
                         job_details: dict = await response.json()
