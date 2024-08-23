@@ -2,11 +2,9 @@ import logging
 import traceback
 
 import aiohttp
-import yaml
+from flask import g
 
 import ump.api.providers as providers
-import ump.config as config
-
 
 async def all_processes():
     processes = {}
@@ -44,15 +42,26 @@ async def all_processes():
 
 def _processes_list(results):
     processes = []
+    auth = g.get('auth_token')
+
     for provider in providers.PROVIDERS:
-
+        provider_access = auth is not None and (provider in auth['realm_access']['roles'] or provider in auth['resource_access']['ump-client']['roles'])
+        if provider_access:
+            logging.debug(f"Granting access for model server {provider}")
         try:
-
             # Check if process has special configuration
             for process in results[provider]:
+                id = f"{provider}_{process['id']}"
+                process_access = auth is not None and (id in auth['realm_access']['roles'] or id in auth['resource_access']['ump-client']['roles'])
+                if process_access or provider_access:
+                    logging.debug(f"Granting access for process {process['id']}")
+
+                if not provider_access and not process_access:
+                    logging.debug(f"Not granting access for {process['id']}")
+                    continue
 
                 logging.debug(
-                    f"Checking  process {process['id']} of provider {providers.PROVIDERS[provider]['name']} "
+                    f"Checking process {process['id']} of provider {providers.PROVIDERS[provider]['name']} "
                 )
 
                 if providers.check_process_availability(provider, process["id"]):
