@@ -31,6 +31,8 @@ class Job:
         "links",
         "parameters",
         "results_metadata",
+        "name",
+        "process_title"
     ]
 
     SORTABLE_COLUMNS = [
@@ -54,6 +56,8 @@ class Job:
         self.updated = None
         self.results_metadata = {}
         self.user_id = None
+        self.name = None
+        self.process_title = None
 
         if job_id and not self._init_from_db(job_id, user):
             raise CustomException(f"Job could not be found!")
@@ -63,14 +67,18 @@ class Job:
         job_id=None,
         remote_job_id=None,
         process_id_with_prefix=None,
+        process_title=None,
+        name=None,
         parameters={},
         user=None
     ):
         self._set_attributes(
-            job_id=job_id,
-            remote_job_id=remote_job_id,
-            process_id_with_prefix=process_id_with_prefix,
-            parameters=parameters,
+            job_id,
+            remote_job_id,
+            process_id_with_prefix,
+            process_title,
+            name,
+            parameters,
             user_id = user
         )
 
@@ -79,11 +87,11 @@ class Job:
         self.updated = datetime.utcnow()
 
         query = """
-      INSERT INTO jobs
-      (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id)
-      VALUES
-      (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s)
-    """
+            INSERT INTO jobs
+            (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id, process_title, name)
+            VALUES
+            (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s)
+        """
         with DBHandler() as db:
             db.run_query(query, query_params=self._to_dict())
 
@@ -94,12 +102,16 @@ class Job:
         job_id=None,
         remote_job_id=None,
         process_id_with_prefix=None,
+        process_title=None,
+        name=None,
         parameters={},
         user_id = None
     ):
         self.job_id = job_id
         self.remote_job_id = remote_job_id
         self.user_id = user_id
+        self.process_title = process_title
+        self.name = name
 
         if remote_job_id and not job_id:
             self.job_id = f"job-{remote_job_id}"
@@ -160,6 +172,8 @@ class Job:
         self.parameters = data["parameters"]
         self.results_metadata = data["results_metadata"]
         self.user_id = data['user_id']
+        self.process_title = data['process_title']
+        self.name = data['name']
 
     def _to_dict(self):
         return {
@@ -175,6 +189,8 @@ class Job:
             "finished": self.finished,
             "updated": self.updated,
             "progress": self.progress,
+            "process_title": self.process_title,
+            "name": self.name,
             "parameters": json.dumps(self.parameters),
             "results_metadata": json.dumps(self.results_metadata),
             "user_id": self.user_id,
@@ -184,12 +200,12 @@ class Job:
         self.updated = datetime.utcnow()
 
         query = """
-      UPDATE jobs SET
-      (process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, results_metadata)
-      =
-      (%(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(results_metadata)s)
-      WHERE job_id = %(job_id)s
-    """
+            UPDATE jobs SET
+            (process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, results_metadata)
+            =
+            (%(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(results_metadata)s)
+            WHERE job_id = %(job_id)s
+        """
         with DBHandler() as db:
             db.run_query(query, query_params=self._to_dict())
 

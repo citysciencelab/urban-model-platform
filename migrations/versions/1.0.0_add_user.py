@@ -11,7 +11,7 @@ from sqlalchemy import Column, String
 # revision identifiers, used by Alembic.
 revision = '1.0.0'
 down_revision = None
-branch_labels = None
+branch_labels = 'add_user'
 depends_on = None
 
 

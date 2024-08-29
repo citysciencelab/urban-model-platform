@@ -43,14 +43,19 @@ class Process:
 
         auth = g.get('auth_token')
         role = f"{self.provider_prefix}_{self.process_id}"
-        if auth is None or \
-            not self.provider_prefix in auth['realm_access']['roles'] and \
-            not self.provider_prefix in auth['resource_access']['ump-client']['roles'] and \
-            not role in auth['realm_access']['roles'] and \
-            not role in auth['resource_access']['ump-client']['roles']:
-            raise InvalidUsage(
-                f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
-            )
+        restricted_access = "authentication" in providers.PROVIDERS[self.provider_prefix]
+
+        if restricted_access:
+            if (
+                auth is None or
+                self.provider_prefix not in auth['realm_access']['roles'] and
+                self.provider_prefix not in auth['resource_access']['ump-client']['roles'] and
+                role not in auth['realm_access']['roles'] and
+                role not in auth['resource_access']['ump-client']['roles']
+            ):
+                raise InvalidUsage(
+                    f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
+                )
 
         asyncio.run(self.set_details())
 
@@ -82,6 +87,12 @@ class Process:
     def validate_params(self, parameters):
         if not self.inputs:
             return
+
+        if not "job_name" in parameters:
+            raise InvalidUsage(
+                f"Parameter job_name is required",
+                payload={"parameter_description": self.inputs["job_name"]},
+            )
 
         for input in self.inputs:
             try:
@@ -193,10 +204,21 @@ class Process:
         request_body["mode"] = "async"
         p = providers.PROVIDERS[self.provider_prefix]
 
+        # extract job_name from request_body
+        name = request_body.pop("job_name")
+
         try:
             auth = providers.authenticate_provider(p)
 
             async with aiohttp.ClientSession() as session:
+                process_response = await session.get(
+                    f"{p['url']}/processes/{self.process_id}",
+                    auth=auth,
+                    headers={
+                        "Content-type": "application/json",
+                        "Accept": "application/json",
+                    },
+                )
                 response = await session.post(
                     f"{p['url']}/processes/{self.process_id}/execution",
                     json=request_body,
@@ -208,6 +230,12 @@ class Process:
                         "Prefer": "respond-async"
                     },
                 )
+
+                process_response.raise_for_status()
+
+                if process_response.ok:
+                    process_details = await process_response.json()
+                    self.process_title = process_details["title"]
 
                 response.raise_for_status()
 
@@ -226,6 +254,8 @@ class Process:
                     job.create(
                         remote_job_id=remote_job_id,
                         process_id_with_prefix=self.process_id_with_prefix,
+                        process_title=self.process_title,
+                        name=name,
                         parameters=request_body,
                         user=user
                     )
