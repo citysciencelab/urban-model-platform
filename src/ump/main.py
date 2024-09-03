@@ -60,7 +60,7 @@ api.register_blueprint(jobs, url_prefix="/jobs")
 
 app.register_blueprint(api)
 
-keycloak_openid = KeycloakOpenID(server_url=f"http://{env['KEYCLOAK_HOST']}/auth/",
+keycloak_openid = KeycloakOpenID(server_url=f"{env['KEYCLOAK_PROTOCOL']}://{env['KEYCLOAK_HOST']}/auth/",
                                  client_id="ump-client",
                                  realm_name="UrbanModelPlatform")
 
