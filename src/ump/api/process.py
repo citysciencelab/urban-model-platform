@@ -180,7 +180,7 @@ class Process:
 
         return False
 
-    def execute(self, parameters, user):
+    def execute(self, parameters, user, ensemble_id = None):
         p = providers.PROVIDERS[self.provider_prefix]
 
         self.validate_params(parameters)
@@ -189,7 +189,7 @@ class Process:
             f" --> Executing {self.process_id} on model server {p['url']} with params {parameters} as process {self.process_id_with_prefix} for user {user}"
         )
 
-        job = asyncio.run(self.start_process_execution(parameters, user))
+        job = asyncio.run(self.start_process_execution(parameters, user, ensemble_id))
 
         _process = dummy.Process(target=self._wait_for_results_async, args=([job]))
         _process.start()
@@ -197,7 +197,7 @@ class Process:
         result = {"jobID": job.job_id, "status": job.status}
         return result
 
-    async def start_process_execution(self, request_body, user):
+    async def start_process_execution(self, request_body, user, ensemble_id = None):
         # execution mode:
         # to maintain backwards compatibility to models using
         # pre-1.0.0 versions of OGC api processes
@@ -257,7 +257,8 @@ class Process:
                         process_title=self.process_title,
                         name=name,
                         parameters=request_body,
-                        user=user
+                        user=user,
+                        ensemble_id=ensemble_id
                     )
                     job.started = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                     job.status = JobStatus.running.value

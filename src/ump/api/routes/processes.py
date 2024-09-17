@@ -9,7 +9,6 @@ from ump.api.processes import all_processes
 
 processes = APIBlueprint("processes", __name__)
 
-
 @processes.route("/", defaults={"page": "index"})
 def index(page):
     result = asyncio.run(all_processes())
