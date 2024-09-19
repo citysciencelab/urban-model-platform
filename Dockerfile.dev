@@ -7,4 +7,9 @@ RUN apt update && apt -y upgrade && \
     rm -rf /var/lib/apt/lists/*
 
 EXPOSE 5000
-CMD poetry install --with dev && poetry run flask -A /app/src/ump/main.py --debug run --host=0.0.0.0
+
+ENV FLASK_APP=/app/src/ump/main.py
+
+CMD poetry install --with dev && \
+    poetry run flask db upgrade head && \
+    poetry run flask -A /app/src/ump/main.py --debug run --host=0.0.0.0
