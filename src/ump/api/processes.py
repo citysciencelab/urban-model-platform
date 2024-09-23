@@ -6,6 +6,7 @@ from flask import g
 
 import ump.api.providers as providers
 
+
 async def all_processes():
     processes = {}
     async with aiohttp.ClientSession() as session:
@@ -42,18 +43,22 @@ async def all_processes():
 
 def _processes_list(results):
     processes = []
-    auth = g.get('auth_token')
+    auth = g.get("auth_token", {}) or {}
+    realm_roles = auth.get("realm_access", {}).get("roles", [])
+    client_roles = (
+        auth.get("resource_access", {}).get("ump-client", {}).get("roles", [])
+    )
 
     for provider in providers.PROVIDERS:
         public_access = not "authentication" in providers.PROVIDERS[provider]
-        provider_access = auth is not None and (provider in auth['realm_access']['roles'] or provider in auth['resource_access']['ump-client']['roles'])
+        provider_access = provider in realm_roles or provider in client_roles
         if public_access or provider_access:
             logging.debug(f"Granting access for model server {provider}")
         try:
             # Check if process has special configuration
             for process in results[provider]:
-                id = f"{provider}_{process['id']}"
-                process_access = auth is not None and (id in auth['realm_access']['roles'] or id in auth['resource_access']['ump-client']['roles'])
+                process_id = f"{provider}_{process['id']}"
+                process_access = process_id in realm_roles or process_id in client_roles
                 if public_access or process_access or provider_access:
                     logging.debug(f"Granting access for process {process['id']}")
 
