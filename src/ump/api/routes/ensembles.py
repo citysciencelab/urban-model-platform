@@ -39,7 +39,7 @@ def create():
         user_id=auth.get("sub"),
         sample_size=data.get("sample_size"),
         sampling_method=data.get("sampling_method"),
-        scenario_configs=json.dumps(data["scenario_configs"]),
+        scenario_configs=json.dumps(data.get("scenario_configs")),
     )
     with Session(engine) as session:
         session.add(ensemble)
@@ -91,7 +91,7 @@ def get(ensemble_id):
             .where(Ensemble.user_id == auth["sub"])
             .where(Ensemble.id == ensemble_id)
         )
-        return jsonify(session.scalars(stmt).fetchall())
+        return jsonify(session.scalar(stmt))
     return Response(json.dumps(""), mimetype="application/json")
 
 
@@ -106,10 +106,10 @@ def execute(ensemble_id):
             .where(Ensemble.user_id == auth["sub"])
             .where(Ensemble.id == ensemble_id)
         )
-        ensembles = session.scalars(stmt).fetchall()
-        if len(ensembles) == 0:
+        ensemble = session.scalar(stmt)
+        if ensemble is None:
             return Response("No such scenario", status=400)
-        return create_jobs(ensembles[0], auth)
+        return create_jobs(ensemble, auth)
 
 
 def create_jobs_for_config(config):
