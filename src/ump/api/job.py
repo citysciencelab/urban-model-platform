@@ -32,7 +32,7 @@ class Job:
         "results_metadata",
         "name",
         "process_title",
-        "ensemble_id"
+        "ensemble_id",
     ]
 
     SORTABLE_COLUMNS = [
@@ -45,7 +45,7 @@ class Job:
         "message",
     ]
 
-    def __init__(self, job_id = None, user = None):
+    def __init__(self, job_id=None, user=None):
         self.job_id = job_id
         self.status = None
         self.message = ""
@@ -72,7 +72,7 @@ class Job:
         name=None,
         parameters={},
         user=None,
-        ensemble_id=None
+        ensemble_id=None,
     ):
         self._set_attributes(
             job_id,
@@ -81,13 +81,13 @@ class Job:
             process_title,
             name,
             parameters,
-            user_id = user,
-            ensemble_id = ensemble_id
+            user_id=user,
+            ensemble_id=ensemble_id,
         )
 
         self.status = JobStatus.accepted.value
-        self.created = datetime.utcnow()
-        self.updated = datetime.utcnow()
+        self.created = datetime.now(datetime.timezone.utc)
+        self.updated = datetime.now(datetime.timezone.utc)
 
         query = """
             INSERT INTO jobs
@@ -109,8 +109,8 @@ class Job:
         process_title=None,
         name=None,
         parameters={},
-        user_id = None,
-        ensemble_id = None
+        user_id=None,
+        ensemble_id=None,
     ):
         self.job_id = job_id
         self.remote_job_id = remote_job_id
@@ -148,7 +148,7 @@ class Job:
       SELECT * FROM jobs WHERE job_id = %(job_id)s
     """
         if user is None:
-            query += ' and user_id is null'
+            query += " and user_id is null"
         else:
             query += f" and (user_id = '{user}' or user_id is null)"
 
@@ -177,10 +177,10 @@ class Job:
         self.progress = data["progress"]
         self.parameters = data["parameters"]
         self.results_metadata = data["results_metadata"]
-        self.user_id = data['user_id']
-        self.process_title = data['process_title']
-        self.name = data['name']
-        self.ensemble_id = data['ensemble_id']
+        self.user_id = data["user_id"]
+        self.process_title = data["process_title"]
+        self.name = data["name"]
+        self.ensemble_id = data["ensemble_id"]
 
     def _to_dict(self):
         return {
@@ -201,7 +201,7 @@ class Job:
             "parameters": json.dumps(self.parameters),
             "results_metadata": json.dumps(self.results_metadata),
             "user_id": self.user_id,
-            "ensemble_id": self.ensemble_id
+            "ensemble_id": self.ensemble_id,
         }
 
     def save(self):
