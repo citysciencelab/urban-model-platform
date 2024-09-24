@@ -6,7 +6,6 @@ from datetime import datetime
 
 import aiohttp
 import geopandas as gpd
-import yaml
 
 import ump.api.providers as providers
 import ump.config as config
@@ -32,7 +31,8 @@ class Job:
         "parameters",
         "results_metadata",
         "name",
-        "process_title"
+        "process_title",
+        "ensemble_id",
     ]
 
     SORTABLE_COLUMNS = [
@@ -45,7 +45,7 @@ class Job:
         "message",
     ]
 
-    def __init__(self, job_id = None, user = None):
+    def __init__(self, job_id=None, user=None):
         self.job_id = job_id
         self.status = None
         self.message = ""
@@ -56,6 +56,7 @@ class Job:
         self.updated = None
         self.results_metadata = {}
         self.user_id = None
+        self.ensemble_id = None
         self.name = None
         self.process_title = None
 
@@ -70,7 +71,8 @@ class Job:
         process_title=None,
         name=None,
         parameters={},
-        user=None
+        user=None,
+        ensemble_id=None,
     ):
         self._set_attributes(
             job_id,
@@ -79,20 +81,22 @@ class Job:
             process_title,
             name,
             parameters,
-            user_id = user
+            user_id=user,
+            ensemble_id=ensemble_id,
         )
 
         self.status = JobStatus.accepted.value
-        self.created = datetime.utcnow()
-        self.updated = datetime.utcnow()
+        self.created = datetime.now(datetime.timezone.utc)
+        self.updated = datetime.now(datetime.timezone.utc)
 
         query = """
             INSERT INTO jobs
-            (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id, process_title, name)
+            (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id, process_title, name, ensemble_id)
             VALUES
-            (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s)
+            (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s, %(ensemble_id)s)
         """
         with DBHandler() as db:
+            logging.error(self._to_dict())
             db.run_query(query, query_params=self._to_dict())
 
         logging.info(f" --> Job {self.job_id} for {self.process_id} created.")
@@ -105,13 +109,15 @@ class Job:
         process_title=None,
         name=None,
         parameters={},
-        user_id = None
+        user_id=None,
+        ensemble_id=None,
     ):
         self.job_id = job_id
         self.remote_job_id = remote_job_id
         self.user_id = user_id
         self.process_title = process_title
         self.name = name
+        self.ensemble_id = ensemble_id
 
         if remote_job_id and not job_id:
             self.job_id = f"job-{remote_job_id}"
@@ -142,7 +148,7 @@ class Job:
       SELECT * FROM jobs WHERE job_id = %(job_id)s
     """
         if user is None:
-            query += ' and user_id is null'
+            query += " and user_id is null"
         else:
             query += f" and (user_id = '{user}' or user_id is null)"
 
@@ -171,9 +177,10 @@ class Job:
         self.progress = data["progress"]
         self.parameters = data["parameters"]
         self.results_metadata = data["results_metadata"]
-        self.user_id = data['user_id']
-        self.process_title = data['process_title']
-        self.name = data['name']
+        self.user_id = data["user_id"]
+        self.process_title = data["process_title"]
+        self.name = data["name"]
+        self.ensemble_id = data["ensemble_id"]
 
     def _to_dict(self):
         return {
@@ -194,6 +201,7 @@ class Job:
             "parameters": json.dumps(self.parameters),
             "results_metadata": json.dumps(self.results_metadata),
             "user_id": self.user_id,
+            "ensemble_id": self.ensemble_id,
         }
 
     def save(self):
@@ -201,9 +209,9 @@ class Job:
 
         query = """
             UPDATE jobs SET
-            (process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, results_metadata)
+            (process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, results_metadata, ensemble_id)
             =
-            (%(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(results_metadata)s)
+            (%(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(results_metadata)s, %(ensemble_id)s)
             WHERE job_id = %(job_id)s
         """
         with DBHandler() as db:

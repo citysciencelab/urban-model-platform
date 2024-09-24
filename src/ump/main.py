@@ -13,6 +13,7 @@ from werkzeug.exceptions import HTTPException
 
 from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
+from ump.api.routes.ensembles import ensembles
 from ump.errors import CustomException
 
 if (
@@ -57,6 +58,7 @@ CORS(app)
 api = APIBlueprint("api", __name__, url_prefix="/api")
 api.register_blueprint(processes, url_prefix="/processes")
 api.register_blueprint(jobs, url_prefix="/jobs")
+api.register_blueprint(ensembles, url_prefix="/ensembles")
 
 app.register_blueprint(api)
 
