@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -23,11 +23,29 @@ class Ensemble(Base):
     created: Mapped[datetime] = mapped_column(DateTime())
     modified: Mapped[datetime] = mapped_column(DateTime())
 
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        user_id: str,
+        scenario_configs: str,
+        sample_size: int,
+        sampling_method: str,
+    ):
+        self.name = name
+        self.description = description
+        self.user_id = user_id
+        self.scenario_configs = scenario_configs
+        self.sample_size = sample_size
+        self.sampling_method = sampling_method
+        self.created = datetime.now(timezone.utc)
+        self.modified = datetime.now(timezone.utc)
+
     def _to_dict(self):
         return {
             "id": self.id,
-            "created": self.created,
-            "modified": self.modified,
+            "created": self.created.isoformat(),
+            "modified": self.modified.isoformat(),
             "name": self.name,
             "description": self.description,
             "user_id": self.user_id,
@@ -47,6 +65,13 @@ class Comment(Base):
     comment: Mapped[str] = mapped_column(String())
     created: Mapped[datetime] = mapped_column(DateTime())
     modified: Mapped[datetime] = mapped_column(DateTime())
+
+    def __init__(self, user_id: str, ensemble_id: int, comment: str):
+        self.user_id = user_id
+        self.ensemble_id = ensemble_id
+        self.comment = comment
+        self.created = datetime.now(datetime.timezone.utc)
+        self.modified = datetime.now(datetime.timezone.utc)
 
     def _to_dict(self):
         return {
