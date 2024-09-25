@@ -2,6 +2,7 @@ import logging
 import traceback
 
 import aiohttp
+from aiohttp import ClientTimeout
 from flask import g
 
 import ump.api.providers as providers
@@ -15,6 +16,7 @@ async def all_processes():
                 p = providers.PROVIDERS[provider]
 
                 auth = providers.authenticate_provider(p)
+                timeout_value = int(p.get("timeout"))
 
                 response = await session.get(
                     f"{p['url']}/processes",
@@ -23,6 +25,7 @@ async def all_processes():
                         "Content-type": "application/json",
                         "Accept": "application/json",
                     },
+                    timeout=ClientTimeout(total=timeout_value / 1000),
                 )
                 async with response:
                     assert (
@@ -34,7 +37,9 @@ async def all_processes():
                         processes[provider] = results["processes"]
 
             except Exception as e:
-                logging.error(f"Cannot access {provider} provider! {e}")
+                logging.error(
+                    f"Cannot access {provider} provider at url \"{p['url']}/processes\"! {e}"
+                )
                 traceback.print_exc()
                 processes[provider] = []
 
