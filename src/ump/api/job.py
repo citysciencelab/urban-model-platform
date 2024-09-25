@@ -2,7 +2,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import aiohttp
 import geopandas as gpd
@@ -86,8 +86,8 @@ class Job:
         )
 
         self.status = JobStatus.accepted.value
-        self.created = datetime.now(datetime.timezone.utc)
-        self.updated = datetime.now(datetime.timezone.utc)
+        self.created = datetime.now(timezone.utc)
+        self.updated = datetime.now(timezone.utc)
 
         query = """
             INSERT INTO jobs

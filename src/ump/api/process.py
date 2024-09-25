@@ -5,9 +5,9 @@ import re
 import time
 from datetime import datetime
 from multiprocessing import dummy
-from flask import g
 
 import aiohttp
+from flask import g
 
 import ump.api.providers as providers
 import ump.config as config
@@ -25,7 +25,7 @@ class Process:
 
         self.process_id_with_prefix = process_id_with_prefix
 
-        match = re.search(r"(.*):(.*)", self.process_id_with_prefix)
+        match = re.search(r"([^:]+):(.*)", self.process_id_with_prefix)
         if not match:
             raise InvalidUsage(
                 f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
@@ -41,17 +41,20 @@ class Process:
                 f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
             )
 
-        auth = g.get('auth_token')
+        auth = g.get("auth_token")
         role = f"{self.provider_prefix}_{self.process_id}"
-        restricted_access = "authentication" in providers.PROVIDERS[self.provider_prefix]
+        restricted_access = (
+            "authentication" in providers.PROVIDERS[self.provider_prefix]
+        )
 
         if restricted_access:
             if (
-                auth is None or
-                self.provider_prefix not in auth['realm_access']['roles'] and
-                self.provider_prefix not in auth['resource_access']['ump-client']['roles'] and
-                role not in auth['realm_access']['roles'] and
-                role not in auth['resource_access']['ump-client']['roles']
+                auth is None
+                or self.provider_prefix not in auth["realm_access"]["roles"]
+                and self.provider_prefix
+                not in auth["resource_access"]["ump-client"]["roles"]
+                and role not in auth["realm_access"]["roles"]
+                and role not in auth["resource_access"]["ump-client"]["roles"]
             ):
                 raise InvalidUsage(
                     f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
@@ -180,7 +183,7 @@ class Process:
 
         return False
 
-    def execute(self, parameters, user, ensemble_id = None):
+    def execute(self, parameters, user, ensemble_id=None):
         p = providers.PROVIDERS[self.provider_prefix]
 
         self.validate_params(parameters)
@@ -197,7 +200,7 @@ class Process:
         result = {"jobID": job.job_id, "status": job.status}
         return result
 
-    async def start_process_execution(self, request_body, user, ensemble_id = None):
+    async def start_process_execution(self, request_body, user, ensemble_id=None):
         # execution mode:
         # to maintain backwards compatibility to models using
         # pre-1.0.0 versions of OGC api processes
@@ -227,7 +230,7 @@ class Process:
                         "Content-type": "application/json",
                         "Accept": "application/json",
                         # execution mode shall be async, if model supports it
-                        "Prefer": "respond-async"
+                        "Prefer": "respond-async",
                     },
                 )
 
@@ -244,9 +247,7 @@ class Process:
                     # location header:
                     match = re.search(
                         "http.*/jobs/(.*)$", response.headers["location"]
-                        ) or (
-                        re.search('.*/jobs/(.*)$', response.headers["location"])
-                    )
+                    ) or (re.search(".*/jobs/(.*)$", response.headers["location"]))
                     if match:
                         remote_job_id = match.group(1)
 
@@ -258,7 +259,7 @@ class Process:
                         name=name,
                         parameters=request_body,
                         user=user,
-                        ensemble_id=ensemble_id
+                        ensemble_id=ensemble_id,
                     )
                     job.started = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                     job.status = JobStatus.running.value
@@ -397,7 +398,7 @@ class Process:
         process_dict["id"] = process_dict.pop("process_id_with_prefix")
 
         # delete all keys containing None
-        for key,value  in list(process_dict.items()):
+        for key, value in list(process_dict.items()):
             if value is None:
                 process_dict.pop(key)
 

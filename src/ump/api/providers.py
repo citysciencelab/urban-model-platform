@@ -38,4 +38,4 @@ def check_process_availability(provider, process_id):
 
 
 def check_result_storage(provider, process_id):
-    return PROVIDERS[provider]["processes"][process_id]["result-storage"]
+    return PROVIDERS.get(provider, {}).get("processes", {}).get(process_id, {}).get("result-storage", None)
