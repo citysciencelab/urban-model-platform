@@ -18,8 +18,6 @@ class Ensemble(Base):
     description: Mapped[str] = mapped_column(String())
     user_id: Mapped[str] = mapped_column(String())
     scenario_configs: Mapped[str] = mapped_column(String())
-    sample_size: Mapped[int] = mapped_column(BigInteger())
-    sampling_method: Mapped[str] = mapped_column(String())
     created: Mapped[datetime] = mapped_column(DateTime())
     modified: Mapped[datetime] = mapped_column(DateTime())
 
@@ -29,15 +27,11 @@ class Ensemble(Base):
         description: str,
         user_id: str,
         scenario_configs: str,
-        sample_size: int,
-        sampling_method: str,
     ):
         self.name = name
         self.description = description
         self.user_id = user_id
         self.scenario_configs = scenario_configs
-        self.sample_size = sample_size
-        self.sampling_method = sampling_method
         self.created = datetime.now(timezone.utc)
         self.modified = datetime.now(timezone.utc)
 
@@ -50,8 +44,6 @@ class Ensemble(Base):
             "description": self.description,
             "user_id": self.user_id,
             "scenario_configs": self.scenario_configs,
-            "sample_size": self.sample_size,
-            "sampling_method": self.sampling_method,
         }
 
 

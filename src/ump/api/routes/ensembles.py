@@ -37,8 +37,6 @@ def create():
         name=data.get("name"),
         description=data.get("description"),
         user_id=auth.get("sub"),
-        sample_size=data.get("sample_size"),
-        sampling_method=data.get("sampling_method"),
         scenario_configs=json.dumps(data.get("scenario_configs")),
     )
     with Session(engine) as session:
