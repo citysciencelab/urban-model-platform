@@ -1,30 +1,32 @@
 import builtins
+from sqlalchemy.orm import Session
+from sqlalchemy import create_engine, select
+from apiflask import APIBlueprint
+from flask import Response, g, request
+import logging
 import copy
 import json
 import logging
 
-from apiflask import APIBlueprint
-from flask import Response, g, jsonify, request
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
-
-from ump.api.ensemble import Comment, Ensemble
+from ump.api.entities import JobConfig, Ensemble, Comment
 from ump.api.process import Process
 
 ensembles = APIBlueprint("ensembles", __name__)
 
 engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
 
-
 @ensembles.route("/", methods=["GET"])
 def index():
     auth = g.get("auth_token")
     if auth is None:
-        return Response("[]", mimetype="application/json")
+        return Response(status = 401)
     with Session(engine) as session:
         stmt = select(Ensemble).where(Ensemble.user_id == auth["sub"])
-        return jsonify(session.scalars(stmt).fetchall())
-
+        result = session.scalars(stmt).fetchall()
+        list = []
+        for ensemble in result:
+            list.append(ensemble.to_dict(rules = ['-job_configs.ensembles']))
+        return list
 
 @ensembles.route("/", methods=["POST"])
 def create():
@@ -42,31 +44,31 @@ def create():
     with Session(engine) as session:
         session.add(ensemble)
         session.commit()
-        return Response(
-            json.dumps(ensemble._to_dict()), status=201, mimetype="application/json"
-        )
-
+        create_jobs(ensemble, auth, session)
+        return Response(mimetype="application/json", status = 201)
 
 @ensembles.route("/<path:ensemble_id>/comments", methods=["GET"])
 def get_comments(ensemble_id):
     auth = g.get("auth_token")
     if auth is None:
-        return Response("[]", mimetype="application/json")
+        return Response(status = 401)
     with Session(engine) as session:
         stmt = (
             select(Comment)
             .where(Comment.user_id == auth["sub"])
             .where(Comment.ensemble_id == ensemble_id)
         )
-        return jsonify(session.scalars(stmt).fetchall())
-
+        list = []
+        for comment in session.scalars(stmt).fetchall():
+            list.append(comment.to_dict())
+        return list
 
 @ensembles.route("/<path:ensemble_id>/comments", methods=["POST"])
 def create_comment(ensemble_id):
     auth = g.get("auth_token")
     if auth is None:
-        logging.error("Not creating comment, no authentication found.")
-        return Response("", mimetype="application/json")
+        logging.error('Not creating comment, no authentication found.')
+        return Response(status = 401)
     comment = Comment(
         user_id=auth["sub"],
         ensemble_id=ensemble_id,
@@ -77,38 +79,35 @@ def create_comment(ensemble_id):
         session.commit()
         return Response(mimetype="application/json", status=201)
 
-
 @ensembles.route("/<path:ensemble_id>", methods=["GET"])
 def get(ensemble_id):
     auth = g.get("auth_token")
     if auth is None:
-        return Response("[]", mimetype="application/json")
+        return Response(status = 401)
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
             .where(Ensemble.user_id == auth["sub"])
             .where(Ensemble.id == ensemble_id)
         )
-        return jsonify(session.scalar(stmt))
+        return session.scalar(stmt).to_dict(rules = ['-job_configs.ensembles'])
     return Response(json.dumps(""), mimetype="application/json")
-
 
 @ensembles.route("/<path:ensemble_id>/execute", methods=["GET"])
 def execute(ensemble_id):
     auth = g.get("auth_token")
     if auth is None:
-        return Response("[]", mimetype="application/json")
+        return Response(status = 401)
     with Session(engine) as session:
-        stmt = (
-            select(Ensemble)
-            .where(Ensemble.user_id == auth["sub"])
-            .where(Ensemble.id == ensemble_id)
-        )
-        ensemble = session.scalar(stmt)
-        if ensemble is None:
-            return Response("No such scenario", status=400)
-        return create_jobs(ensemble, auth)
-
+        stmt = select(Ensemble).where(Ensemble.user_id == auth['sub']).where(Ensemble.id == ensemble_id)
+        ensembles = session.scalars(stmt).fetchall()
+        if len(ensembles) == 0:
+            return Response('No such ensemble', status = 400)
+        list = []
+        for config in ensembles[0].job_configs:
+            process = Process(config.process_id)
+            list.append(process.execute_config(config, auth['sub']))
+        return list
 
 def create_jobs_for_config(config):
     list = [{"process_id": config["process_id"], "inputs": {}}]
@@ -136,20 +135,22 @@ def create_jobs_for_config(config):
                     cfg["inputs"][param] = val
     return list
 
-
-def create_jobs(ensemble: Ensemble, auth):
+def create_jobs(ensemble: Ensemble, auth, session):
     configs = ensemble.scenario_configs
     list = []
     for config in configs:
         list = list + create_jobs_for_config(config)
-    result_list = []
     for config in list:
-        process = Process(config["process_id"])
-        result_list.append(
-            process.execute(
-                {"job_name": ensemble.name, "inputs": config["inputs"]},
-                auth["sub"],
-                ensemble_id=ensemble.id,
-            )
+        job_config = JobConfig(
+            user_id = auth['sub'],
+            name = ensemble.name,
+            parameters = json.dumps({
+                'job_name': ensemble.name,
+                'inputs': config['inputs']
+            }),
+            process_id = config['process_id'],
+            ensembles = [ensemble]
         )
-    return Response(json.dumps(result_list), mimetype="application/json")
+        session.add(job_config)
+        session.commit()
+    session.commit()

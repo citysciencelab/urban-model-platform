@@ -93,6 +93,7 @@ gunicorn = "^23.0.0"
 pyyaml = "^6.0.2"
 flask-migrate = "^4.0.7"
 python-keycloak = "^4.3.0"
+sqlalchemy-serializer = "^1.4.22"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests

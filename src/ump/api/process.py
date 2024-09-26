@@ -3,19 +3,25 @@ import json
 import logging
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from multiprocessing import dummy
 
 import aiohttp
 from flask import g
+from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
+import geopandas as gpd
 
+from ump.api.entities import JobExecution, JobConfig
 import ump.api.providers as providers
 import ump.config as config
 from ump.api.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
+from ump.geoserver.geoserver import Geoserver
 
 logging.basicConfig(level=logging.INFO)
 
+engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
 
 class Process:
     def __init__(self, process_id_with_prefix=None):
@@ -183,6 +189,24 @@ class Process:
 
         return False
 
+    def execute_config(self, job_config, user):
+        with Session(engine) as session:
+            p = providers.PROVIDERS[self.provider_prefix]
+
+            self.validate_params(job_config.parameters)
+
+            logging.info(
+                f" --> Executing {job_config.process_id} on model server {p['url']} with params {job_config.parameters} as process {self.process_id_with_prefix} for user {user}"
+            )
+
+            job = asyncio.run(self.start_process_execution_config(job_config, user, session))
+
+            _process = dummy.Process(target=self._wait_for_results_async, args=([job, job_config, session]))
+            _process.start()
+
+            result = {"jobID": job.job_id, "status": job.status}
+            return result
+
     def execute(self, parameters, user, ensemble_id=None):
         p = providers.PROVIDERS[self.provider_prefix]
 
@@ -199,6 +223,76 @@ class Process:
 
         result = {"jobID": job.job_id, "status": job.status}
         return result
+
+    async def start_process_execution_config(self, job_config, user, session):
+        # execution mode:
+        # to maintain backwards compatibility to models using
+        # pre-1.0.0 versions of OGC api processes
+        job_config.parameters["mode"] = "async"
+        p = providers.PROVIDERS[self.provider_prefix]
+
+        try:
+            auth = providers.authenticate_provider(p)
+
+            async with aiohttp.ClientSession() as http_session:
+                process_response = await http_session.get(
+                    f"{p['url']}/processes/{self.process_id}",
+                    auth=auth,
+                    headers={
+                        "Content-type": "application/json",
+                        "Accept": "application/json",
+                    },
+                )
+                response = await http_session.post(
+                    f"{p['url']}/processes/{self.process_id}/execution",
+                    json=job_config.parameters,
+                    auth=auth,
+                    headers={
+                        "Content-type": "application/json",
+                        "Accept": "application/json",
+                        # execution mode shall be async, if model supports it
+                        "Prefer": "respond-async",
+                    },
+                )
+
+                process_response.raise_for_status()
+
+                if process_response.ok:
+                    process_details = await process_response.json()
+                    self.process_title = process_details["title"]
+
+                response.raise_for_status()
+
+                if response.ok and response.headers:
+                    # Retrieve the job id from the simulation model server from the
+                    # location header:
+                    match = re.search(
+                        "http.*/jobs/(.*)$", response.headers["location"]
+                    ) or (re.search(".*/jobs/(.*)$", response.headers["location"]))
+                    if match:
+                        remote_job_id = match.group(1)
+
+                    job = JobExecution(
+                        remote_job_id = remote_job_id,
+                        job_config_id = job_config.id,
+                        job_id = f"job-{remote_job_id}",
+                        created = datetime.now(timezone.utc),
+                        started = datetime.now(timezone.utc),
+                        user_id = user,
+                        status = JobStatus.running.value
+                    )
+
+                    session.add(job)
+                    session.commit()
+
+                    logging.info(
+                        f" --> Job {job.job_id} for model {self.process_id_with_prefix} started running."
+                    )
+
+                    return job
+
+        except Exception as e:
+            raise CustomException(f"Job could not be started remotely: {e}")
 
     async def start_process_execution(self, request_body, user, ensemble_id=None):
         # execution mode:
@@ -274,10 +368,10 @@ class Process:
         except Exception as e:
             raise CustomException(f"Job could not be started remotely: {e}")
 
-    def _wait_for_results_async(self, job: Job):
-        asyncio.run(self._wait_for_results(job))
+    def _wait_for_results_async(self, job: JobExecution, job_config: JobConfig, session):
+        asyncio.run(self._wait_for_results(job, job_config, session))
 
-    async def _wait_for_results(self, job: Job):
+    async def _wait_for_results(self, job: JobExecution, job_config: JobConfig, session):
 
         logging.info(" --> Waiting for results in Thread")
 
@@ -290,10 +384,10 @@ class Process:
         try:
             while not finished:
 
-                async with aiohttp.ClientSession() as session:
+                async with aiohttp.ClientSession() as http_session:
 
                     auth = providers.authenticate_provider(p)
-                    async with session.get(
+                    async with http_session.get(
                         f"{p['url']}/jobs/{job.remote_job_id}",
                         auth=auth,
                         headers={
@@ -312,8 +406,9 @@ class Process:
                 # either remote job has progress info or else we cannot provide it either
                 job.progress = job_details.get("progress")
 
-                job.updated = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                job.save()
+                job.updated = datetime.now(timezone.utc)
+                session.add(job)
+                session.commit()
 
                 if time.time() - start > timeout:
                     raise TimeoutError(
@@ -328,14 +423,15 @@ class Process:
 
         except Exception as e:
             logging.error(
-                f" --> Could not retrieve results for job {self.process_id_with_prefix} (={self.process_id})/{job.job_id} from simulation model server: {e}"
+                f" --> Could not retrieve results for job {self.process_id_with_prefix} (={job_config.process_id})/{job.job_id} from simulation model server: {e}"
             )
             job.status = JobStatus.failed.value
             job.message = str(e)
-            job.updated = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            job.updated = datetime.now(timezone.utc)
             job.finished = job.updated
             job.progress = 100
-            job.save()
+            session.add(job)
+            session.commit()
             raise CustomException(
                 "Could not retrieve results from simulation model server. {e}"
             )
@@ -344,37 +440,123 @@ class Process:
         try:
             if job_details["status"] != JobStatus.successful.value:
                 job.status = JobStatus.failed.value
-                job.finished = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                job.finished = datetime.now(timezone.utc)
                 job.updated = job.finished
                 job.progress = 100
                 job.message = (
                     f'Remote execution was not successful! {job_details["message"]}'
                 )
-                job.save()
+                session.add(job)
+                session.commit()
                 raise CustomException(f"Remote job {job.remote_job_id}: {job.message}")
 
         except CustomException as e:
             logging.error(f" --> An error occurred: {e}")
 
         job.status = JobStatus.successful.value
-        job.finished = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        job.finished = datetime.now(timezone.utc)
         job.updated = job.finished
         job.progress = 100
-        job.save()
+        session.add(job)
+        session.commit()
 
         # Check if results should be stored in the geoserver
         try:
             if (
-                providers.check_result_storage(self.provider_prefix, self.process_id)
+                providers.check_result_storage(self.provider_prefix, job_config.process_id)
                 == "geoserver"
             ):
-                await job.results_to_geoserver()
+                await self.results_to_geoserver(job)
         except Exception as e:
             logging.error(
-                f" --> Could not store results for job {self.process_id_with_prefix} (={self.process_id})/{job.job_id} to geoserver: {e}"
+                f" --> Could not store results for job {self.process_id_with_prefix} (={job_config.process_id})/{job.job_id} to geoserver: {e}"
             )
             job.message = str(e)
-            job.save()
+            session.add(job)
+            session.commit()
+
+    def set_results_metadata(self, results_as_json):
+        results_df = gpd.GeoDataFrame.from_features(results_as_json)
+
+        minimal_values_df = results_df.min(numeric_only=True)
+        maximal_values_df = results_df.max(numeric_only=True)
+
+        minimal_values_dict = minimal_values_df.to_dict()
+        maximal_values_dict = maximal_values_df.to_dict()
+
+        types = results_df.dtypes.to_dict()
+
+        values = []
+        for column in maximal_values_dict:
+
+            type = str(types[column])
+            if type == "float64" and results_df[column].apply(float.is_integer).all():
+                type = "int"
+
+            values.append(
+                {
+                    column: {
+                        "type": type,
+                        "min": minimal_values_dict[column],
+                        "max": maximal_values_dict[column],
+                    }
+                }
+            )
+
+        for column in results_df.select_dtypes(include=[object]).to_dict():
+            values.append(
+                {column: {"type": "string", "values": list(set(results_df[column]))}}
+            )
+
+        results_metadata = {"values": values}
+
+        return results_metadata
+
+    async def results(self, execution):
+        if execution.status != JobStatus.successful.value:
+            return {
+                "error": f"No results available. Job status = {execution.status}.",
+                "message": execution.message,
+            }
+
+        p = providers.PROVIDERS[self.provider_prefix]
+
+        async with aiohttp.ClientSession() as session:
+            auth = providers.authenticate_provider(p)
+
+            response = await session.get(
+                f"{self.provider_url}/jobs/{self.remote_job_id}/results?f=json",
+                auth=auth,
+                headers={
+                    "Content-type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+
+            if response.status == 200:
+                return await response.json()
+            else:
+                raise CustomException(
+                    f"Could not retrieve results from model server {self.provider_url} - {response.status}: {response.reason}"
+                )
+
+    async def results_to_geoserver(self, execution):
+        try:
+            geoserver = Geoserver()
+            results = self.results(execution)
+
+            execution.results_metadata = self.set_results_metadata(results)
+
+            geoserver.save_results(job_id=execution.job_id, data=results)
+
+            logging.info(
+                f" --> Successfully stored results for job {self.process_id_with_prefix} (={execution.process_id})/{execution.job_id} to geoserver."
+            )
+
+        except Exception as e:
+            logging.error(
+                f" --> Could not store results for job {self.process_id_with_prefix} (={execution.process_id})/{execution.job_id} to geoserver: {e}"
+            )
 
     def is_finished(self, job_details):
         finished = False
