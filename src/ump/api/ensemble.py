@@ -1,16 +1,19 @@
-from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, declarative_base
+from sqlalchemy_serializer import SerializerMixin
 
+Base = declarative_base()
 
-class Base(DeclarativeBase):
-    pass
+class JobsEnsembles(Base, SerializerMixin):
+    __tablename__ = 'jobs_ensembles'
 
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ensemble_id: Mapped[int] = mapped_column(BigInteger())
+    job_id: Mapped[int] = mapped_column(String())
 
-@dataclass
-class Ensemble(Base):
+class Ensemble(Base, SerializerMixin):
     __tablename__ = "ensembles"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -46,9 +49,7 @@ class Ensemble(Base):
             "scenario_configs": self.scenario_configs,
         }
 
-
-@dataclass
-class Comment(Base):
+class Comment(Base, SerializerMixin):
     __tablename__ = "ensemble_comments"
 
     id: Mapped[int] = mapped_column(primary_key=True)

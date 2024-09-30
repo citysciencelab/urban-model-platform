@@ -4,17 +4,17 @@ import json
 import logging
 
 from apiflask import APIBlueprint
-from flask import Response, g, jsonify, request
+from flask import Response, g, request
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from ump.api.ensemble import Comment, Ensemble
+from ump.api.ensemble import Comment, Ensemble, JobsEnsembles
 from ump.api.process import Process
+from ump.api.job import Job
 
 ensembles = APIBlueprint("ensembles", __name__)
 
 engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
-
 
 @ensembles.route("/", methods=["GET"])
 def index():
@@ -23,8 +23,11 @@ def index():
         return Response("[]", mimetype="application/json")
     with Session(engine) as session:
         stmt = select(Ensemble).where(Ensemble.user_id == auth["sub"])
-        return jsonify(session.scalars(stmt).fetchall())
-
+        result = session.scalars(stmt).fetchall()
+        list = []
+        for ensemble in result:
+            list.append(ensemble.to_dict())
+        return list
 
 @ensembles.route("/", methods=["POST"])
 def create():
@@ -58,7 +61,10 @@ def get_comments(ensemble_id):
             .where(Comment.user_id == auth["sub"])
             .where(Comment.ensemble_id == ensemble_id)
         )
-        return jsonify(session.scalars(stmt).fetchall())
+        list = []
+        for comment in session.scalars(stmt).fetchall():
+            list.append(comment.to_dict())
+        return list
 
 
 @ensembles.route("/<path:ensemble_id>/comments", methods=["POST"])
@@ -89,9 +95,21 @@ def get(ensemble_id):
             .where(Ensemble.user_id == auth["sub"])
             .where(Ensemble.id == ensemble_id)
         )
-        return jsonify(session.scalar(stmt))
+        return session.scalar(stmt).to_dict()
     return Response(json.dumps(""), mimetype="application/json")
 
+@ensembles.route("/<path:ensemble_id>/jobs", methods=["GET"])
+def jobs(ensemble_id):
+    auth = g.get("auth_token")
+    if auth is None:
+        return Response("[]", mimetype="application/json")
+    with Session(engine) as session:
+        stmt = select(JobsEnsembles).where(JobsEnsembles.ensemble_id == ensemble_id)
+        ids = session.scalars(stmt).fetchall()
+        list = []
+        for row in ids:
+            list.append(Job(row.job_id, auth['sub']).display())
+        return Response(json.dumps(list), mimetype="application/json")
 
 @ensembles.route("/<path:ensemble_id>/execute", methods=["GET"])
 def execute(ensemble_id):
@@ -107,8 +125,11 @@ def execute(ensemble_id):
         ensemble = session.scalar(stmt)
         if ensemble is None:
             return Response("No such scenario", status=400)
-        return create_jobs(ensemble, auth)
-
+        jobs = create_jobs(ensemble, auth)
+        for job in jobs:
+            session.add(JobsEnsembles(ensemble_id = ensemble_id, job_id = job['jobID']))
+        session.commit()
+        return Response(json.dumps(jobs), mimetype="application/json")
 
 def create_jobs_for_config(config):
     list = [{"process_id": config["process_id"], "inputs": {}}]
@@ -152,4 +173,4 @@ def create_jobs(ensemble: Ensemble, auth):
                 ensemble_id=ensemble.id,
             )
         )
-    return Response(json.dumps(result_list), mimetype="application/json")
+    return result_list
