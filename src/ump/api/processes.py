@@ -55,15 +55,16 @@ def _processes_list(results):
     )
 
     for provider in providers.PROVIDERS:
-        public_access = not "authentication" in providers.PROVIDERS[provider]
         provider_access = provider in realm_roles or provider in client_roles
-        if public_access or provider_access:
+        if provider_access:
             logging.debug(f"Granting access for model server {provider}")
         try:
             # Check if process has special configuration
             for process in results[provider]:
                 process_id = f"{provider}_{process['id']}"
                 process_access = process_id in realm_roles or process_id in client_roles
+                process_config = providers.PROVIDERS[provider]["processes"][process['id']]
+                public_access = 'anonymous-access' in process_config and process_config['anonymous-access']
                 if public_access or process_access or provider_access:
                     logging.debug(f"Granting access for process {process['id']}")
 
