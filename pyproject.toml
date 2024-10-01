@@ -94,6 +94,7 @@ pyyaml = "^6.0.2"
 flask-migrate = "^4.0.7"
 python-keycloak = "^4.3.0"
 sqlalchemy-serializer = "^1.4.22"
+watchdog = "^5.0.3"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests
