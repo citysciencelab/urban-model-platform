@@ -246,9 +246,12 @@ class Job:
             )
 
         for column in results_df.select_dtypes(include=[object]).to_dict():
-            values.append(
-                {column: {"type": "string", "values": list(set(results_df[column]))}}
-            )
+            try:
+                values.append(
+                    {column: {"type": "string", "values": list(set(results_df[column]))}}
+                )
+            except Exception as e:
+                logging.error(f"Unable to store column {column}, skipping: {e}")
 
         self.results_metadata = {"values": values}
 
@@ -320,6 +323,8 @@ class Job:
         try:
 
             results = await self.results()
+            while 'results' in results:
+                results = results['results']
             geoserver = Geoserver()
 
             self.set_results_metadata(results)
@@ -332,7 +337,7 @@ class Job:
 
         except Exception as e:
             logging.error(
-                f" --> Could not store results for job {self.process_id_with_prefix} (={self.process_id})/{self.job_id} to geoserver: {e}"
+                f" --> Could not store results for job {self.process_id_with_prefix} (={self.process_id})/{self.job_id} to geoserver: {e}", e
             )
 
     def __str__(self):
