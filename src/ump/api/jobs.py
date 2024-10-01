@@ -1,9 +1,26 @@
 import re
 
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from ump.api.ensemble import JobsEnsembles, Ensemble
 from ump.api.db_handler import DBHandler
 from ump.api.job import Job
 from ump.api.job_status import JobStatus
 
+engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
+def append_ensemble_list(job):
+  with Session(engine) as session:
+    stmt = select(JobsEnsembles).where(JobsEnsembles.job_id == job['jobID'])
+    ids = session.scalars(stmt).fetchall()
+    list = []
+    for id in ids:
+      list.append(id.ensemble_id)
+    stmt = select(Ensemble).where(Ensemble.id.in_(list))
+    ensembles = session.scalars(stmt).fetchall()
+    job['ensembles'] = []
+    for ensemble in ensembles:
+      job['ensembles'].append(ensemble.to_dict())
 
 def get_jobs(args, user = None):
   page  = int(args["page"][0]) if "page" in args else 1

@@ -32,7 +32,6 @@ class Job:
         "results_metadata",
         "name",
         "process_title",
-        "ensemble_id",
         "process_version",
     ]
 
@@ -57,7 +56,6 @@ class Job:
         self.updated = None
         self.results_metadata = {}
         self.user_id = None
-        self.ensemble_id = None
         self.name = None
         self.process_title = None
         self.process_version = None
@@ -74,7 +72,6 @@ class Job:
         name=None,
         parameters={},
         user=None,
-        ensemble_id=None,
         process_version=None,
     ):
         self._set_attributes(
@@ -85,7 +82,6 @@ class Job:
             name,
             parameters,
             user_id=user,
-            ensemble_id=ensemble_id,
             process_version=process_version,
         )
 
@@ -95,9 +91,9 @@ class Job:
 
         query = """
             INSERT INTO jobs
-            (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id, process_title, name, ensemble_id, process_version)
+            (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id, process_title, name, process_version)
             VALUES
-            (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s, %(ensemble_id)s, %(process_version)s)
+            (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s, %(process_version)s)
         """
         with DBHandler() as db:
             logging.error(self._to_dict())
@@ -114,7 +110,6 @@ class Job:
         name=None,
         parameters={},
         user_id=None,
-        ensemble_id=None,
         process_version=None,
     ):
         self.job_id = job_id
@@ -122,7 +117,6 @@ class Job:
         self.user_id = user_id
         self.process_title = process_title
         self.name = name
-        self.ensemble_id = ensemble_id
         self.process_version = process_version
 
         if remote_job_id and not job_id:
@@ -186,7 +180,6 @@ class Job:
         self.user_id = data["user_id"]
         self.process_title = data["process_title"]
         self.name = data["name"]
-        self.ensemble_id = data["ensemble_id"]
         self.process_version = data['process_version']
 
     def _to_dict(self):
@@ -208,7 +201,6 @@ class Job:
             "parameters": json.dumps(self.parameters),
             "results_metadata": json.dumps(self.results_metadata),
             "user_id": self.user_id,
-            "ensemble_id": self.ensemble_id,
             "process_version": self.process_version,
         }
 
@@ -217,9 +209,9 @@ class Job:
 
         query = """
             UPDATE jobs SET
-            (process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, results_metadata, ensemble_id, process_version)
+            (process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, results_metadata, process_version)
             =
-            (%(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(results_metadata)s, %(ensemble_id)s, %(process_version)s)
+            (%(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(results_metadata)s, %(process_version)s)
             WHERE job_id = %(job_id)s
         """
         with DBHandler() as db:

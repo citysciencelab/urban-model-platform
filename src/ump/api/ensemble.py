@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import ClassVar
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, declarative_base
@@ -23,6 +24,7 @@ class Ensemble(Base, SerializerMixin):
     scenario_configs: Mapped[str] = mapped_column(String())
     created: Mapped[datetime] = mapped_column(DateTime())
     modified: Mapped[datetime] = mapped_column(DateTime())
+    jobs_metadata: ClassVar[dict]
 
     def __init__(
         self,

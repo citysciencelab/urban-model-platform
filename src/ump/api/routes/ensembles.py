@@ -16,6 +16,13 @@ ensembles = APIBlueprint("ensembles", __name__)
 
 engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
 
+def add_job_fields(ensemble: Ensemble):
+    with engine.begin() as conn:
+        result = conn.exec_driver_sql('select count(*), j.status from jobs j right join jobs_ensembles je on j.job_id = je.job_id where je.ensemble_id = %(id)s group by j.status', {'id': ensemble.id})
+        ensemble.jobs_metadata = {}
+        for row in result:
+            ensemble.jobs_metadata[row.status] = row.count
+
 @ensembles.route("/", methods=["GET"])
 def index():
     auth = g.get("auth_token")
@@ -26,7 +33,8 @@ def index():
         result = session.scalars(stmt).fetchall()
         list = []
         for ensemble in result:
-            list.append(ensemble.to_dict())
+            add_job_fields(ensemble)
+            list.append(ensemble.to_dict(rules = ['jobs_metadata']))
         return list
 
 @ensembles.route("/", methods=["POST"])
@@ -45,8 +53,9 @@ def create():
     with Session(engine) as session:
         session.add(ensemble)
         session.commit()
+        add_job_fields(ensemble)
         return Response(
-            json.dumps(ensemble._to_dict()), status=201, mimetype="application/json"
+            json.dumps(ensemble.to_dict(rules = ['jobs_metadata'])), status=201, mimetype="application/json"
         )
 
 
@@ -95,7 +104,9 @@ def get(ensemble_id):
             .where(Ensemble.user_id == auth["sub"])
             .where(Ensemble.id == ensemble_id)
         )
-        return session.scalar(stmt).to_dict()
+        ensemble = session.scalar(stmt)
+        add_job_fields(ensemble)
+        return ensemble.to_dict(rules = ['jobs_metadata'])
     return Response(json.dumps(""), mimetype="application/json")
 
 @ensembles.route("/<path:ensemble_id>/jobs", methods=["GET"])
@@ -164,13 +175,15 @@ def create_jobs(ensemble: Ensemble, auth):
     for config in configs:
         list = list + create_jobs_for_config(config)
     result_list = []
+    cnt = 1
     for config in list:
         process = Process(config["process_id"])
         result_list.append(
             process.execute(
-                {"job_name": ensemble.name, "inputs": config["inputs"]},
+                {"job_name": f"{ensemble.name} {cnt}", "inputs": config["inputs"]},
                 auth["sub"],
                 ensemble_id=ensemble.id,
             )
         )
+        cnt = cnt + 1
     return result_list
