@@ -140,7 +140,7 @@ class Geoserver:
         engine = create_engine(
             f"postgresql://{config.postgres_user}:{config.postgres_password}@{config.postgres_host}/{config.postgres_db}"
         )
-        gdf = gpd.GeoDataFrame.from_features(data["features"])
+        gdf = gpd.GeoDataFrame.from_features(data["features"], crs = 'EPSG:4326')
         table = Identifier(table_name)
         gdf.to_postgis(name=table.string, con=engine)
 
