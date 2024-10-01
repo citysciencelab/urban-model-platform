@@ -3,7 +3,7 @@ import json
 import logging
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from multiprocessing import dummy
 
 import aiohttp
@@ -260,8 +260,9 @@ class Process:
                         parameters=request_body,
                         user=user,
                         ensemble_id=ensemble_id,
+                        process_version=self.version,
                     )
-                    job.started = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    job.started = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                     job.status = JobStatus.running.value
                     job.save()
 
@@ -312,7 +313,7 @@ class Process:
                 # either remote job has progress info or else we cannot provide it either
                 job.progress = job_details.get("progress")
 
-                job.updated = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                job.updated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                 job.save()
 
                 if time.time() - start > timeout:
@@ -332,7 +333,7 @@ class Process:
             )
             job.status = JobStatus.failed.value
             job.message = str(e)
-            job.updated = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            job.updated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             job.finished = job.updated
             job.progress = 100
             job.save()
@@ -344,7 +345,7 @@ class Process:
         try:
             if job_details["status"] != JobStatus.successful.value:
                 job.status = JobStatus.failed.value
-                job.finished = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                job.finished = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                 job.updated = job.finished
                 job.progress = 100
                 job.message = (
@@ -357,7 +358,7 @@ class Process:
             logging.error(f" --> An error occurred: {e}")
 
         job.status = JobStatus.successful.value
-        job.finished = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        job.finished = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         job.updated = job.finished
         job.progress = 100
         job.save()

@@ -33,6 +33,7 @@ class Job:
         "name",
         "process_title",
         "ensemble_id",
+        "process_version",
     ]
 
     SORTABLE_COLUMNS = [
@@ -59,6 +60,7 @@ class Job:
         self.ensemble_id = None
         self.name = None
         self.process_title = None
+        self.process_version = None
 
         if job_id and not self._init_from_db(job_id, user):
             raise CustomException(f"Job could not be found!")
@@ -73,6 +75,7 @@ class Job:
         parameters={},
         user=None,
         ensemble_id=None,
+        process_version=None,
     ):
         self._set_attributes(
             job_id,
@@ -83,6 +86,7 @@ class Job:
             parameters,
             user_id=user,
             ensemble_id=ensemble_id,
+            process_version=process_version,
         )
 
         self.status = JobStatus.accepted.value
@@ -91,9 +95,9 @@ class Job:
 
         query = """
             INSERT INTO jobs
-            (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id, process_title, name, ensemble_id)
+            (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id, process_title, name, ensemble_id, process_version)
             VALUES
-            (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s, %(ensemble_id)s)
+            (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s, %(ensemble_id)s, %(process_version)s)
         """
         with DBHandler() as db:
             logging.error(self._to_dict())
@@ -111,6 +115,7 @@ class Job:
         parameters={},
         user_id=None,
         ensemble_id=None,
+        process_version=None,
     ):
         self.job_id = job_id
         self.remote_job_id = remote_job_id
@@ -118,6 +123,7 @@ class Job:
         self.process_title = process_title
         self.name = name
         self.ensemble_id = ensemble_id
+        self.process_version = process_version
 
         if remote_job_id and not job_id:
             self.job_id = f"job-{remote_job_id}"
@@ -181,6 +187,7 @@ class Job:
         self.process_title = data["process_title"]
         self.name = data["name"]
         self.ensemble_id = data["ensemble_id"]
+        self.process_version = data['process_version']
 
     def _to_dict(self):
         return {
@@ -202,16 +209,17 @@ class Job:
             "results_metadata": json.dumps(self.results_metadata),
             "user_id": self.user_id,
             "ensemble_id": self.ensemble_id,
+            "process_version": self.process_version,
         }
 
     def save(self):
-        self.updated = datetime.utcnow()
+        self.updated = datetime.now(timezone.utc)
 
         query = """
             UPDATE jobs SET
-            (process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, results_metadata, ensemble_id)
+            (process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, results_metadata, ensemble_id, process_version)
             =
-            (%(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(results_metadata)s, %(ensemble_id)s)
+            (%(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(results_metadata)s, %(ensemble_id)s, %(process_version)s)
             WHERE job_id = %(job_id)s
         """
         with DBHandler() as db:
