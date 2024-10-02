@@ -33,6 +33,7 @@ class Job:
         "name",
         "process_title",
         "process_version",
+        "user_id",
     ]
 
     SORTABLE_COLUMNS = [
@@ -180,7 +181,7 @@ class Job:
         self.user_id = data["user_id"]
         self.process_title = data["process_title"]
         self.name = data["name"]
-        self.process_version = data['process_version']
+        self.process_version = data["process_version"]
 
     def _to_dict(self):
         return {
@@ -248,7 +249,12 @@ class Job:
         for column in results_df.select_dtypes(include=[object]).to_dict():
             try:
                 values.append(
-                    {column: {"type": "string", "values": list(set(results_df[column]))}}
+                    {
+                        column: {
+                            "type": "string",
+                            "values": list(set(results_df[column])),
+                        }
+                    }
                 )
             except Exception as e:
                 logging.error(f"Unable to store column {column}, skipping: {e}")
@@ -323,8 +329,8 @@ class Job:
         try:
 
             results = await self.results()
-            while 'results' in results:
-                results = results['results']
+            while "results" in results:
+                results = results["results"]
             geoserver = Geoserver()
 
             self.set_results_metadata(results)
@@ -337,7 +343,8 @@ class Job:
 
         except Exception as e:
             logging.error(
-                f" --> Could not store results for job {self.process_id_with_prefix} (={self.process_id})/{self.job_id} to geoserver: {e}", e
+                f" --> Could not store results for job {self.process_id_with_prefix} (={self.process_id})/{self.job_id} to geoserver: {e}",
+                e,
             )
 
     def __str__(self):
