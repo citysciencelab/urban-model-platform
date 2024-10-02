@@ -4,19 +4,21 @@ import json
 import logging
 
 from apiflask import APIBlueprint
+from ema_workbench import CategoricalParameter, RealParameter
+from ema_workbench.em_framework.samplers import (
+    FullFactorialSampler,
+    LHSSampler,
+    MonteCarloSampler,
+    UniformLHSSampler,
+    sample_parameters,
+)
 from flask import Response, g, request
-from sqlalchemy import create_engine, select, delete, or_
+from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.orm import Session
 
-from ema_workbench import (
-    CategoricalParameter,
-    RealParameter,
-)
-from ema_workbench.em_framework.samplers import LHSSampler, sample_parameters, FullFactorialSampler, MonteCarloSampler, UniformLHSSampler
-
-from ump.api.ensemble import Comment, Ensemble, JobsEnsembles, EnsemblesUsers
-from ump.api.process import Process
+from ump.api.ensemble import Comment, Ensemble, EnsemblesUsers, JobsEnsembles
 from ump.api.job import Job
+from ump.api.keycloak import find_user_id_by_email
 from ump.api.process import Process
 
 ensembles = APIBlueprint("ensembles", __name__)
@@ -41,7 +43,11 @@ def index():
     if auth is None:
         return Response("[]", mimetype="application/json")
     with Session(engine) as session:
-        stmt = select(Ensemble).where(Ensemble.user_id == auth["sub"])
+        stmt = (
+            select(Ensemble)
+            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
+            .where(or_(Ensemble.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
+        )
         result = session.scalars(stmt).fetchall()
         list = []
         for ensemble in result:
@@ -91,6 +97,8 @@ def get_comments(ensemble_id):
             return Response(status = 404)
         stmt = (
             select(Comment)
+            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
+            .where(or_(Comment.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
             .where(Comment.ensemble_id == ensemble_id)
         )
         list = []
@@ -98,6 +106,28 @@ def get_comments(ensemble_id):
             list.append(comment.to_dict())
         return list
 
+@ensembles.route("/<path:ensemble_id>/share/<path:email>", methods=["GET"])
+def share(ensemble_id=None, email=None):
+    auth = g.get('auth_token')
+    id = find_user_id_by_email(email)
+    if id is None:
+        logging.error(f"Unable to find user by email {email}.")
+        return Response(status = 404)
+    with Session(engine) as session:
+        stmt = (
+            select(Ensemble)
+            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
+            .where(or_(Ensemble.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
+            .where(Ensemble.id == ensemble_id)
+        )
+        ensemble = session.scalar(stmt)
+        if ensemble is None:
+            return Response(status = 404)
+
+        row = EnsemblesUsers(ensemble_id = ensemble_id, user_id = id)
+        session.add(row)
+        session.commit()
+        return Response(status = 201)
 
 @ensembles.route("/<path:ensemble_id>/comments", methods=["POST"])
 def create_comment(ensemble_id):
@@ -126,7 +156,8 @@ def get(ensemble_id):
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
-            .where(Ensemble.user_id == auth["sub"])
+            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
+            .where(or_(Ensemble.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
             .where(Ensemble.id == ensemble_id)
         )
         ensemble = session.scalar(stmt)
@@ -175,7 +206,8 @@ def execute(ensemble_id):
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
-            .where(Ensemble.user_id == auth["sub"])
+            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
+            .where(or_(Ensemble.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
             .where(Ensemble.id == ensemble_id)
         )
         ensemble = session.scalar(stmt)
