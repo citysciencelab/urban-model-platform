@@ -259,7 +259,6 @@ class Process:
                         name=name,
                         parameters=request_body,
                         user=user,
-                        ensemble_id=ensemble_id,
                         process_version=self.version,
                     )
                     job.started = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
