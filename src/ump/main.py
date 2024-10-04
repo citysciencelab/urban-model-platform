@@ -11,9 +11,10 @@ from flask_sqlalchemy import SQLAlchemy
 from keycloak import KeycloakOpenID
 from werkzeug.exceptions import HTTPException
 
+from ump.api.routes.ensembles import ensembles
 from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
-from ump.api.routes.ensembles import ensembles
+from ump.api.routes.users import users
 from ump.errors import CustomException
 
 if (
@@ -21,9 +22,11 @@ if (
     # reloading, we want to start debugpy only once during the first
     # invocation and never during reloads.
     # See https://github.com/microsoft/debugpy/issues/1296#issuecomment-2012778330
-    os.environ.get("WERKZEUG_RUN_MAIN") != "true" and os.environ.get('FLASK_DEBUG') == '1'
+    os.environ.get("WERKZEUG_RUN_MAIN") != "true"
+    and os.environ.get("FLASK_DEBUG") == "1"
 ):
     import debugpy
+
     debugpy.listen(("0.0.0.0", 5678))
 
 dictConfig(
@@ -48,7 +51,9 @@ dictConfig(
 app = APIFlask(__name__)
 
 app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", 0)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql+psycopg2://postgres:postgres@postgis/cut_dev'
+app.config["SQLALCHEMY_DATABASE_URI"] = (
+    "postgresql+psycopg2://postgres:postgres@postgis/cut_dev"
+)
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
@@ -59,12 +64,16 @@ api = APIBlueprint("api", __name__, url_prefix="/api")
 api.register_blueprint(processes, url_prefix="/processes")
 api.register_blueprint(jobs, url_prefix="/jobs")
 api.register_blueprint(ensembles, url_prefix="/ensembles")
+api.register_blueprint(users, url_prefix="/users")
 
 app.register_blueprint(api)
 
-keycloak_openid = KeycloakOpenID(server_url=f"{env['KEYCLOAK_PROTOCOL']}://{env['KEYCLOAK_HOST']}/auth/",
-                                 client_id="ump-client",
-                                 realm_name="UrbanModelPlatform")
+keycloak_openid = KeycloakOpenID(
+    server_url=f"{env['KEYCLOAK_PROTOCOL']}://{env['KEYCLOAK_HOST']}/auth/",
+    client_id="ump-client",
+    realm_name="UrbanModelPlatform",
+)
+
 
 @app.before_request
 def check_jwt():
@@ -74,6 +83,7 @@ def check_jwt():
         g.auth_token = decoded
     else:
         g.auth_token = None
+
 
 @app.after_request
 def set_headers(response):
