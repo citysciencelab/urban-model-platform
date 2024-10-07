@@ -5,7 +5,7 @@ import logging
 
 from apiflask import APIBlueprint
 from flask import Response, g, request
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, delete
 from sqlalchemy.orm import Session
 
 from ump.api.ensemble import Comment, Ensemble, JobsEnsembles
@@ -121,6 +121,25 @@ def jobs(ensemble_id):
         for row in ids:
             list.append(Job(row.job_id, auth['sub']).display())
         return Response(json.dumps(list), mimetype="application/json")
+
+@ensembles.route("/<path:ensemble_id>/jobs/<path:job_id>", methods=["DELETE"])
+def delete_job_from_ensemble(ensemble_id, job_id):
+    auth = g.get("auth_token")
+    if auth is None:
+        return Response("[]", mimetype="application/json")
+    with Session(engine) as session:
+        stmt = (
+            select(Ensemble)
+            .where(Ensemble.user_id == auth["sub"])
+            .where(Ensemble.id == ensemble_id)
+        )
+        ensemble = session.scalar(stmt)
+        if ensemble is None:
+            return Response(status = 404)
+        stmt = delete(JobsEnsembles).where(JobsEnsembles.ensemble_id == ensemble_id).where(JobsEnsembles.job_id == job_id)
+        session.execute(stmt)
+        session.commit()
+        return Response(status = 204, mimetype="application/json")
 
 @ensembles.route("/<path:ensemble_id>/execute", methods=["GET"])
 def execute(ensemble_id):
