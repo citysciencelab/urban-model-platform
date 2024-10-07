@@ -98,7 +98,9 @@ def create_comment(ensemble_id):
     with Session(engine) as session:
         session.add(comment)
         session.commit()
-        return Response(mimetype="application/json", status=201)
+        return Response(
+            json.dumps(comment.to_dict()), mimetype="application/json", status=201
+        )
 
 
 @ensembles.route("/<path:ensemble_id>", methods=["GET"])

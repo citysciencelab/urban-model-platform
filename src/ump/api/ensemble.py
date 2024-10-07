@@ -65,8 +65,8 @@ class Comment(Base, SerializerMixin):
         self.user_id = user_id
         self.ensemble_id = ensemble_id
         self.comment = comment
-        self.created = datetime.now(datetime.timezone.utc)
-        self.modified = datetime.now(datetime.timezone.utc)
+        self.created = datetime.now(timezone.utc)
+        self.modified = datetime.now(timezone.utc)
 
     def _to_dict(self):
         return {
