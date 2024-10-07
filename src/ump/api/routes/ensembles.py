@@ -9,19 +9,24 @@ from sqlalchemy import create_engine, select, delete
 from sqlalchemy.orm import Session
 
 from ump.api.ensemble import Comment, Ensemble, JobsEnsembles
-from ump.api.process import Process
 from ump.api.job import Job
+from ump.api.process import Process
 
 ensembles = APIBlueprint("ensembles", __name__)
 
 engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
 
+
 def add_job_fields(ensemble: Ensemble):
     with engine.begin() as conn:
-        result = conn.exec_driver_sql('select count(*), j.status from jobs j right join jobs_ensembles je on j.job_id = je.job_id where je.ensemble_id = %(id)s group by j.status', {'id': ensemble.id})
+        result = conn.exec_driver_sql(
+            "select count(*), j.status from jobs j right join jobs_ensembles je on j.job_id = je.job_id where je.ensemble_id = %(id)s group by j.status",
+            {"id": ensemble.id},
+        )
         ensemble.jobs_metadata = {}
         for row in result:
             ensemble.jobs_metadata[row.status] = row.count
+
 
 @ensembles.route("/", methods=["GET"])
 def index():
@@ -34,8 +39,9 @@ def index():
         list = []
         for ensemble in result:
             add_job_fields(ensemble)
-            list.append(ensemble.to_dict(rules = ['jobs_metadata']))
+            list.append(ensemble.to_dict(rules=["jobs_metadata"]))
         return list
+
 
 @ensembles.route("/", methods=["POST"])
 def create():
@@ -55,7 +61,9 @@ def create():
         session.commit()
         add_job_fields(ensemble)
         return Response(
-            json.dumps(ensemble.to_dict(rules = ['jobs_metadata'])), status=201, mimetype="application/json"
+            json.dumps(ensemble.to_dict(rules=["jobs_metadata"])),
+            status=201,
+            mimetype="application/json",
         )
 
 
@@ -90,7 +98,9 @@ def create_comment(ensemble_id):
     with Session(engine) as session:
         session.add(comment)
         session.commit()
-        return Response(mimetype="application/json", status=201)
+        return Response(
+            json.dumps(comment.to_dict()), mimetype="application/json", status=201
+        )
 
 
 @ensembles.route("/<path:ensemble_id>", methods=["GET"])
@@ -106,8 +116,9 @@ def get(ensemble_id):
         )
         ensemble = session.scalar(stmt)
         add_job_fields(ensemble)
-        return ensemble.to_dict(rules = ['jobs_metadata'])
+        return ensemble.to_dict(rules=["jobs_metadata"])
     return Response(json.dumps(""), mimetype="application/json")
+
 
 @ensembles.route("/<path:ensemble_id>/jobs", methods=["GET"])
 def jobs(ensemble_id):
@@ -119,7 +130,7 @@ def jobs(ensemble_id):
         ids = session.scalars(stmt).fetchall()
         list = []
         for row in ids:
-            list.append(Job(row.job_id, auth['sub']).display())
+            list.append(Job(row.job_id, auth["sub"]).display())
         return Response(json.dumps(list), mimetype="application/json")
 
 @ensembles.route("/<path:ensemble_id>/jobs/<path:job_id>", methods=["DELETE"])
@@ -154,12 +165,13 @@ def execute(ensemble_id):
         )
         ensemble = session.scalar(stmt)
         if ensemble is None:
-            return Response("No such scenario", status=400)
+            return Response("No such ensemble", status=400)
         jobs = create_jobs(ensemble, auth)
         for job in jobs:
-            session.add(JobsEnsembles(ensemble_id = ensemble_id, job_id = job['jobID']))
+            session.add(JobsEnsembles(ensemble_id=ensemble_id, job_id=job["jobID"]))
         session.commit()
         return Response(json.dumps(jobs), mimetype="application/json")
+
 
 def create_jobs_for_config(config):
     list = [{"process_id": config["process_id"], "inputs": {}}]
