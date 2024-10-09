@@ -5,10 +5,17 @@ import logging
 
 from apiflask import APIBlueprint
 from flask import Response, g, request
-from sqlalchemy import create_engine, select, delete
+from sqlalchemy import create_engine, select, delete, or_
 from sqlalchemy.orm import Session
 
-from ump.api.ensemble import Comment, Ensemble, JobsEnsembles
+from ema_workbench import (
+    CategoricalParameter,
+    RealParameter,
+)
+from ema_workbench.em_framework.samplers import LHSSampler, sample_parameters, FullFactorialSampler, MonteCarloSampler, UniformLHSSampler
+
+from ump.api.ensemble import Comment, Ensemble, JobsEnsembles, EnsemblesUsers
+from ump.api.process import Process
 from ump.api.job import Job
 from ump.api.process import Process
 
@@ -74,8 +81,16 @@ def get_comments(ensemble_id):
         return Response("[]", mimetype="application/json")
     with Session(engine) as session:
         stmt = (
+            select(Ensemble)
+            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
+            .where(or_(Ensemble.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
+            .where(Ensemble.id == ensemble_id)
+        )
+        ensemble = session.scalar(stmt)
+        if ensemble is None:
+            return Response(status = 404)
+        stmt = (
             select(Comment)
-            .where(Comment.user_id == auth["sub"])
             .where(Comment.ensemble_id == ensemble_id)
         )
         list = []
@@ -174,29 +189,36 @@ def execute(ensemble_id):
 
 
 def create_jobs_for_config(config):
-    list = [{"process_id": config["process_id"], "inputs": {}}]
+    params = []
+    process_config = {"process_id": config["process_id"], "inputs": {}}
+    sampler = None
+    match config['sampling_method']:
+        case 'lhs':
+            sampler = LHSSampler()
+        case 'uniformlhs':
+            sampler = UniformLHSSampler()
+        case 'factorial':
+            sampler = FullFactorialSampler()
+        case 'montecarlo':
+            sampler = MonteCarloSampler()
     for param in config["parameters"].keys():
         val = config["parameters"][param]
         match val:
             case builtins.list():
-                old_list = list
-                list = []
-                for v in val:
-                    for item in old_list:
-                        x = copy.deepcopy(item)
-                        x["inputs"][param] = v
-                        list.append(x)
+                if len(val) > 1:
+                    params.append(CategoricalParameter(param, val))
+                else:
+                    process_config["inputs"][param] = val[0]
             case dict():
-                old_list = list
-                list = []
-                for v in range(val["from"], val["to"], val["step"]):
-                    for item in old_list:
-                        x = copy.deepcopy(item)
-                        x["inputs"][param] = v
-                        list.append(x)
+                params.append(RealParameter(param, val['from'], val['to']))
             case _:
-                for cfg in list:
-                    cfg["inputs"][param] = val
+                process_config["inputs"][param] = val
+    samples = sample_parameters(params, config['sample_size'], sampler = sampler)
+    list = []
+    for sample in samples:
+        x = copy.deepcopy(process_config)
+        x['inputs'] = x['inputs'] | dict(sample)
+        list.append(x)
     return list
 
 
