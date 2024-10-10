@@ -1,3 +1,4 @@
+"""The ensemble related routes"""
 import builtins
 import copy
 import json
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from ump.api.ensemble import Comment, Ensemble, EnsemblesUsers, JobsEnsembles
 from ump.api.job import Job
-from ump.api.keycloak import find_user_id_by_email
+from ump.api.keycloak_utils import find_user_id_by_email
 from ump.api.process import Process
 
 ensembles = APIBlueprint("ensembles", __name__)
@@ -28,9 +29,12 @@ engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev"
 
 
 def add_job_fields(ensemble: Ensemble):
+    """Adds the synthetic jobs_metadata field"""
     with engine.begin() as conn:
         result = conn.exec_driver_sql(
-            "select count(*), j.status from jobs j right join jobs_ensembles je on j.job_id = je.job_id where je.ensemble_id = %(id)s group by j.status",
+            """select count(*), j.status from jobs j
+            right join jobs_ensembles je on j.job_id = je.job_id
+            where je.ensemble_id = %(id)s group by j.status""",
             {"id": ensemble.id},
         )
         ensemble.jobs_metadata = {}
@@ -40,6 +44,7 @@ def add_job_fields(ensemble: Ensemble):
 
 @ensembles.route("/", methods=["GET"])
 def index():
+    """Gets all ensembles the current user has access to"""
     auth = g.get("auth_token")
     if auth is None:
         return Response("[]", mimetype="application/json")
@@ -57,15 +62,16 @@ def index():
             )
         )
         result = session.scalars(stmt).fetchall()
-        list = []
+        response = []
         for ensemble in result:
             add_job_fields(ensemble)
-            list.append(ensemble.to_dict(rules=["jobs_metadata"]))
-        return list
+            response.append(ensemble.to_dict(rules=["jobs_metadata"]))
+        return response
 
 
 @ensembles.route("/", methods=["POST"])
 def create():
+    """Create an ensemble"""
     auth = g.get("auth_token")
     if auth is None:
         logging.error("Not creating ensemble, no authentication found.")
@@ -90,6 +96,7 @@ def create():
 
 @ensembles.route("/<path:ensemble_id>/comments", methods=["GET"])
 def get_comments(ensemble_id):
+    """Get the comments for an ensemble"""
     auth = g.get("auth_token")
     if auth is None:
         return Response("[]", mimetype="application/json")
@@ -113,7 +120,7 @@ def get_comments(ensemble_id):
         stmt = (
             select(Comment)
             .join(
-                EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
+                EnsemblesUsers, EnsemblesUsers.ensemble_id == ensemble_id, isouter=True
             )
             .where(
                 or_(
@@ -123,19 +130,20 @@ def get_comments(ensemble_id):
             )
             .where(Comment.ensemble_id == ensemble_id)
         )
-        list = []
+        results = []
         for comment in session.scalars(stmt).fetchall():
-            list.append(comment.to_dict())
-        return list
+            results.append(comment.to_dict())
+        return results
 
 
 @ensembles.route("/<path:ensemble_id>/share/<path:email>", methods=["GET"])
 def share(ensemble_id=None, email=None):
-    auth = g.get("auth_token")
-    id = find_user_id_by_email(email)
-    if id is None:
-        logging.error(f"Unable to find user by email {email}.")
-        return Response(status=404)
+    """Share an ensemble with another user"""
+    auth = g.get('auth_token')
+    user_id = find_user_id_by_email(email)
+    if user_id is None:
+        logging.error("Unable to find user by email %s.", email)
+        return Response(status = 404)
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
@@ -154,7 +162,7 @@ def share(ensemble_id=None, email=None):
         if ensemble is None:
             return Response(status=404)
 
-        row = EnsemblesUsers(ensemble_id=ensemble_id, user_id=id)
+        row = EnsemblesUsers(ensemble_id = ensemble_id, user_id = user_id)
         session.add(row)
         session.commit()
         return Response(status=201)
@@ -162,6 +170,7 @@ def share(ensemble_id=None, email=None):
 
 @ensembles.route("/<path:ensemble_id>/comments", methods=["POST"])
 def create_comment(ensemble_id):
+    """Create a comment for an ensemble"""
     auth = g.get("auth_token")
     if auth is None:
         logging.error("Not creating comment, no authentication found.")
@@ -181,6 +190,7 @@ def create_comment(ensemble_id):
 
 @ensembles.route("/<path:ensemble_id>", methods=["GET"])
 def get(ensemble_id):
+    """Get an ensemble by id"""
     auth = g.get("auth_token")
     if auth is None:
         return Response("[]", mimetype="application/json")
@@ -206,20 +216,22 @@ def get(ensemble_id):
 
 @ensembles.route("/<path:ensemble_id>/jobs", methods=["GET"])
 def jobs(ensemble_id):
+    """Get all jobs included in an ensemble"""
     auth = g.get("auth_token")
     if auth is None:
         return Response("[]", mimetype="application/json")
     with Session(engine) as session:
         stmt = select(JobsEnsembles).where(JobsEnsembles.ensemble_id == ensemble_id)
         ids = session.scalars(stmt).fetchall()
-        list = []
+        results = []
         for row in ids:
-            list.append(Job(row.job_id, auth["sub"]).display())
-        return Response(json.dumps(list), mimetype="application/json")
+            results.append(Job(row.job_id, auth["sub"]).display())
+        return Response(json.dumps(results), mimetype="application/json")
 
 
 @ensembles.route("/<path:ensemble_id>/jobs/<path:job_id>", methods=["DELETE"])
 def delete_job_from_ensemble(ensemble_id, job_id):
+    """Delete a job from an ensemble"""
     auth = g.get("auth_token")
     if auth is None:
         return Response("[]", mimetype="application/json")
@@ -244,6 +256,7 @@ def delete_job_from_ensemble(ensemble_id, job_id):
 
 @ensembles.route("/<path:ensemble_id>/execute", methods=["GET"])
 def execute(ensemble_id):
+    """Create and execute the jobs in this ensemble"""
     auth = g.get("auth_token")
     if auth is None:
         return Response("[]", mimetype="application/json")
@@ -264,14 +277,16 @@ def execute(ensemble_id):
         ensemble = session.scalar(stmt)
         if ensemble is None:
             return Response("No such ensemble", status=400)
-        jobs = create_jobs(ensemble, auth)
-        for job in jobs:
+        job_list = create_jobs(ensemble, auth)
+        for job in job_list:
             session.add(JobsEnsembles(ensemble_id=ensemble_id, job_id=job["jobID"]))
         session.commit()
-        return Response(json.dumps(jobs), mimetype="application/json")
+        return Response(json.dumps(job_list), mimetype="application/json")
 
 
 def create_jobs_for_config(config):
+    """Creates the job configurations for an ensemble using
+    the configured parameters and sampling method"""
     params = []
     process_config = {"process_id": config["process_id"], "inputs": {}}
     sampler = None
@@ -297,21 +312,22 @@ def create_jobs_for_config(config):
             case _:
                 process_config["inputs"][param] = val
     samples = sample_parameters(params, config["sample_size"], sampler=sampler)
-    list = []
+    results = []
     for sample in samples:
         x = copy.deepcopy(process_config)
         x["inputs"] = x["inputs"] | dict(sample)
-        list.append(x)
-    return list
+        results.append(x)
+    return results
 
 
 def create_jobs(ensemble: Ensemble, auth):
+    """Create the jobs for an ensemble"""
     configs = ensemble.scenario_configs
-    list = []
+    results = []
     for config in configs:
-        list = list + create_jobs_for_config(config)
+        results = results + create_jobs_for_config(config)
     result_list = []
-    for config in list:
+    for config in results:
         process = Process(config["process_id"])
         job_name = ensemble.name + " - " + generate_name(style="plain")
         result_list.append(

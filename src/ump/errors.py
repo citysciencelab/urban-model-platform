@@ -1,5 +1,6 @@
-import traceback
 import logging
+import traceback
+
 
 class CustomException(Exception):
     status_code = 400
@@ -11,7 +12,7 @@ class CustomException(Exception):
             self.status_code = status_code
 
         self.payload = payload
-        logging.error(f"{type(self).__name__}: {self.message}")
+        logging.error("%s: %s", type(self).__name__, self.message)
         traceback.print_exc()
 
     def to_dict(self):
@@ -20,10 +21,10 @@ class CustomException(Exception):
         return rv
 
     def __str__(self) -> str:
-       return str(self.to_dict())
+        return str(self.to_dict())
 
 class InvalidUsage(CustomException):
-  pass
+    pass
 
 class GeoserverException(CustomException):
-  pass
+    pass

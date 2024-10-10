@@ -60,9 +60,15 @@ class Job:
         self.name = None
         self.process_title = None
         self.process_version = None
+        self.remote_job_id = None
+        self.process_id_with_prefix = None
+        self.parameters = None
+        self.provider_prefix = None
+        self.process_id = None
+        self.provider_url = None
 
         if job_id and not self._init_from_db(job_id, user):
-            raise CustomException(f"Job could not be found!")
+            raise CustomException("Job could not be found!")
 
     def create(
         self,
@@ -71,7 +77,7 @@ class Job:
         process_id_with_prefix=None,
         process_title=None,
         name=None,
-        parameters={},
+        parameters=None,
         user=None,
         process_version=None,
     ):
@@ -100,7 +106,7 @@ class Job:
             logging.error(self._to_dict())
             db.run_query(query, query_params=self._to_dict())
 
-        logging.info(f" --> Job {self.job_id} for {self.process_id} created.")
+        logging.info(" --> Job %s for %s created.", self.job_id, self.process_id)
 
     def _set_attributes(
         self,
@@ -109,7 +115,7 @@ class Job:
         process_id_with_prefix=None,
         process_title=None,
         name=None,
-        parameters={},
+        parameters=None,
         user_id=None,
         process_version=None,
     ):
@@ -134,7 +140,8 @@ class Job:
             match = re.search(r"(.*):(.*)", self.process_id_with_prefix)
             if not match:
                 raise InvalidUsage(
-                    f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
+                    f"Process ID {self.process_id_with_prefix} is not known! " +
+                    "Please check endpoint api/processes for a list of available processes."
                 )
 
             self.provider_prefix = match.group(1)
@@ -146,7 +153,7 @@ class Job:
 
     def _init_from_db(self, job_id, user):
         query = """
-      SELECT * FROM jobs j left join jobs_users u on j.job_id = u.job_id WHERE j.job_id = %(job_id)s
+      SELECT j.* FROM jobs j left join jobs_users u on j.job_id = u.job_id WHERE j.job_id = %(job_id)s
     """
         if user is None:
             query += " and j.user_id is null"
@@ -157,10 +164,10 @@ class Job:
             job_details = db.run_query(query, query_params={"job_id": job_id})
 
         if len(job_details) > 0:
+            logging.error(job_details[0])
             self._init_from_dict(dict(job_details[0]))
             return True
-        else:
-            return False
+        return False
 
     def _init_from_dict(self, data):
         self.job_id = data["job_id"]
@@ -182,6 +189,10 @@ class Job:
         self.process_title = data["process_title"]
         self.name = data["name"]
         self.process_version = data["process_version"]
+        logging.error('next')
+        logging.error(data)
+        logging.error(self._to_dict())
+        logging.error(self.display())
 
     def _to_dict(self):
         return {
@@ -232,14 +243,14 @@ class Job:
         values = []
         for column in maximal_values_dict:
 
-            type = str(types[column])
-            if type == "float64" and results_df[column].apply(float.is_integer).all():
-                type = "int"
+            data_type = str(types[column])
+            if data_type == "float64" and results_df[column].apply(float.is_integer).all():
+                data_type = "int"
 
             values.append(
                 {
                     column: {
-                        "type": type,
+                        "type": data_type,
                         "min": minimal_values_dict[column],
                         "max": maximal_values_dict[column],
                     }
@@ -257,7 +268,7 @@ class Job:
                     }
                 )
             except Exception as e:
-                logging.error(f"Unable to store column {column}, skipping: {e}")
+                logging.error("Unable to store column %s, skipping: %s", column, e)
 
         self.results_metadata = {"values": values}
 
@@ -290,7 +301,8 @@ class Job:
                     "rel": "service",
                     "type": "application/json",
                     "hreflang": "en",
-                    "title": f"Results of job {self.job_id} as geojson - available when job is finished.",
+                    "title": f"Results of job {self.job_id} as geojson" +
+                        " - available when job is finished.",
                 }
             ]
 
@@ -322,7 +334,8 @@ class Job:
                 return await response.json()
             else:
                 raise CustomException(
-                    f"Could not retrieve results from model server {self.provider_url} - {response.status}: {response.reason}"
+                    "Could not retrieve results from model server " +
+                    f"{self.provider_url} - {response.status}: {response.reason}"
                 )
 
     async def results_to_geoserver(self):
@@ -338,12 +351,16 @@ class Job:
             geoserver.save_results(job_id=self.job_id, data=results)
 
             logging.info(
-                f" --> Successfully stored results for job {self.process_id_with_prefix} (={self.process_id})/{self.job_id} to geoserver."
+                " --> Successfully stored results for job %s (=%s)/%s to geoserver.",
+                self.process_id_with_prefix, self.process_id, self.job_id
             )
 
         except Exception as e:
             logging.error(
-                f" --> Could not store results for job {self.process_id_with_prefix} (={self.process_id})/{self.job_id} to geoserver: {e}",
+                " --> Could not store results for job %s (=%s)/%s to geoserver: %s",
+                self.process_id_with_prefix,
+                self.process_id,
+                self.job_id,
                 e,
             )
 

@@ -1,3 +1,4 @@
+"""Extracts env variables"""
 import os
 
 PROVIDERS_FILE = os.environ.get("PROVIDERS_FILE", "providers.yaml")
@@ -23,5 +24,4 @@ geoserver_workspaces_url = f"{geoserver_rest_url}/workspaces"
 geoserver_workspace = os.environ.get("GEOSERVER_WORKSPACE", "CUT")
 geoserver_admin_user = os.environ.get("GEOSERVER_ADMIN_USER", "admin")
 geoserver_admin_password = os.environ.get("GEOSERVER_ADMIN_PASSWORD", "geoserver")
-
-geoserver_timeout = 60
+GEOSERVER_TIMEOUT = 60

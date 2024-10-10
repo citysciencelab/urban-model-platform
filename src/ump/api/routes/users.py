@@ -1,15 +1,16 @@
+"""Endpoints to access user information via keycloak"""
 import json
 
 from apiflask import APIBlueprint
 from flask import Response, g
 
-from ump.api.keycloak import get_user_name
+from ump.api.keycloak_utils import get_user_name
 
 users = APIBlueprint("users", __name__)
 
-
 @users.route("/<path:user_id>/name")
 def index(user_id=None):
+    "Retrieve user name by user id"
     auth = g.get("auth_token")
     if auth is None:
         return Response(mimetype="application/json", status=401)
