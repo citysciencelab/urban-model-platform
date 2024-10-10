@@ -35,24 +35,40 @@ def get_results(job_id=None):
     job = Job(job_id, None if auth is None else auth["sub"])
     return Response(json.dumps(asyncio.run(job.results())), mimetype="application/json")
 
+
+@jobs.route("/<path:job_id>/users", methods=["GET"])
+def get_users(job_id=None):
+    """Get all users that have access to a job"""
+    auth = g.get("auth_token")
+    if auth is None:
+        return Response("[]", mimetype="application/json")
+    with Session(engine) as session:
+        stmt = select(JobsUsers).where(JobsUsers.job_id == job_id)
+        list = []
+        for user in session.scalars(stmt).fetchall():
+            list.append(user.to_dict())
+        return list
+
+
 @jobs.route("/<path:job_id>/share/<path:email>", methods=["GET"])
 def share(job_id=None, email=None):
     """Share a job with another user"""
-    auth = g.get('auth_token')
+    auth = g.get("auth_token")
     user_id = find_user_id_by_email(email)
     if user_id is None:
         logging.error("Unable to find user by email %s.", email)
-        return Response(status = 404)
-    job = Job(job_id, None if auth is None else auth['sub'])
+        return Response(status=404)
+    job = Job(job_id, None if auth is None else auth["sub"])
     if job is None:
         logging.error("Unable to find job with id %s.", job_id)
-        return Response(status = 404)
+        return Response(status=404)
 
     with Session(engine) as session:
-        row = JobsUsers(job_id = job_id, user_id = user_id)
+        row = JobsUsers(job_id=job_id, user_id=user_id)
         session.add(row)
         session.commit()
-        return Response(status = 201)
+        return Response(status=201)
+
 
 @jobs.route("/<path:job_id>/comments", methods=["GET"])
 def get_comments(job_id):
@@ -63,8 +79,10 @@ def get_comments(job_id):
     with Session(engine) as session:
         stmt = (
             select(JobComment)
-            .join(JobsUsers, JobsUsers.job_id == JobComment.job_id, isouter = True)
-            .where(or_(JobComment.user_id == auth["sub"], JobsUsers.user_id == auth['sub']))
+            .join(JobsUsers, JobsUsers.job_id == JobComment.job_id, isouter=True)
+            .where(
+                or_(JobComment.user_id == auth["sub"], JobsUsers.user_id == auth["sub"])
+            )
             .where(JobComment.job_id == job_id)
         )
         results = []
