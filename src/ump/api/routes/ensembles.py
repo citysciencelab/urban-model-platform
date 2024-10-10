@@ -334,7 +334,6 @@ def create_jobs(ensemble: Ensemble, auth):
             process.execute(
                 {"job_name": f"{job_name}", "inputs": config["inputs"]},
                 auth["sub"],
-                ensemble_id=ensemble.id,
             )
         )
     return result_list
