@@ -13,6 +13,7 @@ from ema_workbench.em_framework.samplers import (
     sample_parameters,
 )
 from flask import Response, g, request
+from names_generator import generate_name
 from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.orm import Session
 
@@ -45,8 +46,15 @@ def index():
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
-            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
-            .where(or_(Ensemble.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
+            .join(
+                EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
+            )
+            .where(
+                or_(
+                    Ensemble.user_id == auth["sub"],
+                    EnsemblesUsers.user_id == auth["sub"],
+                )
+            )
         )
         result = session.scalars(stmt).fetchall()
         list = []
@@ -88,17 +96,31 @@ def get_comments(ensemble_id):
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
-            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
-            .where(or_(Ensemble.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
+            .join(
+                EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
+            )
+            .where(
+                or_(
+                    Ensemble.user_id == auth["sub"],
+                    EnsemblesUsers.user_id == auth["sub"],
+                )
+            )
             .where(Ensemble.id == ensemble_id)
         )
         ensemble = session.scalar(stmt)
         if ensemble is None:
-            return Response(status = 404)
+            return Response(status=404)
         stmt = (
             select(Comment)
-            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
-            .where(or_(Comment.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
+            .join(
+                EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
+            )
+            .where(
+                or_(
+                    Comment.user_id == auth["sub"],
+                    EnsemblesUsers.user_id == auth["sub"],
+                )
+            )
             .where(Comment.ensemble_id == ensemble_id)
         )
         list = []
@@ -106,28 +128,37 @@ def get_comments(ensemble_id):
             list.append(comment.to_dict())
         return list
 
+
 @ensembles.route("/<path:ensemble_id>/share/<path:email>", methods=["GET"])
 def share(ensemble_id=None, email=None):
-    auth = g.get('auth_token')
+    auth = g.get("auth_token")
     id = find_user_id_by_email(email)
     if id is None:
         logging.error(f"Unable to find user by email {email}.")
-        return Response(status = 404)
+        return Response(status=404)
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
-            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
-            .where(or_(Ensemble.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
+            .join(
+                EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
+            )
+            .where(
+                or_(
+                    Ensemble.user_id == auth["sub"],
+                    EnsemblesUsers.user_id == auth["sub"],
+                )
+            )
             .where(Ensemble.id == ensemble_id)
         )
         ensemble = session.scalar(stmt)
         if ensemble is None:
-            return Response(status = 404)
+            return Response(status=404)
 
-        row = EnsemblesUsers(ensemble_id = ensemble_id, user_id = id)
+        row = EnsemblesUsers(ensemble_id=ensemble_id, user_id=id)
         session.add(row)
         session.commit()
-        return Response(status = 201)
+        return Response(status=201)
+
 
 @ensembles.route("/<path:ensemble_id>/comments", methods=["POST"])
 def create_comment(ensemble_id):
@@ -156,8 +187,15 @@ def get(ensemble_id):
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
-            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
-            .where(or_(Ensemble.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
+            .join(
+                EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
+            )
+            .where(
+                or_(
+                    Ensemble.user_id == auth["sub"],
+                    EnsemblesUsers.user_id == auth["sub"],
+                )
+            )
             .where(Ensemble.id == ensemble_id)
         )
         ensemble = session.scalar(stmt)
@@ -179,6 +217,7 @@ def jobs(ensemble_id):
             list.append(Job(row.job_id, auth["sub"]).display())
         return Response(json.dumps(list), mimetype="application/json")
 
+
 @ensembles.route("/<path:ensemble_id>/jobs/<path:job_id>", methods=["DELETE"])
 def delete_job_from_ensemble(ensemble_id, job_id):
     auth = g.get("auth_token")
@@ -192,11 +231,16 @@ def delete_job_from_ensemble(ensemble_id, job_id):
         )
         ensemble = session.scalar(stmt)
         if ensemble is None:
-            return Response(status = 404)
-        stmt = delete(JobsEnsembles).where(JobsEnsembles.ensemble_id == ensemble_id).where(JobsEnsembles.job_id == job_id)
+            return Response(status=404)
+        stmt = (
+            delete(JobsEnsembles)
+            .where(JobsEnsembles.ensemble_id == ensemble_id)
+            .where(JobsEnsembles.job_id == job_id)
+        )
         session.execute(stmt)
         session.commit()
-        return Response(status = 204, mimetype="application/json")
+        return Response(status=204, mimetype="application/json")
+
 
 @ensembles.route("/<path:ensemble_id>/execute", methods=["GET"])
 def execute(ensemble_id):
@@ -206,8 +250,15 @@ def execute(ensemble_id):
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
-            .join(EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter = True)
-            .where(or_(Ensemble.user_id == auth["sub"], EnsemblesUsers.user_id == auth['sub']))
+            .join(
+                EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
+            )
+            .where(
+                or_(
+                    Ensemble.user_id == auth["sub"],
+                    EnsemblesUsers.user_id == auth["sub"],
+                )
+            )
             .where(Ensemble.id == ensemble_id)
         )
         ensemble = session.scalar(stmt)
@@ -224,14 +275,14 @@ def create_jobs_for_config(config):
     params = []
     process_config = {"process_id": config["process_id"], "inputs": {}}
     sampler = None
-    match config['sampling_method']:
-        case 'lhs':
+    match config["sampling_method"]:
+        case "lhs":
             sampler = LHSSampler()
-        case 'uniformlhs':
+        case "uniformlhs":
             sampler = UniformLHSSampler()
-        case 'factorial':
+        case "factorial":
             sampler = FullFactorialSampler()
-        case 'montecarlo':
+        case "montecarlo":
             sampler = MonteCarloSampler()
     for param in config["parameters"].keys():
         val = config["parameters"][param]
@@ -242,14 +293,14 @@ def create_jobs_for_config(config):
                 else:
                     process_config["inputs"][param] = val[0]
             case dict():
-                params.append(RealParameter(param, val['from'], val['to']))
+                params.append(RealParameter(param, val["from"], val["to"]))
             case _:
                 process_config["inputs"][param] = val
-    samples = sample_parameters(params, config['sample_size'], sampler = sampler)
+    samples = sample_parameters(params, config["sample_size"], sampler=sampler)
     list = []
     for sample in samples:
         x = copy.deepcopy(process_config)
-        x['inputs'] = x['inputs'] | dict(sample)
+        x["inputs"] = x["inputs"] | dict(sample)
         list.append(x)
     return list
 
@@ -260,15 +311,14 @@ def create_jobs(ensemble: Ensemble, auth):
     for config in configs:
         list = list + create_jobs_for_config(config)
     result_list = []
-    cnt = 1
     for config in list:
         process = Process(config["process_id"])
+        job_name = ensemble.name + " - " + generate_name(style="plain")
         result_list.append(
             process.execute(
-                {"job_name": f"{ensemble.name} {cnt}", "inputs": config["inputs"]},
+                {"job_name": f"{job_name}", "inputs": config["inputs"]},
                 auth["sub"],
                 ensemble_id=ensemble.id,
             )
         )
-        cnt = cnt + 1
     return result_list
