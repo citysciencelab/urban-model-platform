@@ -1,4 +1,5 @@
 """The ensemble related routes"""
+
 import builtins
 import copy
 import json
@@ -136,14 +137,28 @@ def get_comments(ensemble_id):
         return results
 
 
+@ensembles.route("/<path:ensemble_id>/users", methods=["GET"])
+def get_users(ensemble_id=None):
+    """Get all users that have access to an ensemble"""
+    auth = g.get("auth_token")
+    if auth is None:
+        return Response("[]", mimetype="application/json")
+    with Session(engine) as session:
+        stmt = select(EnsemblesUsers).where(EnsemblesUsers.ensemble_id == ensemble_id)
+        list = []
+        for user in session.scalars(stmt).fetchall():
+            list.append(user.to_dict())
+        return list
+
+
 @ensembles.route("/<path:ensemble_id>/share/<path:email>", methods=["GET"])
 def share(ensemble_id=None, email=None):
     """Share an ensemble with another user"""
-    auth = g.get('auth_token')
+    auth = g.get("auth_token")
     user_id = find_user_id_by_email(email)
     if user_id is None:
         logging.error("Unable to find user by email %s.", email)
-        return Response(status = 404)
+        return Response(status=404)
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
@@ -162,7 +177,7 @@ def share(ensemble_id=None, email=None):
         if ensemble is None:
             return Response(status=404)
 
-        row = EnsemblesUsers(ensemble_id = ensemble_id, user_id = user_id)
+        row = EnsemblesUsers(ensemble_id=ensemble_id, user_id=user_id)
         session.add(row)
         session.commit()
         return Response(status=201)
