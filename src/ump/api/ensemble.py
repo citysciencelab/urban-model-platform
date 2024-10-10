@@ -1,13 +1,15 @@
+"""Ensemble and related entities."""
 from datetime import datetime, timezone
 from typing import ClassVar
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column, declarative_base
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 from sqlalchemy_serializer import SerializerMixin
 
 Base = declarative_base()
 
 class JobsEnsembles(Base, SerializerMixin):
+    """Entity linking jobs and ensembles."""
     __tablename__ = 'jobs_ensembles'
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -29,6 +31,7 @@ class EnsemblesUsers(Base, SerializerMixin):
     user_id: Mapped[str] = mapped_column(String())
 
 class Ensemble(Base, SerializerMixin):
+    """Ensemble entity"""
     __tablename__ = "ensembles"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -66,6 +69,7 @@ class Ensemble(Base, SerializerMixin):
         }
 
 class Comment(Base, SerializerMixin):
+    """Comments for ensembles"""
     __tablename__ = "ensemble_comments"
 
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -38,7 +38,10 @@ async def all_processes():
 
             except Exception as e:
                 logging.error(
-                    f"Cannot access {provider} provider at url \"{p['url']}/processes\"! {e}"
+                    "Cannot access %s provider at url \"%s/processes\"! %s",
+                    provider,
+                    p['url'],
+                    e
                 )
                 traceback.print_exc()
                 processes[provider] = []
@@ -57,7 +60,7 @@ def _processes_list(results):
     for provider in providers.PROVIDERS:
         provider_access = provider in realm_roles or provider in client_roles
         if provider_access:
-            logging.debug(f"Granting access for model server {provider}")
+            logging.debug("Granting access for model server %s", provider)
         try:
             # Check if process has special configuration
             for process in results[provider]:
@@ -66,14 +69,16 @@ def _processes_list(results):
                 process_config = providers.PROVIDERS[provider]["processes"][process['id']]
                 public_access = 'anonymous-access' in process_config and process_config['anonymous-access']
                 if public_access or process_access or provider_access:
-                    logging.debug(f"Granting access for process {process['id']}")
+                    logging.debug("Granting access for process %s", process['id'])
 
                 if not public_access and not provider_access and not process_access:
-                    logging.debug(f"Not granting access for {process['id']}")
+                    logging.debug("Not granting access for %s", process['id'])
                     continue
 
                 logging.debug(
-                    f"Checking process {process['id']} of provider {providers.PROVIDERS[provider]['name']} "
+                    "Checking process %s of provider %s",
+                    process['id'],
+                    providers.PROVIDERS[provider]['name']
                 )
 
                 if providers.check_process_availability(provider, process["id"]):
@@ -81,12 +86,13 @@ def _processes_list(results):
                     processes.append(process)
 
                 else:
-                    logging.debug(f"Process ID  {process['id']} is not configured.")
+                    logging.debug("Process ID %s is not configured.", process['id'])
                     continue
 
         except Exception as e:
             logging.error(
-                f"Something seems to be wrong with the configuration of model servers: {e}"
+                "Something seems to be wrong with the configuration of model servers: %s",
+                e
             )
             traceback.print_exc()
 

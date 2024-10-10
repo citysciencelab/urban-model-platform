@@ -24,11 +24,14 @@ class Process:
         self.outputs: dict
 
         self.process_id_with_prefix = process_id_with_prefix
+        self.process_title = None
 
         match = re.search(r"([^:]+):(.*)", self.process_id_with_prefix)
         if not match:
             raise InvalidUsage(
-                f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
+                "Process ID %s is not known! Please check endpoint api/processes " +
+                "for a list of available processes.",
+                self.process_id_with_prefix
             )
 
         self.provider_prefix = match.group(1)
@@ -38,7 +41,9 @@ class Process:
             self.provider_prefix, self.process_id
         ):
             raise InvalidUsage(
-                f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
+                "Process ID %s is not known! Please check endpoint api/processes " +
+                "for a list of available processes.",
+                self.process_id_with_prefix
             )
 
         auth = g.get("auth_token")
@@ -57,7 +62,9 @@ class Process:
                 and role not in auth["resource_access"]["ump-client"]["roles"]
             ):
                 raise InvalidUsage(
-                    f"Process ID {self.process_id_with_prefix} is not known! Please check endpoint api/processes for a list of available processes."
+                    "Process ID %s is not known! Please check endpoint api/processes " +
+                    "for a list of available processes.",
+                    self.process_id_with_prefix
                 )
 
         asyncio.run(self.set_details())
@@ -80,7 +87,8 @@ class Process:
 
             if response.status != 200:
                 raise InvalidUsage(
-                    f"Model/process not found! {response.status}: {response.reason}. Check /api/processes endpoint for available models/processes."
+                    f"Model/process not found! {response.status}: {response.reason}. " +
+                    "Check /api/processes endpoint for available models/processes.",
                 )
 
             process_details = await response.json()
@@ -93,7 +101,7 @@ class Process:
 
         if not "job_name" in parameters:
             raise InvalidUsage(
-                f"Parameter job_name is required",
+                "Parameter job_name is required",
                 payload={"parameter_description": self.inputs["job_name"]},
             )
 
@@ -112,8 +120,10 @@ class Process:
                             payload={"parameter_description": parameter_metadata},
                         )
                     else:
-                        logging.warn(
-                            f"Model execution {self.process_id_with_prefix} started without parameter {input}."
+                        logging.warning(
+                            "Model execution %s started without parameter %s.",
+                            self.process_id_with_prefix,
+                            input
                         )
                         continue
 
@@ -166,10 +176,10 @@ class Process:
                 if "pattern" in schema:
                     assert re.search(schema["pattern"], param)
 
-            except AssertionError:
+            except AssertionError as exc:
                 raise InvalidUsage(
                     f"Invalid parameter {input} = {param}: does not match mandatory schema {schema}"
-                )
+                ) from exc
 
     def is_required(self, parameter_metadata):
         if "required" in parameter_metadata:
@@ -183,16 +193,21 @@ class Process:
 
         return False
 
-    def execute(self, parameters, user, ensemble_id=None):
+    def execute(self, parameters, user):
         p = providers.PROVIDERS[self.provider_prefix]
 
         self.validate_params(parameters)
 
         logging.info(
-            f" --> Executing {self.process_id} on model server {p['url']} with params {parameters} as process {self.process_id_with_prefix} for user {user}"
+            " --> Executing %s on model server %s with params %s as process %s for user %s",
+            self.process_id,
+            p['url'],
+            parameters,
+            self.process_id_with_prefix,
+            user
         )
 
-        job = asyncio.run(self.start_process_execution(parameters, user, ensemble_id))
+        job = asyncio.run(self.start_process_execution(parameters, user))
 
         _process = dummy.Process(target=self._wait_for_results_async, args=([job]))
         _process.start()
@@ -200,7 +215,7 @@ class Process:
         result = {"jobID": job.job_id, "status": job.status}
         return result
 
-    async def start_process_execution(self, request_body, user, ensemble_id=None):
+    async def start_process_execution(self, request_body, user):
         # execution mode:
         # to maintain backwards compatibility to models using
         # pre-1.0.0 versions of OGC api processes
@@ -266,13 +281,15 @@ class Process:
                     job.save()
 
                     logging.info(
-                        f" --> Job {job.job_id} for model {self.process_id_with_prefix} started running."
+                        " --> Job %s for model %s started running.",
+                        job.job_id,
+                        self.process_id_with_prefix
                     )
 
                     return job
 
         except Exception as e:
-            raise CustomException(f"Job could not be started remotely: {e}")
+            raise CustomException(f"Job could not be started remotely: {e}") from e
 
     def _wait_for_results_async(self, job: Job):
         asyncio.run(self._wait_for_results(job))
@@ -307,7 +324,7 @@ class Process:
 
                 finished = self.is_finished(job_details)
 
-                logging.info(" --> Current Job status: " + str(job_details))
+                logging.info(" --> Current Job status: %s", str(job_details))
 
                 # either remote job has progress info or else we cannot provide it either
                 job.progress = job_details.get("progress")
@@ -323,12 +340,19 @@ class Process:
                 time.sleep(config.fetch_job_results_interval)
 
             logging.info(
-                f" --> Remote execution job {job.remote_job_id}: success = {finished}. Took approx. {int((time.time() - start)/60)} minutes."
+                " --> Remote execution job %s: success = %s. Took approx. %s minutes.",
+                job.remote_job_id,
+                finished,
+                int((time.time() - start)/60)
             )
 
         except Exception as e:
             logging.error(
-                f" --> Could not retrieve results for job {self.process_id_with_prefix} (={self.process_id})/{job.job_id} from simulation model server: {e}"
+                " --> Could not retrieve results for job %s (=%s)/%s from simulation model server: %s",
+                self.process_id_with_prefix,
+                self.process_id,
+                job.job_id,
+                e
             )
             job.status = JobStatus.failed.value
             job.message = str(e)
@@ -337,8 +361,8 @@ class Process:
             job.progress = 100
             job.save()
             raise CustomException(
-                "Could not retrieve results from simulation model server. {e}"
-            )
+                f"Could not retrieve results from simulation model server. {e}"
+            ) from e
 
         # Check if job was successful
         try:
@@ -354,7 +378,7 @@ class Process:
                 raise CustomException(f"Remote job {job.remote_job_id}: {job.message}")
 
         except CustomException as e:
-            logging.error(f" --> An error occurred: {e}")
+            logging.error(" --> An error occurred: %s", e)
 
         job.status = JobStatus.successful.value
         job.finished = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -371,7 +395,11 @@ class Process:
                 await job.results_to_geoserver()
         except Exception as e:
             logging.error(
-                f" --> Could not store results for job {self.process_id_with_prefix} (={self.process_id})/{job.job_id} to geoserver: {e}"
+                " --> Could not store results for job %s (=%s)/%s to geoserver: %s",
+                self.process_id_with_prefix,
+                self.process_id,
+                job.job_id,
+                e
             )
             job.message = str(e)
             job.save()
@@ -410,7 +438,11 @@ class Process:
         )
 
     def __str__(self):
-        return f"src.process.Process object: process_id={self.process_id}, process_id_with_prefix={self.process_id_with_prefix}, provider_prefix={self.provider_prefix}"
+        return (
+            f"src.process.Process object: process_id={self.process_id}, " +
+            f"process_id_with_prefix={self.process_id_with_prefix}, " +
+            f"provider_prefix={self.provider_prefix}"
+        )
 
     def __repr__(self):
         return f"src.process.Process(process_id={self.process_id})"

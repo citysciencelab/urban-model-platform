@@ -1,3 +1,4 @@
+"""Keycloak helper functions"""
 from os import environ as env
 
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
@@ -17,6 +18,7 @@ keycloak_admin.change_current_realm("UrbanModelPlatform")
 
 
 def find_user_id_by_email(email):
+    """Retrieves a user id by email"""
     users = keycloak_admin.get_users({"email": email})
     for user in users:
         if user["email"] == email:
@@ -25,5 +27,6 @@ def find_user_id_by_email(email):
 
 
 def get_user_name(user_id):
+    """Retrieve the username by user id"""
     user = keycloak_admin.get_user(user_id)
     return user["username"] if user else None
