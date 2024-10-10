@@ -14,6 +14,20 @@ class JobsEnsembles(Base, SerializerMixin):
     ensemble_id: Mapped[int] = mapped_column(BigInteger())
     job_id: Mapped[int] = mapped_column(String())
 
+class JobsUsers(Base, SerializerMixin):
+    __tablename__ = 'jobs_users'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[str] = mapped_column(String())
+    user_id: Mapped[str] = mapped_column(String())
+
+class EnsemblesUsers(Base, SerializerMixin):
+    __tablename__ = 'ensembles_users'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ensemble_id: Mapped[int] = mapped_column(BigInteger())
+    user_id: Mapped[str] = mapped_column(String())
+
 class Ensemble(Base, SerializerMixin):
     __tablename__ = "ensembles"
 

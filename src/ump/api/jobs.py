@@ -28,15 +28,15 @@ def get_jobs(args, user = None):
 
   jobs = []
   query = """
-    SELECT job_id FROM jobs
+    SELECT j.job_id FROM jobs j left join jobs_users u on j.job_id = u.job_id
   """
   query_params = {}
   conditions = []
   user = None if user is None else user['sub']
   if user is not None:
-    conditions.append(f"user_id = '{user}' or user_id is null")
+    conditions.append(f"j.user_id = '{user}' or j.user_id is null or u.user_id = '{user}'")
   else:
-    conditions.append('user_id is null')
+    conditions.append('j.user_id is null')
 
   if 'processID' in args and args['processID']:
     # this processID is actually the process_id_with_prefix!!!
@@ -112,7 +112,7 @@ def next_links(page, limit, count_jobs):
 
 def count(conditions, query_params):
   count_query = """
-    SELECT count(*) FROM jobs
+    SELECT count(*) FROM jobs j left join jobs_users u on j.job_id = u.job_id
   """
   with DBHandler() as db:
     count_jobs = db.run_query(
