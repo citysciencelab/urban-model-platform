@@ -52,6 +52,7 @@ def index():
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
+            .distinct()
             .join(
                 EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
             )
@@ -120,6 +121,7 @@ def get_comments(ensemble_id):
             return Response(status=404)
         stmt = (
             select(Comment)
+            .distinct()
             .join(
                 EnsemblesUsers, EnsemblesUsers.ensemble_id == ensemble_id, isouter=True
             )
@@ -212,6 +214,7 @@ def get(ensemble_id):
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
+            .distinct()
             .join(
                 EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
             )

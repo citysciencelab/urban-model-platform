@@ -58,14 +58,24 @@ def share(job_id=None, email=None):
     if user_id is None:
         logging.error("Unable to find user by email %s.", email)
         return Response(status=404)
-    job = Job(job_id, None if auth is None else auth["sub"])
+    if auth is None:
+        logging.error("Authentication token is missing.")
+        return Response(status=401)
+    
+    own_user_id = auth["sub"]
+
+    job = Job(job_id, None if auth is None else own_user_id)
     if job is None:
         logging.error("Unable to find job with id %s.", job_id)
         return Response(status=404)
 
     with Session(engine) as session:
-        row = JobsUsers(job_id=job_id, user_id=user_id)
-        session.add(row)
+        own_entry = JobsUsers(job_id=job_id, user_id=own_user_id)
+        session.add(own_entry)
+
+        shared_entry = JobsUsers(job_id=job_id, user_id=user_id)
+        session.add(shared_entry)
+
         session.commit()
         return Response(status=201)
 
@@ -79,6 +89,7 @@ def get_comments(job_id):
     with Session(engine) as session:
         stmt = (
             select(JobComment)
+            .distinct()
             .join(JobsUsers, JobsUsers.job_id == JobComment.job_id, isouter=True)
             .where(
                 or_(JobComment.user_id == auth["sub"], JobsUsers.user_id == auth["sub"])
