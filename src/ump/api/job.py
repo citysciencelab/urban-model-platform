@@ -189,11 +189,7 @@ class Job:
         self.process_title = data["process_title"]
         self.name = data["name"]
         self.process_version = data["process_version"]
-        logging.error('next')
-        logging.error(data)
-        logging.error(self._to_dict())
-        logging.error(self.display())
-
+       
     def _to_dict(self):
         return {
             "process_id": self.process_id,
