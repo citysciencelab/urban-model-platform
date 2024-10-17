@@ -272,6 +272,51 @@ def delete_job_from_ensemble(ensemble_id, job_id):
         return Response(status=204, mimetype="application/json")
 
 
+@ensembles.route("/<path:ensemble_id>", methods=["DELETE"])
+def delete_ensemble(ensemble_id):
+    """Delete an ensemble by its ID"""
+    auth = g.get("auth_token")
+    if auth is None:
+        logging.error("Unauthorized delete attempt. No auth token found.")
+        return Response("Unauthorized. No ensemble deleted", status=401)
+
+    with Session(engine) as session:
+        stmt = (
+            select(Ensemble)
+            .where(Ensemble.id == ensemble_id)
+            .where(
+                or_(
+                    Ensemble.user_id == auth["sub"],
+                    EnsemblesUsers.user_id == auth["sub"]
+                )
+            )
+        )
+        ensemble = session.scalar(stmt)
+
+        if ensemble is None:
+            logging.error(f"Ensemble {ensemble_id} not found or no access.")
+            return Response("Ensemble not found or access denied", status=404)
+
+        # Delete references in 'jobs_ensembles'-table
+        delete_jobs_ensembles_stmt = delete(JobsEnsembles).where(JobsEnsembles.ensemble_id == ensemble_id)
+        session.execute(delete_jobs_ensembles_stmt)
+
+        # Delete references in 'ensembles_users'-table
+        delete_ensembles_users_stmt = delete(EnsemblesUsers).where(EnsemblesUsers.ensemble_id == ensemble_id)
+        session.execute(delete_ensembles_users_stmt)
+
+        # Delete comments
+        delete_comments_stmt = delete(Comment).where(Comment.ensemble_id == ensemble_id)
+        session.execute(delete_comments_stmt)
+
+        # Delete ensemble
+        session.delete(ensemble)
+        session.commit()
+
+        logging.info(f"Ensemble {ensemble_id} deleted successfully.")
+        return Response(f"Ensemble {ensemble_id} deleted", status=204)
+
+
 @ensembles.route("/<path:ensemble_id>/execute", methods=["GET"])
 def execute(ensemble_id):
     """Create and execute the jobs in this ensemble"""
