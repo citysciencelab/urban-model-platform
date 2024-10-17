@@ -283,6 +283,10 @@ def delete_ensemble(ensemble_id):
     with Session(engine) as session:
         stmt = (
             select(Ensemble)
+            .distinct()
+            .join(
+                EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
+            )
             .where(Ensemble.id == ensemble_id)
             .where(
                 or_(
