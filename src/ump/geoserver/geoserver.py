@@ -80,7 +80,7 @@ class Geoserver:
         try:
             response = requests.post(
                 f"{config.geoserver_workspaces_url}/{self.workspace}" +
-                    "/datastores/{store_name}/featuretypes",
+                    f"/datastores/{store_name}/featuretypes",
                 auth=(config.geoserver_admin_user, config.geoserver_admin_password),
                 data=f"<featureType><name>{layer_name}</name></featureType>",
                 headers={"Content-type": "text/xml"},
@@ -143,7 +143,7 @@ class Geoserver:
     def geojson_to_postgis(self, table_name: str, data: dict):
         engine = create_engine(
             f"postgresql://{config.postgres_user}:{config.postgres_password}" +
-                "@{config.postgres_host}/{config.postgres_db}"
+                f"@{config.postgres_host}/{config.postgres_db}"
         )
         gdf = gpd.GeoDataFrame.from_features(data["features"], crs = 'EPSG:4326')
         table = Identifier(table_name)
