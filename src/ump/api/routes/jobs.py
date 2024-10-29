@@ -61,7 +61,7 @@ def share(job_id=None, email=None):
     if auth is None:
         logging.error("Authentication token is missing.")
         return Response(status=401)
-    
+
     own_user_id = auth["sub"]
 
     job = Job(job_id, None if auth is None else own_user_id)

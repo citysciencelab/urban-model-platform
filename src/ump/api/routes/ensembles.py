@@ -19,7 +19,7 @@ from names_generator import generate_name
 from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.orm import Session
 
-from ump.api.ensemble import Comment, Ensemble, EnsemblesUsers, JobsEnsembles
+from ump.api.ensemble import Comment, Ensemble, EnsemblesUsers, JobsEnsembles, JobsUsers
 from ump.api.job import Job
 from ump.api.keycloak_utils import find_user_id_by_email
 from ump.api.process import Process
@@ -147,10 +147,10 @@ def get_users(ensemble_id=None):
         return Response("[]", mimetype="application/json")
     with Session(engine) as session:
         stmt = select(EnsemblesUsers).where(EnsemblesUsers.ensemble_id == ensemble_id)
-        list = []
+        result = []
         for user in session.scalars(stmt).fetchall():
-            list.append(user.to_dict())
-        return list
+            result.append(user.to_dict())
+        return result
 
 
 @ensembles.route("/<path:ensemble_id>/share/<path:email>", methods=["GET"])
@@ -181,6 +181,12 @@ def share(ensemble_id=None, email=None):
 
         row = EnsemblesUsers(ensemble_id=ensemble_id, user_id=user_id)
         session.add(row)
+        session.commit()
+        stmt = select(JobsEnsembles).where(JobsEnsembles.ensemble_id == ensemble_id)
+        ids = session.scalars(stmt).fetchall()
+        for row in ids:
+            shared = JobsUsers(job_id=row.job_id, user_id=user_id)
+            session.add(shared)
         session.commit()
         return Response(status=201)
 
@@ -298,15 +304,19 @@ def delete_ensemble(ensemble_id):
         ensemble = session.scalar(stmt)
 
         if ensemble is None:
-            logging.error(f"Ensemble {ensemble_id} not found or no access.")
+            logging.error("Ensemble %s not found or no access.", ensemble_id)
             return Response("Ensemble not found or access denied", status=404)
 
         # Delete references in 'jobs_ensembles'-table
-        delete_jobs_ensembles_stmt = delete(JobsEnsembles).where(JobsEnsembles.ensemble_id == ensemble_id)
+        delete_jobs_ensembles_stmt = delete(JobsEnsembles).where(
+            JobsEnsembles.ensemble_id == ensemble_id
+        )
         session.execute(delete_jobs_ensembles_stmt)
 
         # Delete references in 'ensembles_users'-table
-        delete_ensembles_users_stmt = delete(EnsemblesUsers).where(EnsemblesUsers.ensemble_id == ensemble_id)
+        delete_ensembles_users_stmt = delete(EnsemblesUsers).where(
+            EnsemblesUsers.ensemble_id == ensemble_id
+        )
         session.execute(delete_ensembles_users_stmt)
 
         # Delete comments
@@ -317,7 +327,7 @@ def delete_ensemble(ensemble_id):
         session.delete(ensemble)
         session.commit()
 
-        logging.info(f"Ensemble {ensemble_id} deleted successfully.")
+        logging.info("Ensemble %s deleted successfully.", ensemble_id)
         return Response(f"Ensemble {ensemble_id} deleted", status=204)
 
 
