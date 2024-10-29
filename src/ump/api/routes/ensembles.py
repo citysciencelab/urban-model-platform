@@ -40,7 +40,8 @@ def add_job_fields(ensemble: Ensemble):
         )
         ensemble.jobs_metadata = {}
         for row in result:
-            ensemble.jobs_metadata[row.status] = row.count
+            if row.status is not None:
+                ensemble.jobs_metadata[row.status] = row.count
 
 
 @ensembles.route("/", methods=["GET"])

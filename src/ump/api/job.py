@@ -103,7 +103,6 @@ class Job:
             (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s, %(process_version)s)
         """
         with DBHandler() as db:
-            logging.error(self._to_dict())
             db.run_query(query, query_params=self._to_dict())
 
         logging.info(" --> Job %s for %s created.", self.job_id, self.process_id)
@@ -164,7 +163,6 @@ class Job:
             job_details = db.run_query(query, query_params={"job_id": job_id})
 
         if len(job_details) > 0:
-            logging.error(job_details[0])
             self._init_from_dict(dict(job_details[0]))
             return True
         return False
@@ -189,7 +187,7 @@ class Job:
         self.process_title = data["process_title"]
         self.name = data["name"]
         self.process_version = data["process_version"]
-       
+
     def _to_dict(self):
         return {
             "process_id": self.process_id,
@@ -336,10 +334,15 @@ class Job:
 
     async def results_to_geoserver(self):
         try:
+            p = providers.PROVIDERS[self.provider_prefix]['processes'][self.process_id]
 
             results = await self.results()
             while "results" in results:
                 results = results["results"]
+            if 'result-path' in p:
+                parts = p['result-path'].split('.')
+                for part in parts:
+                    results = results[part]
             geoserver = Geoserver()
 
             self.set_results_metadata(results)
