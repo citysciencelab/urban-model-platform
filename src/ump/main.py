@@ -1,21 +1,27 @@
 import json
 import os
+from datetime import datetime, timedelta
 from logging.config import dictConfig
 from os import environ as env
 
+import requests
+import schedule
 from apiflask import APIBlueprint, APIFlask
 from flask import g, jsonify, request
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from keycloak import KeycloakOpenID
+from sqlalchemy import create_engine
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from ump import config
 from ump.api.routes.ensembles import ensembles
 from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
 from ump.api.routes.users import users
+from ump.config import CLEANUP_AGE
 from ump.errors import CustomException
 
 if (
@@ -49,6 +55,37 @@ dictConfig(
     }
 )
 
+def cleanup():
+    """Cleans up jobs and Geoserver layers of anonymous users"""
+    engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
+    sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id"
+    finished = datetime.now() - timedelta(minutes = CLEANUP_AGE)
+    with engine.begin() as conn:
+        result = conn.exec_driver_sql(sql, {'finished': finished})
+        for row in result:
+            job_id = row[0]
+            requests.delete(
+                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
+                    f"/layers/{job_id}.xml",
+                auth=(config.geoserver_admin_user, config.geoserver_admin_password),
+                timeout=config.GEOSERVER_TIMEOUT,
+            )
+            requests.delete(
+                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
+                    f"/datastores/{job_id}/featuretypes/{job_id}.xml",
+                auth=(config.geoserver_admin_user, config.geoserver_admin_password),
+                timeout=config.GEOSERVER_TIMEOUT,
+            )
+            requests.delete(
+                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
+                    f"/datastores/{job_id}.xml",
+                auth=(config.geoserver_admin_user, config.geoserver_admin_password),
+                timeout=config.GEOSERVER_TIMEOUT,
+            )
+
+
+schedule.every(60).seconds.do(cleanup)
+
 app = APIFlask(__name__)
 app.wsgi_app = ProxyFix(
     app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
@@ -81,7 +118,8 @@ keycloak_openid = KeycloakOpenID(
 
 @app.before_request
 def check_jwt():
-    """Decodes the JWT token before each request is handled"""
+    """Decodes the JWT token and runs pending scheduled jobs"""
+    schedule.run_pending()
     auth = request.authorization
     if auth is not None:
         decoded = keycloak_openid.decode_token(auth.token)
