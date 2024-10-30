@@ -10,6 +10,7 @@ from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from keycloak import KeycloakOpenID
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ump.api.routes.ensembles import ensembles
 from ump.api.routes.jobs import jobs
@@ -49,6 +50,9 @@ dictConfig(
 )
 
 app = APIFlask(__name__)
+app.wsgi_app = ProxyFix(
+    app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
+)
 
 app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", 0)
 app.config["SQLALCHEMY_DATABASE_URI"] = (
