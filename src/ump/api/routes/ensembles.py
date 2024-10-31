@@ -191,6 +191,34 @@ def share(ensemble_id=None, email=None):
         session.commit()
         return Response(status=201)
 
+@ensembles.route("/<path:ensemble_id>/addjob/<path:job_id>")
+def add_job_to_ensemble(ensemble_id, job_id):
+    """Add a job to an ensemble"""
+    auth = g.get("auth_token")
+    if auth is None:
+        logging.info("Not adding job to ensemble, no authentication found.")
+        return Response("Unauthorized", status=401)
+    with Session(engine) as session:
+        stmt = (
+            select(Ensemble)
+            .join(
+                EnsemblesUsers, EnsemblesUsers.ensemble_id == Ensemble.id, isouter=True
+            )
+            .where(
+                or_(
+                    Ensemble.user_id == auth["sub"],
+                    EnsemblesUsers.user_id == auth["sub"],
+                )
+            )
+            .where(Ensemble.id == ensemble_id)
+        )
+        ensemble = session.scalar(stmt)
+        if ensemble is None:
+            return Response(status=404)
+        entry = JobsEnsembles(ensemble_id = ensemble_id, job_id = job_id)
+        session.add(entry)
+        session.commit()
+        return Response(status=201)
 
 @ensembles.route("/<path:ensemble_id>/comments", methods=["POST"])
 def create_comment(ensemble_id):
