@@ -1046,6 +1046,17 @@ recommended = ["ema-workbench[dev,graph,jupyter]"]
 simio = ["pythonnet"]
 
 [[package]]
+name = "entrypoints"
+version = "0.4"
+description = "Discover and load entry points from installed packages."
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "entrypoints-0.4-py3-none-any.whl", hash = "sha256:f174b5ff827504fd3cd97cc3f8649f3693f51538c7e4bdf3ef002c8429d42f9f"},
+    {file = "entrypoints-0.4.tar.gz", hash = "sha256:b706eddaa9218a19ebcd67b56818f05bb27589b1ca9e8d797b74affad4ccacd4"},
+]
+
+[[package]]
 name = "execnet"
 version = "2.1.1"
 description = "execnet: rapid multi-Python deployment"
@@ -1688,6 +1699,38 @@ docs = ["myst-parser", "pydata-sphinx-theme", "sphinx", "sphinx-autodoc-typehint
 pyqt5 = ["pyqt5"]
 pyside6 = ["pyside6"]
 test = ["flaky", "ipyparallel", "pre-commit", "pytest (>=7.0)", "pytest-asyncio (>=0.23.5)", "pytest-cov", "pytest-timeout"]
+
+[[package]]
+name = "ipyparallel"
+version = "8.8.0"
+description = "Interactive Parallel Computing with IPython"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "ipyparallel-8.8.0-py3-none-any.whl", hash = "sha256:d2db60fd8baea09e02e7a13a761e1798868c0a717e3e2fa8fb52ffc037cccd35"},
+    {file = "ipyparallel-8.8.0.tar.gz", hash = "sha256:2404d59f86a3aaa3bd27bf6b57df777bff5c1363c1c6e60403759d16ed42dc7b"},
+]
+
+[package.dependencies]
+decorator = "*"
+entrypoints = "*"
+ipykernel = ">=4.4"
+ipython = ">=4"
+jupyter-client = ">=5"
+psutil = "*"
+python-dateutil = ">=2.1"
+pyzmq = ">=18"
+tornado = ">=5.1"
+tqdm = "*"
+traitlets = ">=4.3"
+
+[package.extras]
+benchmark = ["asv"]
+labextension = ["jupyter-server", "jupyterlab (>=3)"]
+nbext = ["jupyter-server", "notebook"]
+retroextension = ["jupyter-server", "retrolab"]
+serverextension = ["jupyter-server"]
+test = ["ipython[test]", "pytest", "pytest-asyncio", "pytest-cov", "testpath"]
 
 [[package]]
 name = "ipython"
@@ -2786,8 +2829,8 @@ files = [
 
 [package.dependencies]
 numpy = [
-    {version = ">=1.26.0", markers = "python_version >= \"3.12\""},
     {version = ">=1.23.2", markers = "python_version == \"3.11\""},
+    {version = ">=1.26.0", markers = "python_version >= \"3.12\""},
 ]
 python-dateutil = ">=2.8.2"
 pytz = ">=2020.1"
@@ -3429,8 +3472,8 @@ files = [
 astroid = ">=3.3.4,<=3.4.0-dev0"
 colorama = {version = ">=0.4.5", markers = "sys_platform == \"win32\""}
 dill = [
-    {version = ">=0.3.7", markers = "python_version >= \"3.12\""},
     {version = ">=0.3.6", markers = "python_version >= \"3.11\" and python_version < \"3.12\""},
+    {version = ">=0.3.7", markers = "python_version >= \"3.12\""},
 ]
 isort = ">=4.2.5,<5.13.0 || >5.13.0,<6"
 mccabe = ">=0.6,<0.8"
@@ -4404,8 +4447,8 @@ files = [
 
 [package.dependencies]
 astroid = [
-    {version = ">=3.0.0a1", markers = "python_version >= \"3.12\""},
     {version = ">=2.7", markers = "python_version < \"3.12\""},
+    {version = ">=3.0.0a1", markers = "python_version >= \"3.12\""},
 ]
 Jinja2 = "*"
 PyYAML = "*"
@@ -5333,4 +5376,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.13"
-content-hash = "b860d3d39e527c4b731333c46248d357a9c4d7f3d62bd17da530d86d9004a58a"
+content-hash = "71bf68d337f8402f6f58e3c8144629c5d89089fdec6feac783bc2c4f8adde966"
