@@ -4,7 +4,7 @@ import os
 import aiohttp
 import yaml
 from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 
 from ump import config
 
@@ -19,9 +19,10 @@ class ProviderLoader(FileSystemEventHandler):
         if event.src_path == config.PROVIDERS_FILE:
             with open(config.PROVIDERS_FILE, encoding="UTF-8") as to_reload:
                 if new_content := yaml.safe_load(to_reload):
+                    logging.info('Reloading providers.yaml.')
                     PROVIDERS.update(new_content)
 
-observer = Observer()
+observer = PollingObserver()
 observer.schedule(ProviderLoader(), os.path.dirname(config.PROVIDERS_FILE), recursive=False)
 observer.start()
 
