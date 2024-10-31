@@ -337,8 +337,6 @@ class Job:
             p = providers.PROVIDERS[self.provider_prefix]['processes'][self.process_id]
 
             results = await self.results()
-            while "results" in results:
-                results = results["results"]
             if 'result-path' in p:
                 parts = p['result-path'].split('.')
                 for part in parts:
