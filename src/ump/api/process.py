@@ -8,6 +8,7 @@ from multiprocessing import dummy
 
 import aiohttp
 from flask import g
+from sqlalchemy import create_engine
 
 import ump.api.providers as providers
 import ump.config as config
@@ -16,6 +17,7 @@ from ump.errors import CustomException, InvalidUsage
 
 logging.basicConfig(level=logging.INFO)
 
+engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
 
 class Process:
     def __init__(self, process_id_with_prefix=None):
@@ -25,6 +27,7 @@ class Process:
 
         self.process_id_with_prefix = process_id_with_prefix
         self.process_title = None
+        self.version = None
 
         match = re.search(r"([^:]+):(.*)", self.process_id_with_prefix)
         if not match:
@@ -193,6 +196,29 @@ class Process:
 
         return False
 
+    def check_for_cache(self, parameters, user_id):
+        """
+        Checks if the job has already been executed. Returns the job id if it has, None otherwise.
+        """
+        p = providers.PROVIDERS[self.provider_prefix]['processes'][self.process_id]
+        if 'deterministic' not in p or not p['deterministic']:
+            return None
+        sql = """
+        select job_id from jobs where hash = encode(sha512((%(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea), 'base64')
+        """
+        with engine.begin() as conn:
+            result = conn.exec_driver_sql(
+                sql,
+                {
+                    "parameters": json.dumps(parameters),
+                    "process_version": self.version,
+                    "user_id": user_id,
+                },
+            )
+            for row in result:
+                return row.job_id
+        return None
+
     def execute(self, parameters, user):
         p = providers.PROVIDERS[self.provider_prefix]
 
@@ -209,7 +235,7 @@ class Process:
 
         job = asyncio.run(self.start_process_execution(parameters, user))
 
-        _process = dummy.Process(target=self._wait_for_results_async, args=([job]))
+        _process = dummy.Process(target=self._wait_for_results_async, args=[job])
         _process.start()
 
         result = {"jobID": job.job_id, "status": job.status}
@@ -224,6 +250,11 @@ class Process:
 
         # extract job_name from request_body
         name = request_body.pop("job_name")
+
+        job_id = self.check_for_cache(request_body, user)
+        if job_id:
+            logging.info('Job found, returning cached job.')
+            return Job(job_id, user)
 
         try:
             auth = providers.authenticate_provider(p)
