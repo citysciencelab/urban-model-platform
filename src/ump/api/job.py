@@ -157,7 +157,7 @@ class Job:
         if user is None:
             query += " and j.user_id is null"
         else:
-            query += f" and (j.user_id = '{user}' or j.user_id is null or u.user_id = '{user}')"
+            query += f" and (j.user_id = '{user}' or u.user_id = '{user}')"
 
         with DBHandler() as db:
             job_details = db.run_query(query, query_params={"job_id": job_id})
