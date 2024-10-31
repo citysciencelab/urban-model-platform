@@ -34,7 +34,7 @@ def get_jobs(args, user = None):
     conditions = []
     user = None if user is None else user['sub']
     if user is not None:
-        conditions.append(f"j.user_id = '{user}' or j.user_id is null or u.user_id = '{user}'")
+        conditions.append(f"j.user_id = '{user}' or u.user_id = '{user}'")
     else:
         conditions.append('j.user_id is null')
 
