@@ -81,6 +81,7 @@ keycloak_openid = KeycloakOpenID(
 
 @app.before_request
 def check_jwt():
+    """Decodes the JWT token before each request is handled"""
     auth = request.authorization
     if auth is not None:
         decoded = keycloak_openid.decode_token(auth.token)
