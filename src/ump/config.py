@@ -25,3 +25,4 @@ geoserver_workspace = os.environ.get("GEOSERVER_WORKSPACE", "CUT")
 geoserver_admin_user = os.environ.get("GEOSERVER_ADMIN_USER", "admin")
 geoserver_admin_password = os.environ.get("GEOSERVER_ADMIN_PASSWORD", "geoserver")
 GEOSERVER_TIMEOUT = 60
+CLEANUP_AGE = 4 * 60 # configure minutes, after which jobs and layers of anonymous users are deleted
