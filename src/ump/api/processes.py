@@ -66,6 +66,9 @@ def _processes_list(results):
             for process in results[provider]:
                 process_id = f"{provider}_{process['id']}"
                 process_access = process_id in realm_roles or process_id in client_roles
+                if not process['id'] in providers.PROVIDERS[provider]["processes"]:
+                    logging.debug("No configuration found for process %s", process['id'])
+                    continue
                 process_config = providers.PROVIDERS[provider]["processes"][process['id']]
                 public_access = 'anonymous-access' in process_config and process_config['anonymous-access']
                 if public_access or process_access or provider_access:
