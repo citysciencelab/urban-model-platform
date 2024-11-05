@@ -96,7 +96,6 @@ python-keycloak = "^4.3.0"
 sqlalchemy-serializer = "^1.4.22"
 watchdog = "^5.0.3"
 ema-workbench = "^2.5.2"
-names-generator = "^0.2.0"
 ipyparallel = "^8.8.0"
 schedule = "^1.2.2"
 

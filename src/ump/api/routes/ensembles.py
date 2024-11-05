@@ -4,6 +4,7 @@ import builtins
 import copy
 import json
 import logging
+from uuid import uuid1
 
 from apiflask import APIBlueprint
 from ema_workbench import CategoricalParameter, RealParameter
@@ -15,7 +16,6 @@ from ema_workbench.em_framework.samplers import (
     sample_parameters,
 )
 from flask import Response, g, request
-from names_generator import generate_name
 from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.orm import Session
 
@@ -435,7 +435,7 @@ def create_jobs(ensemble: Ensemble, auth):
     result_list = []
     for config in results:
         process = Process(config["process_id"])
-        job_name = ensemble.name + " - " + generate_name(style="plain")
+        job_name = ensemble.name + " - " + str(uuid1())
         result_list.append(
             process.execute(
                 {"job_name": f"{job_name}", "inputs": config["inputs"]},
