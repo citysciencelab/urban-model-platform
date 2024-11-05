@@ -1,6 +1,5 @@
 """Keycloak helper functions"""
 
-import hashlib
 from os import environ as env
 
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
@@ -28,14 +27,7 @@ def find_user_id_by_email(email):
     return None
 
 
-def get_user_name(user_id):
-    """Retrieve the username by user id"""
+def get_user_details(user_id):
+    """Retrieve the user details by user id"""
     user = keycloak_admin.get_user(user_id)
-    return user["username"] if user else None
-
-
-def get_gravatar_url(user_id):
-    """Retrieve the gravatar url by user id"""
-    email = keycloak_admin.get_user(user_id)["email"].strip().lower()
-    hash_email = hashlib.md5(email.encode("utf-8")).hexdigest()
-    return f"https://www.gravatar.com/avatar/{hash_email}"
+    return user

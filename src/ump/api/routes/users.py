@@ -5,7 +5,7 @@ import json
 from apiflask import APIBlueprint
 from flask import Response, g
 
-from ump.api.keycloak_utils import get_gravatar_url, get_user_name
+from ump.api.keycloak_utils import get_user_details
 
 users = APIBlueprint("users", __name__)
 
@@ -17,13 +17,14 @@ def index(user_id=None):
     if auth is None:
         return Response(mimetype="application/json", status=401)
 
-    user_name = get_user_name(user_id)
-    gravatar_url = get_gravatar_url(user_id)
+    details = get_user_details(user_id)
 
     response_data = {
         "user_id": user_id,
-        "username": user_name,
-        "gravatar_url": gravatar_url,
+        "username": details['username'],
+        "firstName": details['firstName'],
+        "lastName": details['lastName'],
+        "email": details['email'],
     }
 
     return Response(json.dumps(response_data), mimetype="application/json")
