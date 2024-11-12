@@ -42,7 +42,7 @@ Processes configured with `anonymous-access: True` can be seen and run by anonym
 
 Processes can be configured with `deterministic: True`. If so, jobs will be cached based on a hash of the input parameters, the process version and the user id.
 
-With `graph-properties` and the sub-property `root-path` you can configure processes to simplify graph configuration in the UI.
+With `graph-properties` and the sub-properties `root-path`, `x-path` and `y-path` you can configure processes to simplify graph configuration in the UI.
 
 ## Keycloak
 
