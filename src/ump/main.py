@@ -99,7 +99,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-CORS(app)
+CORS(app, origins="*")
 
 api = APIBlueprint("api", __name__, url_prefix="/api")
 api.register_blueprint(processes, url_prefix="/processes")
