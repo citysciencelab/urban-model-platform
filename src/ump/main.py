@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 from logging.config import dictConfig
@@ -11,7 +12,7 @@ from flask import g, jsonify, request
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-from keycloak import KeycloakOpenID
+from keycloak import KeycloakGetError, KeycloakOpenID
 from sqlalchemy import create_engine
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -55,30 +56,31 @@ dictConfig(
     }
 )
 
+
 def cleanup():
     """Cleans up jobs and Geoserver layers of anonymous users"""
     engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
     sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id"
-    finished = datetime.now() - timedelta(minutes = CLEANUP_AGE)
+    finished = datetime.now() - timedelta(minutes=CLEANUP_AGE)
     with engine.begin() as conn:
-        result = conn.exec_driver_sql(sql, {'finished': finished})
+        result = conn.exec_driver_sql(sql, {"finished": finished})
         for row in result:
             job_id = row[0]
             requests.delete(
-                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
-                    f"/layers/{job_id}.xml",
+                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}"
+                + f"/layers/{job_id}.xml",
                 auth=(config.geoserver_admin_user, config.geoserver_admin_password),
                 timeout=config.GEOSERVER_TIMEOUT,
             )
             requests.delete(
-                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
-                    f"/datastores/{job_id}/featuretypes/{job_id}.xml",
+                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}"
+                + f"/datastores/{job_id}/featuretypes/{job_id}.xml",
                 auth=(config.geoserver_admin_user, config.geoserver_admin_password),
                 timeout=config.GEOSERVER_TIMEOUT,
             )
             requests.delete(
-                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
-                    f"/datastores/{job_id}.xml",
+                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}"
+                + f"/datastores/{job_id}.xml",
                 auth=(config.geoserver_admin_user, config.geoserver_admin_password),
                 timeout=config.GEOSERVER_TIMEOUT,
             )
@@ -87,9 +89,7 @@ def cleanup():
 schedule.every(60).seconds.do(cleanup)
 
 app = APIFlask(__name__)
-app.wsgi_app = ProxyFix(
-    app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
-)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", 0)
 app.config["SQLALCHEMY_DATABASE_URI"] = (
@@ -110,10 +110,18 @@ api.register_blueprint(users, url_prefix="/users")
 app.register_blueprint(api)
 
 keycloak_openid = KeycloakOpenID(
-    server_url=f"{env['KEYCLOAK_PROTOCOL']}://{env['KEYCLOAK_HOST']}/auth/",
+    server_url=f"{env['KEYCLOAK_PROTOCOL']}://{env['KEYCLOAK_HOST']}/",
     client_id="ump-client",
     realm_name="UrbanModelPlatform",
+    verify=True,
 )
+try:
+    config_well_known = keycloak_openid.well_known()
+    logging.debug(
+        "Verbindung erfolgreich. Well-Known-Konfiguration:", print(config_well_known)
+    )
+except KeycloakGetError as e:
+    logging.error("Fehler bei der Verbindung:", e)
 
 
 @app.before_request
@@ -122,8 +130,12 @@ def check_jwt():
     schedule.run_pending()
     auth = request.authorization
     if auth is not None:
-        decoded = keycloak_openid.decode_token(auth.token)
-        g.auth_token = decoded
+        try:
+            decoded = keycloak_openid.decode_token(auth.token)
+            g.auth_token = decoded
+        except Exception as e:
+            logging.error(f"Fehler beim Decodieren des JWT: {e}")
+            return jsonify({"error": "Invalid token"}), 401
     else:
         g.auth_token = None
 
