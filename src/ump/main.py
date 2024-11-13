@@ -99,7 +99,17 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-CORS(app, origins=["https://scenarioexplorer.comodeling.city", "http://localhost"], supports_credentials=True, allow_headers=["Content-Type", "Authorization"], methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+CORS(
+    app,
+    origins=[
+        "https://scenarioexplorer.comodeling.city",
+        "http://localhost",
+        "https://auth.comodeling.city",
+    ],
+    supports_credentials=True,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+)
 
 api = APIBlueprint("api", __name__, url_prefix="/api")
 api.register_blueprint(processes, url_prefix="/processes")
@@ -113,7 +123,7 @@ keycloak_openid = KeycloakOpenID(
     server_url=f"{env['KEYCLOAK_PROTOCOL']}://{env['KEYCLOAK_HOST']}/",
     client_id="ump-client",
     realm_name="UrbanModelPlatform",
-    verify=True,
+    verify=False,
 )
 try:
     config_well_known = keycloak_openid.well_known()
