@@ -99,7 +99,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-CORS(app, origins="*")
+CORS(app, origins=["https://scenarioexplorer.comodeling.city", "http://localhost"], supports_credentials=True, allow_headers=["Content-Type", "Authorization"], methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 api = APIBlueprint("api", __name__, url_prefix="/api")
 api.register_blueprint(processes, url_prefix="/processes")
