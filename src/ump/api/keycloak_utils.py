@@ -1,18 +1,17 @@
 """Keycloak helper functions"""
 
-import logging
 from os import environ as env
 
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 
 keycloak_connection = KeycloakOpenIDConnection(
-    server_url=f"{env['KEYCLOAK_PROTOCOL']}://{env['KEYCLOAK_HOST']}/",
+    server_url=f"{env['KEYCLOAK_PROTOCOL']}://{env['KEYCLOAK_HOST']}/auth/",
     username=env["KEYCLOAK_USER"],
     password=env["KEYCLOAK_PASSWORD"],
     realm_name="master",
     user_realm_name="master",
     client_id="admin-cli",
-    verify=False,
+    verify=True,
 )
 
 keycloak_admin = KeycloakAdmin(connection=keycloak_connection)
