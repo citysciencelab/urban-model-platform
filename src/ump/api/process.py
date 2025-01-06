@@ -19,6 +19,7 @@ logging.basicConfig(level=logging.INFO)
 
 engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
 
+
 class Process:
     def __init__(self, process_id_with_prefix=None):
 
@@ -32,9 +33,9 @@ class Process:
         match = re.search(r"([^:]+):(.*)", self.process_id_with_prefix)
         if not match:
             raise InvalidUsage(
-                "Process ID %s is not known! Please check endpoint api/processes " +
-                "for a list of available processes.",
-                self.process_id_with_prefix
+                "Process ID %s is not known! Please check endpoint api/processes "
+                + "for a list of available processes.",
+                self.process_id_with_prefix,
             )
 
         self.provider_prefix = match.group(1)
@@ -44,9 +45,9 @@ class Process:
             self.provider_prefix, self.process_id
         ):
             raise InvalidUsage(
-                "Process ID %s is not known! Please check endpoint api/processes " +
-                "for a list of available processes.",
-                self.process_id_with_prefix
+                "Process ID %s is not known! Please check endpoint api/processes "
+                + "for a list of available processes.",
+                self.process_id_with_prefix,
             )
 
         auth = g.get("auth_token")
@@ -65,9 +66,9 @@ class Process:
                 and role not in auth["resource_access"]["ump-client"]["roles"]
             ):
                 raise InvalidUsage(
-                    "Process ID %s is not known! Please check endpoint api/processes " +
-                    "for a list of available processes.",
-                    self.process_id_with_prefix
+                    "Process ID %s is not known! Please check endpoint api/processes "
+                    + "for a list of available processes.",
+                    self.process_id_with_prefix,
                 )
 
         asyncio.run(self.set_details())
@@ -90,8 +91,8 @@ class Process:
 
             if response.status != 200:
                 raise InvalidUsage(
-                    f"Model/process not found! {response.status}: {response.reason}. " +
-                    "Check /api/processes endpoint for available models/processes.",
+                    f"Model/process not found! {response.status}: {response.reason}. "
+                    + "Check /api/processes endpoint for available models/processes.",
                 )
 
             process_details = await response.json()
@@ -126,7 +127,7 @@ class Process:
                         logging.warning(
                             "Model execution %s started without parameter %s.",
                             self.process_id_with_prefix,
-                            input
+                            input,
                         )
                         continue
 
@@ -200,8 +201,8 @@ class Process:
         """
         Checks if the job has already been executed. Returns the job id if it has, None otherwise.
         """
-        p = providers.PROVIDERS[self.provider_prefix]['processes'][self.process_id]
-        if 'deterministic' not in p or not p['deterministic']:
+        p = providers.PROVIDERS[self.provider_prefix]["processes"][self.process_id]
+        if "deterministic" not in p or not p["deterministic"]:
             return None
         sql = """
         select job_id from jobs where hash = encode(sha512((%(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea), 'base64')
@@ -227,10 +228,10 @@ class Process:
         logging.info(
             " --> Executing %s on model server %s with params %s as process %s for user %s",
             self.process_id,
-            p['url'],
+            p["url"],
             parameters,
             self.process_id_with_prefix,
-            user
+            user,
         )
 
         job = asyncio.run(self.start_process_execution(parameters, user))
@@ -253,7 +254,7 @@ class Process:
 
         job_id = self.check_for_cache(request_body, user)
         if job_id:
-            logging.info('Job found, returning cached job.')
+            logging.info("Job found, returning cached job.")
             return Job(job_id, user)
 
         try:
@@ -307,14 +308,28 @@ class Process:
                         user=user,
                         process_version=self.version,
                     )
-                    job.started = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                    job.status = JobStatus.running.value
+                    job.started = datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%dT%H:%M:%S.%fZ"
+                    )
+
+                    status_response = await session.get(
+                        f"{p['url']}/jobs/{remote_job_id}?f=json",
+                        auth=auth,
+                        headers={
+                            "Content-type": "application/json",
+                            "Accept": "application/json",
+                        },
+                    )
+                    status_response.raise_for_status()
+                    status_json = await status_response.json()
+
+                    job.status = status_json.get("status")
                     job.save()
 
                     logging.info(
                         " --> Job %s for model %s started running.",
                         job.job_id,
-                        self.process_id_with_prefix
+                        self.process_id_with_prefix,
                     )
 
                     return job
@@ -342,7 +357,7 @@ class Process:
 
                     auth = providers.authenticate_provider(p)
                     async with session.get(
-                        f"{p['url']}/jobs/{job.remote_job_id}",
+                        f"{p['url']}/jobs/{job.remote_job_id}?f=json",
                         auth=auth,
                         headers={
                             "Content-type": "application/json",
@@ -360,7 +375,9 @@ class Process:
                 # either remote job has progress info or else we cannot provide it either
                 job.progress = job_details.get("progress")
 
-                job.updated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                job.updated = datetime.now(timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%S.%fZ"
+                )
                 job.save()
 
                 if time.time() - start > timeout:
@@ -374,7 +391,7 @@ class Process:
                 " --> Remote execution job %s: success = %s. Took approx. %s minutes.",
                 job.remote_job_id,
                 finished,
-                int((time.time() - start)/60)
+                int((time.time() - start) / 60),
             )
 
         except Exception as e:
@@ -383,7 +400,7 @@ class Process:
                 self.process_id_with_prefix,
                 self.process_id,
                 job.job_id,
-                e
+                e,
             )
             job.status = JobStatus.failed.value
             job.message = str(e)
@@ -399,7 +416,9 @@ class Process:
         try:
             if job_details["status"] != JobStatus.successful.value:
                 job.status = JobStatus.failed.value
-                job.finished = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                job.finished = datetime.now(timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%S.%fZ"
+                )
                 job.updated = job.finished
                 job.progress = 100
                 job.message = (
@@ -430,7 +449,7 @@ class Process:
                 self.process_id_with_prefix,
                 self.process_id,
                 job.job_id,
-                e
+                e,
             )
             job.message = str(e)
             job.save()
@@ -470,9 +489,9 @@ class Process:
 
     def __str__(self):
         return (
-            f"src.process.Process object: process_id={self.process_id}, " +
-            f"process_id_with_prefix={self.process_id_with_prefix}, " +
-            f"provider_prefix={self.provider_prefix}"
+            f"src.process.Process object: process_id={self.process_id}, "
+            + f"process_id_with_prefix={self.process_id_with_prefix}, "
+            + f"provider_prefix={self.provider_prefix}"
         )
 
     def __repr__(self):
