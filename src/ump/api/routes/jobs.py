@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-
+from os import environ as env
 from apiflask import APIBlueprint
 from flask import Response, g, request
 from sqlalchemy import create_engine, or_, select
@@ -16,7 +16,7 @@ from ump.api.keycloak_utils import find_user_id_by_email
 
 jobs = APIBlueprint("jobs", __name__)
 
-engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
+engine = create_engine(f"postgresql+psycopg2://{env['POSTGRES_USER']}:{env['POSTGRES_PASSWORD']}@{env['POSTGRES_HOST']}:{env['POSTGRES_PORT_EXTERNAL']}/{env['POSTGRES_DB']}")
 
 
 @jobs.route("/", defaults={"page": "index"})

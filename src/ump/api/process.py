@@ -5,7 +5,7 @@ import re
 import time
 from datetime import datetime, timezone
 from multiprocessing import dummy
-
+from os import environ as env
 import aiohttp
 from flask import g
 from sqlalchemy import create_engine
@@ -16,8 +16,7 @@ from ump.api.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
 
 logging.basicConfig(level=logging.INFO)
-
-engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
+engine = create_engine(f"postgresql+psycopg2://{env['POSTGRES_USER']}:{env['POSTGRES_PASSWORD']}@{env['POSTGRES_HOST']}:{env['POSTGRES_PORT_EXTERNAL']}/{env['POSTGRES_DB']}")
 
 class Process:
     def __init__(self, process_id_with_prefix=None):

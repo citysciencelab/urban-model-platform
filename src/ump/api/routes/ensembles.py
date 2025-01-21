@@ -5,7 +5,7 @@ import copy
 import json
 import logging
 from uuid import uuid1
-
+from os import environ as env
 from apiflask import APIBlueprint
 from ema_workbench import CategoricalParameter, RealParameter
 from ema_workbench.em_framework.samplers import (
@@ -26,7 +26,7 @@ from ump.api.process import Process
 
 ensembles = APIBlueprint("ensembles", __name__)
 
-engine = create_engine("postgresql+psycopg2://postgres:postgres@postgis/cut_dev")
+engine = create_engine(f"postgresql+psycopg2://{env['POSTGRES_USER']}:{env['POSTGRES_PASSWORD']}@{env['POSTGRES_HOST']}:{env['POSTGRES_PORT_EXTERNAL']}/{env['POSTGRES_DB']}")
 
 
 def add_job_fields(ensemble: Ensemble):
