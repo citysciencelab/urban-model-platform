@@ -6,10 +6,12 @@ ENV CACHE_DIR=/app/cache
 
 WORKDIR /app
 
+COPY environment.yaml ./
 RUN --mount=type=cache,target=$CACHE_DIR apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install poetry
+    && poetry_version=$(grep 'poetry=' environment.yaml | awk -F '=' '{print $2}') \
+    && pip install poetry==$poetry_version
 
 ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=1 \
@@ -39,7 +41,7 @@ ARG USERNAME=pythonuser
 ARG USER_GID=2000
 ARG SOURCE_COMMIT
 
-LABEL maintainer="Urban Data Analytics" name="analytics/mobilitatsmonitor_dashboard" source_commit=$SOURCE_COMMIT
+LABEL maintainer="Urban Data Analytics" name="analytics/urban-model-platform" source_commit=$SOURCE_COMMIT
 
 # add user and group
 RUN groupadd --gid $USER_GID $USERNAME && \
