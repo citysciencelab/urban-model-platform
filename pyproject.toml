@@ -3,7 +3,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [project]
-name = "urban-model-platform"
+name = "ump"
 description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
 authors = [
     { name = "Rico Herzog", email = "rico.herzog@hcu-hamburg.de"},
