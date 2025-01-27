@@ -3,12 +3,13 @@ import re
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from os import environ as env
+from ump import config
 from ump.api.db_handler import DBHandler
 from ump.api.ensemble import Ensemble, JobsEnsembles
 from ump.api.job import Job
 from ump.api.job_status import JobStatus
 
-engine = create_engine(f"postgresql+psycopg2://{env['POSTGRES_USER']}:{env['POSTGRES_PASSWORD']}@{env['POSTGRES_HOST']}:{env['POSTGRES_PORT_EXTERNAL']}/{env['POSTGRES_DB']}")
+engine = create_engine(f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")
 def append_ensemble_list(job):
     with Session(engine) as session:
         stmt = select(JobsEnsembles).where(JobsEnsembles.job_id == job['jobID'])

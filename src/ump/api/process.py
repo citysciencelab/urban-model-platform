@@ -16,8 +16,7 @@ from ump.api.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
 
 logging.basicConfig(level=logging.INFO)
-engine = create_engine(f"postgresql+psycopg2://{env['POSTGRES_USER']}:{env['POSTGRES_PASSWORD']}@{env['POSTGRES_HOST']}:{env['POSTGRES_PORT_EXTERNAL']}/{env['POSTGRES_DB']}")
-
+engine = create_engine(f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")
 class Process:
     def __init__(self, process_id_with_prefix=None):
 

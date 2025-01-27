@@ -57,7 +57,7 @@ dictConfig(
 
 def cleanup():
     """Cleans up jobs and Geoserver layers of anonymous users"""
-    engine = create_engine(f"postgresql+psycopg2://{env['POSTGRES_USER']}:{env['POSTGRES_PASSWORD']}@{env['POSTGRES_HOST']}:{env['POSTGRES_PORT_EXTERNAL']}/{env['POSTGRES_DB']}")
+    engine = create_engine(f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")    
     sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id"
     finished = datetime.now() - timedelta(minutes = CLEANUP_AGE)
     with engine.begin() as conn:
@@ -92,8 +92,7 @@ app.wsgi_app = ProxyFix(
 )
 
 app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", 0)
-app.config["SQLALCHEMY_DATABASE_URI"] = (f"postgresql+psycopg2://{env['POSTGRES_USER']}:{env['POSTGRES_PASSWORD']}@{env['POSTGRES_HOST']}:{env['POSTGRES_PORT_EXTERNAL']}/{env['POSTGRES_DB']}"
-)
+app.config["SQLALCHEMY_DATABASE_URI"] = (f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)

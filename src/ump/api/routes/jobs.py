@@ -7,7 +7,7 @@ from apiflask import APIBlueprint
 from flask import Response, g, request
 from sqlalchemy import create_engine, or_, select
 from sqlalchemy.orm import Session
-
+from ump import config
 from ump.api.ensemble import JobsUsers
 from ump.api.job import Job
 from ump.api.job_comments import JobComment
@@ -16,8 +16,7 @@ from ump.api.keycloak_utils import find_user_id_by_email
 
 jobs = APIBlueprint("jobs", __name__)
 
-engine = create_engine(f"postgresql+psycopg2://{env['POSTGRES_USER']}:{env['POSTGRES_PASSWORD']}@{env['POSTGRES_HOST']}:{env['POSTGRES_PORT_EXTERNAL']}/{env['POSTGRES_DB']}")
-
+engine = create_engine(f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")
 
 @jobs.route("/", defaults={"page": "index"})
 def index(page):
