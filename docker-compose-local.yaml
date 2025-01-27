@@ -21,7 +21,7 @@ services:
     container_name: ump-postgis
     image: postgis/postgis:14-3.3
     ports: 
-      - ${POSTGRES_PORT_EXTERNAL}:${POSTGRES_PORT_INTERNAL}
+      - 5433:${POSTGRES_PORT}
     environment:
       - POSTGRES_HOST_AUTH_METHOD=trust
     volumes:
@@ -36,7 +36,7 @@ services:
       dockerfile: Dockerfile
     #env_file: .env
     ports:
-      - ${WEBAPP_PORT_EXTERNAL}:5678
+      - ${WEBAPP_PORT_EXTERNAL}:5000
     volumes:
       - ./providers.yaml:/home/pythonuser/providers.yaml
     environment:
@@ -47,6 +47,20 @@ services:
       FLASK_DEBUG: 1
       PROVIDERS_FILE: /home/pythonuser/providers.yaml
       CORS_URL_REGEX: "*"
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: admin
+      KEYCLOAK_HOST: localhost:8081
+      KEYCLOAK_PROTOCOL: http
+      KEYCLOAK_PORT_EXTERNAL: 8081
+      KEYCLOAK_PORT_INTERNAL: 8080
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      POSTGRES_DB: cut_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
     networks:
       - dev
 
