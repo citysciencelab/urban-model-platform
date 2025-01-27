@@ -1,0 +1,99 @@
+# applications/core/observability/apps/gateway/gateway.yaml
+# Certificate Issuer
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: analytics@gv.hamburg.de
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: ump-gateway
+                namespace: ump-api 
+                kind: "Gateway"
+                group: "gateway.networking.k8s.io"
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: analytics@gv.hamburg.de
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: ump-gateway
+                namespace: ump-api
+                kind: "Gateway"
+                group: "gateway.networking.k8s.io"
+---
+# Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ump-api
+  namespace: ump-api
+spec:
+  secretName: ump-api-tls
+  dnsNames:
+    - ump.germanywestcentral.cloudapp.azure.com
+  issuerRef:
+    name: letsencrypt-stage
+    kind: Issuer
+    group: cert-manager.io
+
+---
+# HTTP Route for HTTP-01 Challenge
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ump-api-http
+  namespace: ump-api
+spec:
+  parentRefs:
+    - name: ump-gateway
+      sectionName: web
+  hostnames:
+    - ump.germanywestcentral.cloudapp.azure.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ .Values.labels."app.kubernetes.io/name" }}
+          port: {{ .Values.service.port }}
+
+---
+# HTTPS Route
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ump-api-https
+  namespace: ump-api
+spec:
+  parentRefs:
+    - name: ump-gateway
+      sectionName: websecure
+  hostnames:
+    - ump.germanywestcentral.cloudapp.azure.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ .Values.labels."app.kubernetes.io/name" }}
+          port: {{ .Values.service.port }}
+
