@@ -43,7 +43,7 @@ ARG USERNAME=pythonuser
 ARG USER_GID=2000
 ARG SOURCE_COMMIT
 
-LABEL maintainer="Urban Data Analytics" name="analytics/ump" source_commit=$SOURCE_COMMIT
+LABEL maintainer="Urban Data Analytics" name="analytics/urban-model-platform" source_commit=$SOURCE_COMMIT
 
 # add user and group
 RUN groupadd --gid $USER_GID $USERNAME && \
