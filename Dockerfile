@@ -6,18 +6,21 @@ ENV CACHE_DIR=/app/cache
 
 WORKDIR /app
 
+COPY environment.yaml ./
 RUN --mount=type=cache,target=$CACHE_DIR apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install poetry
+    && poetry_version=$(grep 'poetry=' environment.yaml | awk -F '=' '{print $2}') \
+    && pip install poetry==$poetry_version
 
 ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=1 \
     POETRY_VIRTUALENVS_CREATE=1 \
     POETRY_CACHE_DIR=/app/poetry_cache
 
-COPY pyproject.toml poetry.lock ./
-RUN --mount=type=cache,target=$POETRY_CACHE_DIR poetry install --without=dev --no-root
+COPY pyproject.toml ./
+#poetry.lock
+RUN poetry lock && poetry install --without=dev --no-root
 
 # maybe needed for psycopg2
 # RUN apt update \
@@ -30,7 +33,8 @@ COPY src ./src
 COPY migrations ./migrations
 RUN touch README.md \
     && poetry build \
-    && /app/.venv/bin/python -m pip install dist/*.whl --no-deps
+    && /app/.venv/bin/python -m pip install dist/*.whl 
+    #--no-deps
 
 FROM python:3.11-slim-bookworm AS runtime
 
@@ -39,7 +43,7 @@ ARG USERNAME=pythonuser
 ARG USER_GID=2000
 ARG SOURCE_COMMIT
 
-LABEL maintainer="Urban Data Analytics" name="analytics/mobilitatsmonitor_dashboard" source_commit=$SOURCE_COMMIT
+LABEL maintainer="Urban Data Analytics" name="analytics/ump" source_commit=$SOURCE_COMMIT
 
 # add user and group
 RUN groupadd --gid $USER_GID $USERNAME && \
