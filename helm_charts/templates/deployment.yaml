@@ -54,8 +54,10 @@ spec:
                 name: {{ include "ump-api-dev.fullname" . }}-settings
       volumes:
         - name: providers-volume
+          {{- if not .Values.existingProvidersConfigMap }}
           configMap:
             name: {{ include "ump-api-dev.fullname" . }}-providers
+          {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

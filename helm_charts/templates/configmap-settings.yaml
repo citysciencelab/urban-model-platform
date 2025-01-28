@@ -6,12 +6,12 @@ metadata:
     {{- include "ump-api-dev.labels" . | nindent 4 }}
 data:
   PROVIDERS_FILE: {{ .Values.config.providersFilePath | quote }}
-  CORS_URL_REGEX: {{ .Values.config.corsUrlRegex | quote }}
-  WEBAPP_PORT_EXTERNAL: {{ .Values.config.webappPortExternal | quote }}
+  CORS_URL_REGEX: {{ .Values.config.apiCorsUrlRegex | quote }}
+  WEBAPP_PORT_EXTERNAL: {{ .Values.config.apiPortExternal | quote }}
   API_SERVER_URL: {{ .Values.config.apiServerUrl | quote }}
-  KEYCLOAK_HOST: {{ .Values.config.keycloakHost | quote }}
-  KEYCLOAK_PROTOCOL: {{ .Values.config.keycloakProtocol | quote }}
-  KEYCLOAK_USER: {{ .Values.config.keycloakUser | quote }}
-  KEYCLOAK_PASSWORD: {{ .Values.config.keycloakPassword | quote }}
+  KEYCLOAK_HOST: {{ .Values.keycloakConnection.host | quote }}
+  KEYCLOAK_PROTOCOL: {{ .Values.keycloakConnection.protocol | quote }}
+  KEYCLOAK_USER: {{ .Values.keycloakConnection.existingSecret.keyUser  | quote }}
+  KEYCLOAK_PASSWORD: {{ .Values.keycloakConnection.existingSecret.keyPassword | quote }}
   REQUESTS_CA_BUNDLE: {{ .Values.config.requestsCABundle | quote }}
   SSL_CERT_FILE: {{ .Values.config.sslCertFile | quote }}

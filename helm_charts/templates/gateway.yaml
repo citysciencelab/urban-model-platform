@@ -72,7 +72,7 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: {{ .Values.labels."app.kubernetes.io/name" }}
+        - name: {{ .Values.labels.name }}
           port: {{ .Values.service.port }}
 
 ---
@@ -94,6 +94,6 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: {{ .Values.labels."app.kubernetes.io/name" }}
+        - name: {{ .Values.labels.name }}
           port: {{ .Values.service.port }}
 

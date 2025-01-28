@@ -46,8 +46,8 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 Selector labels
 */}}
 {{- define "ump-api-dev.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "ump-api-dev.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
+name: {{ include "ump-api-dev.name" . }}
+instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*

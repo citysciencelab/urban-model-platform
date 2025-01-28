@@ -5,4 +5,4 @@ metadata:
   labels:
     {{- include "ump-api-dev.labels" . | nindent 4 }}
 data:
-  providers.yaml: {{- toYaml .Values.config.providersContent | indent 4 }}
+  providers.yaml: {{- toYaml .Values.providersContent | indent 4 }}
