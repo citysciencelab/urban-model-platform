@@ -11,9 +11,20 @@ image:
 
 replicaCount: 1
 
-labels: 
-    instance: test-ump
-    name: ump
+labels: {}
+
+tls:
+  enabled: false
+  issuer:
+    prodEnabled: false
+    email:  ""
+  gateway:
+    name: ""
+    httpSectionName: ""
+    tlsSectionName: ""
+    hostName: ""
+  clusterIssuerRef:
+    name: ""
 
 resources:
   limits:
@@ -29,7 +40,6 @@ service:
 
 config:
   corsUrlRegex: "*"
-  port: "5000"
   serverUrl: "0.0.0.0:5000"
   providersFilePath: "/usr/src/app/providers.yml"
 
@@ -62,7 +72,7 @@ providers:
           result-storage: "remote"
           anonymous-access: True
         hello-geo-world:
-          result-storage: "remote"  
+          result-storage: "remote"
 
 autoscaling:
   enabled: false
@@ -102,6 +112,9 @@ podLabels: {}
 podSecurityContext: {}
   # fsGroup: 2000
 
-securityContext: {}
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  readOnlyRootFilesystem: true
 
 affinity: {}
