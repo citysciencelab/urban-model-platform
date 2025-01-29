@@ -1,7 +1,7 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: {{ include "ump.fullname" }}
+  name: {{ include "ump.fullname" . }}
   labels:
     app.kubernetes.io/name: urban-model-platform-api
     app.kubernetes.io/component: api
