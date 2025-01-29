@@ -6,11 +6,19 @@ image:
   tag: "dev_improvements"
 
 labels: 
-    instance: test-ump-api-dev
-    name: ump-api-dev
+    instance: test-ump
+    name: ump
 
 imagePullSecrets:
   - name: test-secret3
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
 
 service:
   type: ClusterIP

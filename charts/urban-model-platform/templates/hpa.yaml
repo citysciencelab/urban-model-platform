@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "ump-api-dev.fullname" . }}
+  name: {{ include "ump.fullname" . }}
   labels:
-    {{- include "ump-api-dev.labels" . | nindent 4 }}
+    {{- include "ump.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "ump-api-dev.fullname" . }}
+    name: {{ include "ump.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

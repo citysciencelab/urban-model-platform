@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "ump-api-dev.fullname" . }}
+  name: {{ include "ump.fullname" . }}
   labels:
-    {{- include "ump-api-dev.labels" . | nindent 4 }}
+    {{- include "ump.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "ump-api-dev.selectorLabels" . | nindent 6 }}
+      {{- include "ump.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -18,7 +18,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "ump-api-dev.labels" . | nindent 8 }}
+        {{- include "ump.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -27,7 +27,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "ump-api-dev.serviceAccountName" . }}
+      serviceAccountName: {{ include "ump.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -51,12 +51,12 @@ spec:
             - secretRef:
                 name: postgres-credentials
             - configMapRef: 
-                name: {{ include "ump-api-dev.fullname" . }}-settings
+                name: {{ include "ump.fullname" . }}-settings
       volumes:
         - name: providers-volume
           {{- if not .Values.existingProvidersConfigMap }}
           configMap:
-            name: {{ include "ump-api-dev.fullname" . }}-providers
+            name: {{ include "ump.fullname" . }}-providers
           {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "ump-api-dev.name" -}}
+{{- define "ump.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "ump-api-dev.fullname" -}}
+{{- define "ump.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "ump-api-dev.chart" -}}
+{{- define "ump.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "ump-api-dev.labels" -}}
-helm.sh/chart: {{ include "ump-api-dev.chart" . }}
-{{ include "ump-api-dev.selectorLabels" . }}
+{{- define "ump.labels" -}}
+helm.sh/chart: {{ include "ump.chart" . }}
+{{ include "ump.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +45,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "ump-api-dev.selectorLabels" -}}
-name: {{ include "ump-api-dev.name" . }}
+{{- define "ump.selectorLabels" -}}
+name: {{ include "ump.name" . }}
 instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "ump-api-dev.serviceAccountName" -}}
+{{- define "ump.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "ump-api-dev.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "ump.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
