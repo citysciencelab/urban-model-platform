@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: {{ include "ump.fullname" . }}
   labels:
+    app.kubernetes.io/name: urban-model-platform-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: urban-model-platform
     {{- include "ump.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
@@ -50,6 +53,8 @@ spec:
           envFrom:
             - configMapRef: 
                 name: {{ include "ump.fullname" . }}-settings
+            - secretRef:
+              name: {{ .Values.keycloakConnection.existingSecret.name }}
           env:
             # postgres connection
             - name: POSTGRES_DB
@@ -107,10 +112,18 @@ spec:
             {{- end }}
       volumes:
         - name: providers-volume
-          {{- if not .Values.existingProvidersConfigMap }}
           configMap:
+          {{- if not .Values.existingProvidersConfigMap }}
             name: {{ include "ump.fullname" . }}-providers
+          {{- else }}
+            name: {{ .Values.existingProvidersConfigMap }}
           {{- end }}
+        {{- if not .Values.keycloakConnection.existingSecret.name }}
+        - name: keycloak-config
+          secret:
+            secretName: {{ include "ump.fullname" . -}}-keycloak-connection
+            defaultMode: 0400
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
