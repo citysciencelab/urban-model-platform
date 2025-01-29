@@ -78,7 +78,7 @@ spec:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: password
             # keycloak connection
-            {{- if not .Values.keycloakConnection.existingConfigMap.name }}
+            {{- if .Values.keycloakConnection.existingSecret.name }}
             - name: KEYCLOAK_USER
               valueFrom:
                 secretKeyRef:
@@ -104,6 +104,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
                   key: protocol
+            {{- end }}
       volumes:
         - name: providers-volume
           {{- if not .Values.existingProvidersConfigMap }}
