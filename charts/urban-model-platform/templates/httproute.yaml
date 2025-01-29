@@ -1,3 +1,4 @@
+{{- if .Values.tls.enabled }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -9,15 +10,17 @@ metadata:
     {{- include "ump.labels" . | nindent 4 }}
 spec:
   parentRefs:
-    - name: ump-gateway
-      sectionName: web
+    - name: {{ .Values.tls.gateway.name }}
+      sectionName: {{ .Values.tls.gateway.sectionName }}
   hostnames:
-    - ump.germanywestcentral.cloudapp.azure.com
+    - {{ .Values.tls.gateway.hostName }}
   rules:
     - matches:
         - path:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: {{ .Values.labels.name }}
+        - name: {{ include "ump.fullname" . }}
           port: {{ .Values.service.port }}
+          kind: Service
+{{- end }}

@@ -1,3 +1,4 @@
+{{- if .Values.tls.enabled }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -8,10 +9,11 @@ metadata:
     app.kubernetes.io/part-of: urban-model-platform
     {{- include "ump.labels" . | nindent 4 }}
 spec:
-  secretName: ump-api-tls
+  secretName: {{ printf "%s-tls" (include "ump.fullname" .) }}
   dnsNames:
-    - ump.germanywestcentral.cloudapp.azure.com
+    - {{ .Values.tls.gateway.hostName }}
   issuerRef:
-    name: letsencrypt-stage
+    name: {{ include "ump.issuer" . }}
     kind: Issuer
     group: cert-manager.io
+{{ end }}

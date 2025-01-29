@@ -1,8 +1,9 @@
-# Certificate Issuer
+{{ if .Values.tls.enabled }}
+{{ if not .Values.tls.issuer.prodEnabled }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: letsencrypt-staging
+  name: {{ include "ump.fullname" . }}-le-staging
   labels:
     app.kubernetes.io/name: urban-model-platform-api
     app.kubernetes.io/component: api
@@ -13,7 +14,7 @@ spec:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
     email: analytics@gv.hamburg.de
     privateKeySecretRef:
-      name: letsencrypt-prod
+      name: {{ include "ump.fullname" . }}-le-staging
     solvers:
       - http01:
           gatewayHTTPRoute:
@@ -22,3 +23,5 @@ spec:
                 namespace: ump-api 
                 kind: "Gateway"
                 group: "gateway.networking.k8s.io"
+{{- end }}
+{{- end -}}
