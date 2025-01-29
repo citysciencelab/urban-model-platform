@@ -60,3 +60,25 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Create a variable that holds the current issuer (prod or staging)
+*/}}
+{{- define "ump.issuer" -}}
+{{- if .Values.tls.clusterIssuerRef.name }}
+{{- .Values.tls.clusterIssuerRef.name }}
+{{- else if .Values.tls.issuer.prodEnabled }}
+{{- printf "%s-le-prod" (include "ump.fullname" .) }}
+{{- else }}
+{{- printf "%s-le-staging" (include "ump.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{/*
+Validate if hostname has a value when tls is enabled
+*/}}
+{{- define "ump.validateValues" -}}
+{{- if and .Values.tls.enabled (not .Values.tls.gateway.hostName) -}}
+{{- fail "tls.gateway.hostName is required when TLS is enabled" -}}
+{{- end -}}
+{{- end -}}
