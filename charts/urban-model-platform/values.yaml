@@ -39,13 +39,7 @@ postgresConnection:
 
 keycloakConnection:
   existingSecret: 
-    name: keycloak-credentials
-  host: "localhost:8081"
-  protocol: "http"
-  user: keycloak
-  password: keycloak
-  clientId: CLIENT_ID
-  realmName: example_realm
+    name: ""
 
 # If configMap for providers is already existing and should not be overwritten, set this to true. Default: false
 providers:
@@ -110,18 +104,4 @@ podSecurityContext: {}
 
 securityContext: {}
 
-resources: {}
-
-# Additional volumes on the output Deployment definition.
-volumes: []
-
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-
 affinity: {}
-
-ingress:
-  enabled: false
-
-
-
