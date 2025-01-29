@@ -48,10 +48,62 @@ spec:
               subPath: providers.yaml
               readOnly: true
           envFrom:
-            - secretRef:
-                name: postgres-credentials
             - configMapRef: 
                 name: {{ include "ump.fullname" . }}-settings
+          env:
+            # postgres connection
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresConnection.existingSecret.name }}
+                  key: dbname
+            - name: POSTGRES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresConnection.existingSecret.name }}
+                  key: host
+            - name: POSTGRES_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresConnection.existingSecret.name }}
+                  key: port
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresConnection.existingSecret.name }}
+                  key: user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresConnection.existingSecret.name }}
+                  key: password
+            # keycloak connection
+            {{- if not .Values.keycloakConnection.existingConfigMap.name }}
+            - name: KEYCLOAK_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakConnection.existingSecret.name }}
+                  key: user
+            - name: KEYCLOAK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakConnection.existingSecret.name }}
+                  key: password
+            - name: KEYCLOAK_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakConnection.existingSecret.name }}
+                  key: host
+            - name: KEYCLOAK_PORT_EXTERNAL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakConnection.existingSecret.name }}
+                  key: port
+            - name: KEYCLOAK_PROTOCOL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakConnection.existingSecret.name }}
+                  key: protocol
       volumes:
         - name: providers-volume
           {{- if not .Values.existingProvidersConfigMap }}
