@@ -1,16 +1,19 @@
-replicaCount: 1
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
 
 image:
   repository: lgvanalytics.azurecr.io/urban-model-platform
   pullPolicy: IfNotPresent
   tag: "dev_improvements"
+  imagePullSecrets:
+    - name: secret
+
+replicaCount: 1
 
 labels: 
     instance: test-ump
     name: ump
-
-imagePullSecrets:
-  - name: test-secret3
 
 resources:
   limits:
@@ -25,56 +28,47 @@ service:
   port: 5000
 
 config:
-  apiCorsUrlRegex: "*"
-  apiPortExternal: "5000"
-  apiServerUrl: "0.0.0.0:5000"
+  corsUrlRegex: "*"
+  port: "5000"
+  serverUrl: "0.0.0.0:5000"
   providersFilePath: "/usr/src/app/providers.yml"
 
 postgresConnection: 
   existingSecret:
     name: postgres-credentials
-    keyUser: POSTGRES_USER
-    keyPassword: POSTGRES_PASSWORD
-  host: POSTGRES_HOST
-  port: POSTGRES_PORT
-  database: POSTGRES_DB
 
 keycloakConnection:
-  host: "localhost:8081"
-  protocol: "http"
   existingSecret: 
     name: keycloak-credentials
-    keyUser: POSTGRES_USER
-    keyPassword: POSTGRES_PASSWORD
-    keyClientId: CLIENT_ID
-  clientId: "example_client"
+  host: "localhost:8081"
+  protocol: "http"
+  user: keycloak
+  password: keycloak
+  clientId: CLIENT_ID
   realmName: example_realm
 
 # If configMap for providers is already existing and should not be overwritten, set this to true. Default: false
-existingProvidersConfigMap: false
-
-providersContent: |
-  modelserver:
-    name: "modelserver"
-    url: "http://localhost:5005" 
-    authentication:
-      type: "BasicAuth"
-      user: "user"
-      password: "password"
-    timeout:  1800
-    processes:
-      hello-world:
-        result-storage: "remote"
-        anonymous-access: True
-      squareroot:
-        result-storage: "remote"
-        anonymous-access: True
-      hello-geo-world:
-        result-storage: "remote"  
-
-# This is to override the chart name.
-nameOverride: ""
-fullnameOverride: ""
+providers:
+  existingConfigMap:
+    name: "" # Set to use existing ConfigMap instead of creating a new one
+  content: |
+    modelserver:
+      name: "modelserver"
+      url: "http://localhost:5005" 
+      authentication:
+        type: "BasicAuth"
+        user: "user"
+        password: "password"
+      timeout:  1800
+      processes:
+        hello-world:
+          result-storage: "remote"
+          anonymous-access: True
+        squareroot:
+          result-storage: "remote"
+          anonymous-access: True
+        hello-geo-world:
+          result-storage: "remote"  
 
 autoscaling:
   enabled: false
