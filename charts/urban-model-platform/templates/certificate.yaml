@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/part-of: urban-model-platform
     {{- include "ump.labels" . | nindent 4 }}
 spec:
-  secretName: {{ printf "%s-tls" (include "ump.fullname" .) }}
+  secretName: {{ include "ump.issuer" . }}
   dnsNames:
     - {{ .Values.tls.gateway.hostName }}
   issuerRef:
