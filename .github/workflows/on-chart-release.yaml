@@ -29,12 +29,7 @@ jobs:
           helm package $HELM_CHART_PATH
 
       - name: Checkout helm repo
-        uses: actions/checkout@v3
-        with:
-          repository: geowerkstatt-hamburg/urban-model-platform-helm-charts
-          ref: main
-          token: ${{ secrets.BB_ACCESS_TOKEN }}
-          path: helm-repo
+        run: git clone https://x-token-auth:${{ secrets.BB_ACCESS_TOKEN }}@bitbucket.org/geowerkstatt-hamburg/urban-model-platform-helm-charts.git helm-repo
 
       - name: Update Helm repo index
         run: |
