@@ -13,6 +13,8 @@ spec:
   parentRefs:
     - name: {{ .Values.tls.gateway.name }}
       sectionName: {{ .Values.tls.gateway.tlsSectionName }}
+      group: gateway.networking.k8s.io
+      kind: Gateway
   hostnames:
     - {{ .Values.tls.gateway.hostName }}
   rules:
