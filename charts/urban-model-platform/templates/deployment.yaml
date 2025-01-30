@@ -46,6 +46,8 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
             - name: providers-volume
               mountPath: {{ .Values.config.providersFilePath | quote }}
               subPath: providers.yaml
@@ -108,6 +110,8 @@ spec:
                   key: protocol
             {{- end }}
       volumes:
+        - name: tmp-volume
+          emptyDir: {}
         - name: providers-volume
           configMap:
           {{- if not .Values.existingProvidersConfigMap }}
