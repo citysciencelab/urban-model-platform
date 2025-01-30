@@ -43,6 +43,9 @@ config:
   corsUrlRegex: "*"
   serverUrl: "0.0.0.0:5000"
   providersFilePath: "/usr/src/app/providers.yml"
+  # optional, overwrites Host and Port coming from postgresConnection.existingSecret
+  postgresHost: ""
+  postgresPort: ""
 
 postgresConnection: 
   existingSecret:

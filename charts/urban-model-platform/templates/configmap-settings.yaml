@@ -11,3 +11,9 @@ data:
   PROVIDERS_FILE: {{ .Values.config.providersFilePath | quote }}
   CORS_URL_REGEX: {{ .Values.config.corsUrlRegex | quote }}
   API_SERVER_URL: {{ .Values.config.serverUrl | quote }}
+  {{- if .Values.config.postgresPort -}}
+  POSTGRES_PORT: {{ .Values.config.postgresPort | quote}}
+  {{- end }}
+  {{- if .Values.config.postgresHost }}
+  POSTGRES_HOST: {{ .Values.config.postgresHost | quote }}
+  {{- end }}
