@@ -6,7 +6,7 @@ on:
       - 'chart-v*'
 
 env:
-  HELM_REPO_URL: https://bitbucket.org/geowerkstatt-hamburg/urban-model-platform-helm-charts
+  HELM_REPO_URL: https://api.bitbucket.org/2.0/repositories/geowerkstatt-hamburg/urban-model-platform-helm-charts/src/main
   HELM_CHART_PATH: ./charts/urban-model-platform
 
 jobs:
@@ -48,4 +48,4 @@ jobs:
           git config user.email "actions@github.com"
           git add .
           git commit -m "Update helm repository"
-          git push https://x-token-auth:${{ secrets.BB_ACCESS_TOKEN }}@bitbucket.org/geowerkstatt-hamburg/urban-model-platform-helm-charts.git main
+          git push origin main
