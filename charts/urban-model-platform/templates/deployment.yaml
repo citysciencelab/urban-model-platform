@@ -53,8 +53,10 @@ spec:
           envFrom:
             - configMapRef: 
                 name: {{ include "ump.fullname" . }}-settings
+            {{- if not .Values.keycloakConnection.existingSecret -}}
             - secretRef:
-              name: {{ .Values.keycloakConnection.existingSecret.name }}
+              name: {{ include "ump.fullname" -}}-keycloak-connection
+            {{- end }}
           env:
             # postgres connection
             - name: POSTGRES_DB
@@ -99,11 +101,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
                   key: host
-            - name: KEYCLOAK_PORT_EXTERNAL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.keycloakConnection.existingSecret.name }}
-                  key: port
             - name: KEYCLOAK_PROTOCOL
               valueFrom:
                 secretKeyRef:
