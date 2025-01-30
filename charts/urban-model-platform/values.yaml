@@ -36,7 +36,8 @@ resources:
 
 service:
   type: ClusterIP
-  port: 5000
+  port: 5000 # port under which the svc answers
+  targetPort: 5000 port the container itsel uses
 
 config:
   corsUrlRegex: "*"
