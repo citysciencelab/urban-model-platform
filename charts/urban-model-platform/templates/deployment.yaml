@@ -8,6 +8,8 @@ metadata:
     app.kubernetes.io/part-of: urban-model-platform
     {{- include "ump.labels" . | nindent 4 }}
 spec:
+  # replicasets are retained for rollback purposes
+  revisionHistoryLimit: 3  # Retain only the last 3 ReplicaSets
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
