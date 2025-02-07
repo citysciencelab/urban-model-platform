@@ -15,7 +15,7 @@ branch_labels = "add_postgis_extension"
 depends_on = "1.0.5"
 
 def upgrade():
-    op.execute('create extension postgis')
+    op.execute('CREATE EXTENSION IF NOT EXISTS postgis')
 
 def downgrade():
     op.execute('drop extension postgis')
