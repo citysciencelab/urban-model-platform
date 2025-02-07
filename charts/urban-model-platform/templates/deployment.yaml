@@ -74,7 +74,6 @@ spec:
                 name: {{ include "ump.fullname" . }}-keycloak-connection
             {{- end }}
           env:
-            {{- define "ump.databaseEnv" }}
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
@@ -104,7 +103,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: password
-            {{- end }}
             # keycloak connection
             {{- if .Values.keycloakConnection.existingSecret.name }}
             - name: KEYCLOAK_USER
