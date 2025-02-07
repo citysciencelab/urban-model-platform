@@ -7,7 +7,7 @@ Instead of executing jobs and processes on the server itself, the Urban Model Pl
 This architecture is independent of any frontend application. One could use e.g. - as shown in the illustration below - the Masterportal Simulation Controller as a client frontend, but due to the standardized API, mutliple frontends are possible.
 
 ![Architektur](https://user-images.githubusercontent.com/61881523/232417254-a620fd2c-bd1c-416a-ae64-b0f564fd64cc.jpg)
-## Application dependency diagram
+## Application architecture and dependency diagram
 
 ```mermaid
 flowchart TB
@@ -20,7 +20,7 @@ flowchart TB
 
     %% Components
     api[UMP API]
-    gateway[API Gateway]
+    gateway[k8s Gateway Api]
     keycloak[Keycloak]
     geoserver[GeoServer]
     db_api[API PostgreSQL]
