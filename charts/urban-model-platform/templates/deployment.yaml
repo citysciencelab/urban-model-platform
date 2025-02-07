@@ -28,6 +28,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      serviceAccountName: {{ include "ump.fullname" . }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -35,6 +36,17 @@ spec:
       serviceAccountName: {{ include "ump.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-db-migrate
+          image: bitnami/kubectl
+          command:
+          - /bin/sh
+          - -c
+          - |
+            until kubectl get job {{ include "ump.fullname" . }}-db-migrate -o jsonpath='{.status.succeeded}' | grep 1; do
+              echo "Waiting for database migrations to complete..."
+              sleep 5
+            done
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -62,7 +74,7 @@ spec:
                 name: {{ include "ump.fullname" . }}-keycloak-connection
             {{- end }}
           env:
-            # postgres connection
+            {{- define "ump.databaseEnv" }}
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
@@ -92,6 +104,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: password
+            {{- end }}
             # keycloak connection
             {{- if .Values.keycloakConnection.existingSecret.name }}
             - name: KEYCLOAK_USER
@@ -115,6 +128,12 @@ spec:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
                   key: protocol
             {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
       volumes:
         - name: tmp-volume
           emptyDir: {}
