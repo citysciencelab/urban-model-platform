@@ -42,7 +42,7 @@ service:
 config:
   corsUrlRegex: "*"
   serverUrl: "0.0.0.0:5000"
-  providersFilePath: "/usr/src/app/providers.yml"
+  providersFilePath: "/app/providers.yml"
   numberOfWorkers: 1
   # optional, overwrites Host and Port coming from postgresConnection.existingSecret
   postgresHost: ""
