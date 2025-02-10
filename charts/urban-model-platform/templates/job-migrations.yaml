@@ -25,6 +25,9 @@ spec:
             mountPath: {{ .Values.config.providersFilePath | quote }}
             subPath: providers.yaml
             readOnly: true
+        envFrom:
+          - configMapRef: 
+              name: {{ include "ump.fullname" . }}-settings
         env:
           - name: POSTGRES_DB
             valueFrom:
