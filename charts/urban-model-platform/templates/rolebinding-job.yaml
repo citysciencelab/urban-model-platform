@@ -11,4 +11,4 @@ spec:
     name: {{ include "ump.fullname" . }}-job-reader
   subjects:
   - kind: ServiceAccount
-    name: {{ include "ump.fullname" . }}
+    name: {{ include "ump.serviceAccountName" . }}
