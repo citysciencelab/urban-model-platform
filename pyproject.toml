@@ -46,7 +46,6 @@ authors = [
     "Stefan Schuhart <stefan.schuhart@gv.hamburg.de>"
 ]
 readme = "README.md"
-python = ">=3.11,<3.13"
 package-mode = true
 
 [tool.poetry.urls]
