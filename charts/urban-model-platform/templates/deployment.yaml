@@ -137,10 +137,10 @@ spec:
           emptyDir: {}
         - name: providers-volume
           configMap:
-          {{- if not .Values.existingProvidersConfigMap }}
+          {{- if not .Values.providers.existingConfigMap.name }}
             name: {{ include "ump.fullname" . }}-providers
           {{- else }}
-            name: {{ .Values.existingProvidersConfigMap }}
+            name: {{ .Values.providers.existingConfigMap.name }}
           {{- end }}
         {{- if not .Values.keycloakConnection.existingSecret.name }}
         - name: keycloak-config
