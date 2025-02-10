@@ -10,6 +10,9 @@ spec:
   backoffLimit: 3
   template:
     spec:
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: db-migrate
         image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
