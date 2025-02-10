@@ -18,6 +18,13 @@ spec:
       - name: db-migrate
         image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
         command: ["flask", "db", "upgrade"]
+        volumeMounts:
+          - name: tmp-volume
+            mountPath: /tmp
+          - name: providers-volume
+            mountPath: {{ .Values.config.providersFilePath | quote }}
+            subPath: providers.yaml
+            readOnly: true
         env:
           - name: POSTGRES_DB
             valueFrom:
@@ -51,3 +58,13 @@ spec:
           - name: FLASK_APP
             value: "ump.main"
       restartPolicy: Never
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+        - name: providers-volume
+          configMap:
+          {{- if not .Values.existingProvidersConfigMap }}
+            name: {{ include "ump.fullname" . }}-providers
+          {{- else }}
+            name: {{ .Values.existingProvidersConfigMap }}
+          {{- end }}
