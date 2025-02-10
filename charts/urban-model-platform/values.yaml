@@ -6,7 +6,7 @@ image:
   repository: lgvanalytics.azurecr.io/urban-model-platform
   pullPolicy: IfNotPresent
   tag: "dev_improvements"
-  imagePullSecrets:
+  pullSecrets:
     - name: secret
 
 replicaCount: 1
