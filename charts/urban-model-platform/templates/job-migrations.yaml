@@ -27,7 +27,7 @@ spec:
             readOnly: true
         envFrom:
           - configMapRef: 
-              name: {{ include "ump.fullname" . }}-settings
+              name: {{ include "ump.fullname" . }}-job-settings
           {{- if not .Values.keycloakConnection.existingSecret.name }}
           - secretRef:
               name: {{ include "ump.fullname" . }}-keycloak-connection
