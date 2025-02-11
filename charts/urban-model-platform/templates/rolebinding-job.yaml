@@ -1,14 +1,18 @@
+# rolebinding-job.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "ump.fullname" . }}-job-reader
   labels:
+    app.kubernetes.io/name: urban-model-platform-api 
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: urban-model-platform
     {{- include "ump.labels" . | nindent 4 }}
-spec:
-  roleRef:
-    apiGroup: rbac.authorization.k8s.io
-    kind: Role
-    name: {{ include "ump.fullname" . }}-job-reader
-  subjects:
-  - kind: ServiceAccount
-    name: {{ include "ump.serviceAccountName" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ump.fullname" . }}-job-reader
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ump.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
