@@ -4,9 +4,6 @@ kind: ConfigMap
 metadata:
   name: {{ include "ump.fullname" . }}-providers
   labels:
-    app.kubernetes.io/name: urban-model-platform-api
-    app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: urban-model-platform
     {{- include "ump.labels" . | nindent 4 }}
 data:
   providers.yaml: {{- toYaml .Values.providers.content | indent 4 }}

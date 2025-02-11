@@ -5,9 +5,6 @@ kind: Issuer
 metadata:
   name: {{ include "ump.fullname" . }}-le-prod
   labels:
-    app.kubernetes.io/name: urban-model-platform-api
-    app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: urban-model-platform
     {{- include "ump.labels" . | nindent 4 }}
 spec:
   acme:

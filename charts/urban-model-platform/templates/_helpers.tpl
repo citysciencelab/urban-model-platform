@@ -46,8 +46,9 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 Selector labels
 */}}
 {{- define "ump.selectorLabels" -}}
-name: {{ include "ump.name" . }}
-instance: {{ .Release.Name }}
+app.kubernetes.io/name: urban-model-platform-api
+app.kubernetes.io/component: api
+app.kubernetes.io/part-of: urban-model-platform
 {{- end }}
 
 {{/*
