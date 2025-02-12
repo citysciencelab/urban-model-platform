@@ -42,7 +42,8 @@ service:
 config:
   corsUrlRegex: "*"
   serverUrl: "0.0.0.0:5000"
-  providersFilePath: "/app/providers.yml"
+  providersFileMountPath: /app
+  providersFilePath: /app/providers.yaml
   numberOfWorkers: "1"
   postgresHost: ""
   postgresPort: 5432
