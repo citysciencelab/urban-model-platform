@@ -2,6 +2,10 @@ networks:
   dev:
     external: true
     name: ${DOCKER_NETWORK}
+
+volumes:
+  postgres_data:
+
 services:
   api:
     image: ${CONTAINER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
@@ -43,14 +47,14 @@ services:
   postgis:
     image: postgis/postgis:14-3.3
     volumes:
-      - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
-      - ./postgresql_data:/var/lib/postgresql/data/
+      # - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
+      - postgres_data:/var/lib/postgresql/data/
     #   - ./geoserver/data/pg_data:/var/lib/postgresql/data
     env_file:
     - path: .env
       required: true # default
     ports:
-      - 5432:${POSTGRES_PORT}
+      - ${POSTGRES_PORT_EXTERNAL}:5432
     networks:
       - dev
 
@@ -59,7 +63,7 @@ services:
     depends_on:
       - postgis
     ports:
-      - ${GEOSERVER_PORT_EXTERNAL}:${GEOSERVER_PORT_INTERNAL}
+      - ${GEOSERVER_PORT_EXTERNAL}:8080
     volumes:
       - ./geoserver/data/geoserver:/opt/geoserver/data_dir
     env_file:
@@ -78,7 +82,7 @@ services:
       - ./modelserver_example/pygeoapi-config.yml:/home/pythonuser/pygeoapi-config.yaml
       - ./modelserver_example/example-openapi.yml:/home/pythonuser/pygeoapi-openapi.yaml
     ports:
-      - ${PYGEOAPI_SERVER_PORT_EXTERNAL}:${PYGEOAPI_SERVER_INTERNAL}
+      - ${PYGEOAPI_SERVER_PORT_EXTERNAL}:${PYGEOAPI_SERVER_PORT_INTERNAL}
     command: [
       '/bin/bash', '-c',
       'pygeoapi openapi generate /home/pythonuser/pygeoapi-config.yaml --output-file /home/pythonuser/pygeoapi-openapi.yaml && pygeoapi serve --flask'
@@ -86,11 +90,11 @@ services:
     networks:
       - dev
       
-keycloak:
+  keycloak:
     container_name: ump-keycloak
     image: quay.io/keycloak/keycloak:25.0
     ports: 
-      - ${KEYCLOAK_PORT_EXTERNAL}:${KEYCLOAK_PORT_INTERNAL}
+      - ${KEYCLOAK_PORT_EXTERNAL}:8080
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_USER}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
