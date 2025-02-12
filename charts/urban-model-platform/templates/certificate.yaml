@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "ump.labels" . | nindent 4 }}
 spec:
-  secretName: {{ include "ump.issuer" . }}
+  secretName: {{ include "ump.issuer" . }}-tls
   dnsNames:
     - {{ .Values.tls.gateway.hostName }}
   issuerRef:
