@@ -30,10 +30,8 @@ spec:
         envFrom:
           - configMapRef: 
               name: {{ include "ump.fullname" . }}-job-settings
-          {{- if not .Values.keycloakConnection.existingSecret.name }}
           - secretRef:
-              name: {{ include "ump.fullname" . }}-keycloak-connection
-          {{- end }}
+              name: {{ include "ump.fullname" . }}-job-keycloak-connection
         env:
           - name: POSTGRES_DB
             valueFrom:
