@@ -4,6 +4,9 @@ metadata:
   name: {{ include "ump.fullname" . }}
   labels:
     {{- include "ump.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
 spec:
   # replicasets are retained for rollback purposes
   revisionHistoryLimit: 3  # Retain only the last 3 ReplicaSets
@@ -32,17 +35,6 @@ spec:
       serviceAccountName: {{ include "ump.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      initContainers:
-        - name: wait-for-db-migrate
-          image: bitnami/kubectl
-          command:
-          - /bin/sh
-          - -c
-          - |
-            until kubectl get job {{ include "ump.fullname" . }}-db-migrate -o jsonpath='{.status.succeeded}' | grep 1; do
-              echo "Waiting for database migrations to complete..."
-              sleep 5
-            done
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
