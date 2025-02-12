@@ -16,7 +16,7 @@ spec:
       - http01:
           gatewayHTTPRoute:
             parentRefs:
-              - name: ump-gateway
+              - name: {{ .Values.tls.gateway.name }}
                 namespace: ump-api 
                 kind: "Gateway"
                 group: "gateway.networking.k8s.io"
