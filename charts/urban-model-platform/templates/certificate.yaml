@@ -1,0 +1,16 @@
+{{- if .Values.tls.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "ump.fullname" . }}
+  labels:
+    {{- include "ump.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "ump.issuer" . }}-tls
+  dnsNames:
+    - {{ .Values.tls.gateway.hostName }}
+  issuerRef:
+    name: {{ include "ump.issuer" . }}
+    kind: Issuer
+    group: cert-manager.io
+{{ end }}

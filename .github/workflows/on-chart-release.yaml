@@ -1,0 +1,51 @@
+name: Release Helm Chart
+
+on:
+  push:
+    tags:
+      - 'chart-v*'
+
+env:
+  HELM_REPO_URL: https://api.bitbucket.org/2.0/repositories/geowerkstatt-hamburg/urban-model-platform-helm-charts/src/main
+  HELM_CHART_PATH: ./charts/urban-model-platform
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.12.0
+
+      - name: Lint Chart
+        run: helm lint $HELM_CHART_PATH
+
+      - name: Package Chart
+        run: |
+          helm package $HELM_CHART_PATH
+
+      - name: Checkout helm repo
+        run: git clone https://x-token-auth:${{ secrets.BB_ACCESS_TOKEN }}@bitbucket.org/geowerkstatt-hamburg/urban-model-platform-helm-charts.git helm-repo
+
+      - name: Update Helm repo index
+        run: |
+          cp *.tgz helm-repo/
+          cd helm-repo
+          if [ -f index.yaml ]; then
+            helm repo index . --url $HELM_REPO_URL --merge index.yaml
+          else
+            helm repo index . --url $HELM_REPO_URL
+          fi
+
+      - name: Push changes
+        run: |
+          cd helm-repo
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add .
+          git commit -m "Update helm repository"
+          git push origin main

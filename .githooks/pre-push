@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Check if helm is installed
+if ! command -v helm &> /dev/null; then
+    echo "Error: helm is not installed"
+    exit 1
+fi
+
+# Run helm lint
+echo "Running helm lint..."
+helm lint charts/urban-model-platform
+
+# Check the exit status
+if [ $? -ne 0 ]; then
+    echo "Error: helm lint failed"
+    exit 1
+fi
+
+exit 0

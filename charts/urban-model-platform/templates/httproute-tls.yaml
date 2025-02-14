@@ -1,0 +1,26 @@
+# HTTPS Route
+{{- if .Values.tls.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ump-api-https
+  labels:
+    {{- include "ump.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - name: {{ .Values.tls.gateway.name }}
+      sectionName: {{ .Values.tls.gateway.tlsSectionName }}
+      group: gateway.networking.k8s.io
+      kind: Gateway
+  hostnames:
+    - {{ .Values.tls.gateway.hostName }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "ump.fullname" . }}
+          port: {{ .Values.service.port }}
+          kind: Service
+{{- end -}}

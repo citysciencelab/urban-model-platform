@@ -1,0 +1,125 @@
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: lgvanalytics.azurecr.io/urban-model-platform
+  pullPolicy: IfNotPresent
+  tag: "dev_improvements"
+  pullSecrets:
+    - name: secret
+
+replicaCount: 1
+
+labels: {}
+
+tls:
+  enabled: false
+  issuer:
+    prodEnabled: false
+    email:  ""
+  gateway:
+    name: ""
+    httpSectionName: ""
+    tlsSectionName: ""
+    hostName: ""
+  clusterIssuerRef:
+    name: ""
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+service:
+  type: ClusterIP
+  port: 5000 # port under which the svc answers
+  targetPort: 5000 port the container itsel uses
+
+config:
+  corsUrlRegex: "*"
+  serverUrl: "0.0.0.0:5000"
+  providersFileMountPath: /app
+  providersFilePath: /app/providers.yaml
+  numberOfWorkers: "1"
+  postgresHost: ""
+  postgresPort: 5432
+
+postgresConnection: 
+  existingSecret:
+    name: postgres-credentials
+
+keycloakConnection:
+  existingSecret: 
+    name: ""
+
+# If configMap for providers is already existing and should not be overwritten, set this to true. Default: false
+providers:
+  existingConfigMap:
+    name: "" # Set to use existing ConfigMap instead of creating a new one
+  content: |
+    modelserver:
+      name: "modelserver"
+      url: "http://localhost:5005" 
+      authentication:
+        type: "BasicAuth"
+        user: "user"
+        password: "password"
+      timeout:  1800
+      processes:
+        hello-world:
+          result-storage: "remote"
+          anonymous-access: True
+        squareroot:
+          result-storage: "remote"
+          anonymous-access: True
+        hello-geo-world:
+          result-storage: "remote"
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+tolerations: 
+  - key: ump/reservedFor
+    operator: "Equal" 
+    value: app
+    effect: NoSchedule
+  - key: ump/reservedFor
+    operator: "Equal" 
+    value: app
+    effect: NoExecute
+
+#This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: false
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# This is for setting Kubernetes Annotations to a Pod.
+podAnnotations: {}
+
+# This is for setting Kubernetes Labels to a Pod.
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  readOnlyRootFilesystem: true
+
+affinity: {}

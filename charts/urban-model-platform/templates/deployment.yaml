@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ump.fullname" . }}
+  labels:
+    {{- include "ump.labels" . | nindent 4 }}
+spec:
+  # replicasets are retained for rollback purposes
+  revisionHistoryLimit: 3  # Retain only the last 3 ReplicaSets
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "ump.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "ump.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "ump.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: providers-volume
+              mountPath: {{ .Values.config.providersFileMountPath | quote }}
+              readOnly: true
+          envFrom:
+            - configMapRef: 
+                name: {{ include "ump.fullname" . }}-settings
+            {{- if not .Values.keycloakConnection.existingSecret.name }}
+            - secretRef:
+                name: {{ include "ump.fullname" . }}-keycloak-connection
+            {{- end }}
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresConnection.existingSecret.name }}
+                  key: dbname
+            {{- if not .Values.config.postgresHost }}
+            - name: POSTGRES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresConnection.existingSecret.name }}
+                  key: host
+            {{- end }}
+            {{- if not .Values.config.postgresPort }}
+            - name: POSTGRES_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresConnection.existingSecret.name }}
+                  key: port
+            {{- end }}
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresConnection.existingSecret.name }}
+                  key: user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresConnection.existingSecret.name }}
+                  key: password
+            # keycloak connection
+            {{- if .Values.keycloakConnection.existingSecret.name }}
+            - name: KEYCLOAK_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakConnection.existingSecret.name }}
+                  key: user
+            - name: KEYCLOAK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakConnection.existingSecret.name }}
+                  key: password
+            - name: KEYCLOAK_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakConnection.existingSecret.name }}
+                  key: host
+            - name: KEYCLOAK_PROTOCOL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakConnection.existingSecret.name }}
+                  key: protocol
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+        - name: providers-volume
+          configMap:
+          {{- if not .Values.providers.existingConfigMap.name }}
+            name: {{ include "ump.fullname" . }}-providers
+          {{- else }}
+            name: {{ .Values.providers.existingConfigMap.name }}
+          {{- end }}
+        {{- if not .Values.keycloakConnection.existingSecret.name }}
+        - name: keycloak-config
+          secret:
+            secretName: {{ include "ump.fullname" . -}}-keycloak-connection
+            defaultMode: 0400
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

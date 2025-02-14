@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ump.fullname" . }}-settings
+  labels:
+    {{- include "ump.labels" . | nindent 4 }}
+data:
+  PROVIDERS_FILE: {{ .Values.config.providersFilePath | quote }}
+  CORS_URL_REGEX: {{ .Values.config.corsUrlRegex | quote }}
+  API_SERVER_URL: {{ .Values.config.serverUrl | quote }}
+  NUMBER_OF_WORKERS: {{ .Values.config.numberOfWorkers | quote }}
+  POSTGRES_PORT: {{ .Values.config.postgresPort | quote }}
+  POSTGRES_HOST: {{ .Values.config.postgresHost | quote }}
