@@ -17,7 +17,6 @@
                 "--debug",
                 "run",
                 "--no-debugger",
-                "--no-reload",
                 "-p",
                 // "5005",
                 "${command:pickArgs}"

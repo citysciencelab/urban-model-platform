@@ -1,0 +1,10 @@
+{{- if not .Values.providers.existingConfigMap.name }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ump.fullname" . }}-providers
+  labels:
+    {{- include "ump.labels" . | nindent 4 }}
+data:
+  providers.yaml: {{- toYaml .Values.providers.content | indent 4 }}
+{{- end }}

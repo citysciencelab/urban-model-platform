@@ -1,0 +1,23 @@
+{{ if .Values.tls.enabled }}
+{{ if .Values.tls.issuer.prodEnabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "ump.fullname" . }}-le-prod
+  labels:
+    {{- include "ump.labels" . | nindent 4 }}
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: analytics@gv.hamburg.de
+    privateKeySecretRef:
+      name: {{ include "ump.fullname" . }}-le-prod
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: {{ .Values.tls.gateway.name }}
+                kind: "Gateway"
+                group: "gateway.networking.k8s.io"
+{{- end }}
+{{- end -}}

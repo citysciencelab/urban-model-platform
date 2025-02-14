@@ -21,6 +21,7 @@ from ump.api.routes.ensembles import ensembles
 from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
 from ump.api.routes.users import users
+from ump.api.routes.health import health_bp
 from ump.config import CLEANUP_AGE
 from ump.errors import CustomException
 from ump.api.providers import PROVIDERS
@@ -113,6 +114,7 @@ api.register_blueprint(processes, url_prefix="/processes")
 api.register_blueprint(jobs, url_prefix="/jobs")
 api.register_blueprint(ensembles, url_prefix="/ensembles")
 api.register_blueprint(users, url_prefix="/users")
+api.register_blueprint(health_bp, url_prefix="/health")
 
 app.register_blueprint(api)
 
