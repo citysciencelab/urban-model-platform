@@ -89,8 +89,10 @@ def cleanup():
                     timeout=config.GEOSERVER_TIMEOUT,
                 )
 
-
-schedule.every(60).seconds.do(cleanup)
+# TODO: this is NOT good for production environments! 
+# cleanup is a different task and should NOT be part of 
+# the main app, instead it should be outsourced to a module and should be optionally 
+schedule.every(config.CLEANUP_AGE).seconds.do(cleanup)
 
 app = APIFlask(__name__)
 app.wsgi_app = ProxyFix(
