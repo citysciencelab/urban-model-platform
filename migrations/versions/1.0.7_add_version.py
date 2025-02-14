@@ -10,9 +10,9 @@ from alembic import op
 from sqlalchemy import BigInteger, Column, String
 
 revision = "1.0.7"
-down_revision = "1.0.6"
+down_revision = "1.0.5"
 branch_labels = "add_version"
-depends_on = "1.0.6"
+depends_on = "1.0.5"
 
 def upgrade():
     op.add_column('jobs', Column("process_version", String()))
