@@ -8,7 +8,7 @@ volumes:
 
 services:
   api:
-    image: ${CONTAINER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+    image: ${CONTAINER_REGISTRY}/${IMAGE_REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}
     restart: "unless-stopped"
     # env_file:
     # - path: .env
@@ -73,8 +73,7 @@ services:
       - dev
 
   modelserver:
-    image: lgvudh.azurecr.io/analytics/example_ogcapi_processes:main 
-    #${CONTAINER_REGISTRY}/${CONTAINER_NAMESPACE}/ogcapi_processes_example:0.0.4
+    image: ${CONTAINER_REGISTRY}/${IMAGE_REPOSITORY}/ogcapi_processes_example:0.0.4
     env_file:
     - path: .env
       required: true # default
