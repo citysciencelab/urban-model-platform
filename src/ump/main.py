@@ -92,6 +92,7 @@ def cleanup():
 # TODO: this is NOT good for production environments! 
 # cleanup is a different task and should NOT be part of 
 # the main app, instead it should be outsourced to a module and should be optionally 
+# I suggest to use celery and redis for this task
 schedule.every(config.CLEANUP_AGE).seconds.do(cleanup)
 
 app = APIFlask(__name__)
