@@ -24,6 +24,7 @@ from ump.api.routes.users import users
 from ump.api.routes.health import health_bp
 from ump.config import CLEANUP_AGE
 from ump.errors import CustomException
+from ump.api.providers import PROVIDERS
 
 if (
     # The WERKZEUG_RUN_MAIN is set to true when running the subprocess for
@@ -59,33 +60,41 @@ dictConfig(
 def cleanup():
     """Cleans up jobs and Geoserver layers of anonymous users"""
     engine = create_engine(f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")    
-    sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id"
+    sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id, provider_prefix, process_id"
     finished = datetime.now() - timedelta(minutes = CLEANUP_AGE)
     with engine.begin() as conn:
         result = conn.exec_driver_sql(sql, {'finished': finished})
         for row in result:
-            job_id = row[0]
-            requests.delete(
-                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
-                    f"/layers/{job_id}.xml",
-                auth=(config.geoserver_admin_user, config.geoserver_admin_password),
-                timeout=config.GEOSERVER_TIMEOUT,
-            )
-            requests.delete(
-                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
-                    f"/datastores/{job_id}/featuretypes/{job_id}.xml",
-                auth=(config.geoserver_admin_user, config.geoserver_admin_password),
-                timeout=config.GEOSERVER_TIMEOUT,
-            )
-            requests.delete(
-                f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
-                    f"/datastores/{job_id}.xml",
-                auth=(config.geoserver_admin_user, config.geoserver_admin_password),
-                timeout=config.GEOSERVER_TIMEOUT,
-            )
+            # get additional job metadata
+            job_id, provider_prefix, process_id = row
 
+            # Check if result-storage is set to geoserver
+            result_storage = PROVIDERS.get(provider_prefix, {}).get('processes', {}).get(process_id, {}).get('result-storage', None)
+            if result_storage == "geoserver":
+                requests.delete(
+                    f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
+                        f"/layers/{job_id}.xml",
+                    auth=(config.geoserver_admin_user, config.geoserver_admin_password),
+                    timeout=config.GEOSERVER_TIMEOUT,
+                )
+                requests.delete(
+                    f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
+                        f"/datastores/{job_id}/featuretypes/{job_id}.xml",
+                    auth=(config.geoserver_admin_user, config.geoserver_admin_password),
+                    timeout=config.GEOSERVER_TIMEOUT,
+                )
+                requests.delete(
+                    f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}" +
+                        f"/datastores/{job_id}.xml",
+                    auth=(config.geoserver_admin_user, config.geoserver_admin_password),
+                    timeout=config.GEOSERVER_TIMEOUT,
+                )
 
-schedule.every(60).seconds.do(cleanup)
+# TODO: this is NOT good for production environments! 
+# cleanup is a different task and should NOT be part of 
+# the main app, instead it should be outsourced to a module and should be optionally 
+# I suggest to use celery and redis for this task
+schedule.every(config.CLEANUP_AGE).seconds.do(cleanup)
 
 app = APIFlask(__name__)
 app.wsgi_app = ProxyFix(
