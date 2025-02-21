@@ -2,30 +2,59 @@ networks:
   dev:
     external: true
     name: ${DOCKER_NETWORK}
+
+volumes:
+  postgres_data:
+
 services:
-  app:
-    image: ${CONTAINER_REGISTRY}/${CONTAINER_NAMESPACE}/${IMAGE_NAME}:${IMAGE_TAG}
+  api:
+    image: ${CONTAINER_REGISTRY}/${IMAGE_REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}
     restart: "unless-stopped"
-    env_file:
-    - path: .env
-      required: true # default
+    # env_file:
+    # - path: .env
+    #   required: true # default
     ports:
-      - ${WEBAPP_PORT_EXTERNAL}:5001
-    command: ['src/app.py']
+      - ${WEBAPP_PORT_EXTERNAL}:5000
+    environment:
+      API_SERVER_URL: http://localhost:5003
+      NUMBER_OF_WORKERS: 1
+      FETCH_JOB_RESULT_INTERVAL: 5
+      LOGLEVEL: DEBUG
+      FLASK_DEBUG: 1
+      PROVIDERS_FILE: /home/pythonuser/providers.yaml
+      CORS_URL_REGEX: "*"
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: admin
+      KEYCLOAK_HOST: localhost:8081
+      KEYCLOAK_PROTOCOL: http
+      KEYCLOAK_PORT_EXTERNAL: 8081
+      KEYCLOAK_PORT_INTERNAL: 8080
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      POSTGRES_DB: cut_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+    #env:
+    #  PROVIDERS_FILE: ${PROVIDERS_FILE_CONTAINER}
+    volumes:
+      - ./providers.yaml:/home/pythonuser/providers.yaml
     networks:
       - dev
-      
-  
+
   postgis:
     image: postgis/postgis:14-3.3
     volumes:
-      - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
+      # - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
+      - postgres_data:/var/lib/postgresql/data/
     #   - ./geoserver/data/pg_data:/var/lib/postgresql/data
     env_file:
     - path: .env
       required: true # default
     ports:
-      - ${POSTGRES_PORT}:5432
+      - ${POSTGRES_PORT_EXTERNAL}:5432
     networks:
       - dev
 
@@ -33,10 +62,10 @@ services:
     image: kartoza/geoserver:2.22.0
     depends_on:
       - postgis
-    # volumes:
-    #   - ./geoserver/data/geoserver:/opt/geoserver/data_dir
     ports:
-      - ${GEOSERVER_PORT}:8080
+      - ${GEOSERVER_PORT_EXTERNAL}:8080
+    volumes:
+      - ./geoserver/data/geoserver:/opt/geoserver/data_dir
     env_file:
     - path: .env
       required: true # default
@@ -44,7 +73,7 @@ services:
       - dev
 
   modelserver:
-    image: ${CONTAINER_REGISTRY}/${CONTAINER_NAMESPACE}/ogcapi_processes_example:0.0.4
+    image: ${CONTAINER_REGISTRY}/${IMAGE_REPOSITORY}/ogcapi_processes_example:0.0.4
     env_file:
     - path: .env
       required: true # default
@@ -52,10 +81,33 @@ services:
       - ./modelserver_example/pygeoapi-config.yml:/home/pythonuser/pygeoapi-config.yaml
       - ./modelserver_example/example-openapi.yml:/home/pythonuser/pygeoapi-openapi.yaml
     ports:
-      - ${PYGEOAPI_SERVER_PORT_CONTAINER}:${PYGEOAPI_SERVER_PORT}
+      - ${PYGEOAPI_SERVER_PORT_EXTERNAL}:${PYGEOAPI_SERVER_PORT_INTERNAL}
     command: [
       '/bin/bash', '-c',
       'pygeoapi openapi generate /home/pythonuser/pygeoapi-config.yaml --output-file /home/pythonuser/pygeoapi-openapi.yaml && pygeoapi serve --flask'
     ]
+    networks:
+      - dev
+      
+  keycloak:
+    container_name: ump-keycloak
+    image: quay.io/keycloak/keycloak:25.0
+    ports: 
+      - ${KEYCLOAK_PORT_EXTERNAL}:8080
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgis
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PATH: /auth
+      KC_HTTP_RELATIVE_PATH: /auth
+    depends_on:
+      - postgis
+    command: ['start', '--proxy-headers', 'xforwarded', '--http-enabled', 'true']
     networks:
       - dev

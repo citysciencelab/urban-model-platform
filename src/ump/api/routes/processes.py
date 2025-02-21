@@ -1,13 +1,15 @@
 import asyncio
+import copy
 import json
 
-from flask import Blueprint, Response, request
+from apiflask import APIBlueprint
+from flask import Response, g, request
 
+import ump.api.providers as providers
 from ump.api.process import Process
 from ump.api.processes import all_processes
 
-processes = Blueprint("processes", __name__)
-
+processes = APIBlueprint("processes", __name__)
 
 @processes.route("/", defaults={"page": "index"})
 def index(page):
@@ -23,6 +25,24 @@ def show(process_id_with_prefix=None):
 
 @processes.route("/<path:process_id_with_prefix>/execution", methods=["POST"])
 def execute(process_id_with_prefix=None):
+    auth = g.get('auth_token')
     process = Process(process_id_with_prefix)
-    result = process.execute(request.json)
+    result = process.execute(request.json, None if auth is None else auth['sub'])
     return Response(json.dumps(result), status=201, mimetype="application/json")
+
+@processes.route("/providers", methods=["GET"])
+def get_providers():
+    """Returns the providers config"""
+    response = copy.deepcopy(providers.PROVIDERS)
+    for key in response:
+        if 'authentication' in response[key]:
+            del response[key]['authentication']
+        del response[key]['url']
+        if 'timeout' in response[key]:
+            del response[key]['timeout']
+        for process in response[key]['processes']:
+            if 'deterministic' in response[key]['processes'][process]:
+                del response[key]['processes'][process]['deterministic']
+            if 'anonymous-access' in response[key]['processes'][process]:
+                del response[key]['processes'][process]['anonymous-access']
+    return response

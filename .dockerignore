@@ -4,8 +4,9 @@
 # except
 !setup.cfg
 !setup.py
-!environment.yml
+!environment.yaml
 !poetry.lock
 !pyproject.toml
 !src
 !scripts
+!migrations

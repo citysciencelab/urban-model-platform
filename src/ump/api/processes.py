@@ -2,10 +2,10 @@ import logging
 import traceback
 
 import aiohttp
-import yaml
+from aiohttp import ClientTimeout
+from flask import g
 
 import ump.api.providers as providers
-import ump.config as config
 
 
 async def all_processes():
@@ -16,6 +16,7 @@ async def all_processes():
                 p = providers.PROVIDERS[provider]
 
                 auth = providers.authenticate_provider(p)
+                timeout_value = int(p.get("timeout"))
 
                 response = await session.get(
                     f"{p['url']}/processes",
@@ -24,6 +25,7 @@ async def all_processes():
                         "Content-type": "application/json",
                         "Accept": "application/json",
                     },
+                    timeout=ClientTimeout(total=timeout_value / 1000),
                 )
                 async with response:
                     assert (
@@ -35,7 +37,12 @@ async def all_processes():
                         processes[provider] = results["processes"]
 
             except Exception as e:
-                logging.error(f"Cannot access {provider} provider! {e}")
+                logging.error(
+                    "Cannot access %s provider at url \"%s/processes\"! %s",
+                    provider,
+                    p['url'],
+                    e
+                )
                 traceback.print_exc()
                 processes[provider] = []
 
@@ -44,15 +51,37 @@ async def all_processes():
 
 def _processes_list(results):
     processes = []
+    auth = g.get("auth_token", {}) or {}
+    realm_roles = auth.get("realm_access", {}).get("roles", [])
+    client_roles = (
+        auth.get("resource_access", {}).get("ump-client", {}).get("roles", [])
+    )
+
     for provider in providers.PROVIDERS:
-
+        provider_access = provider in realm_roles or provider in client_roles
+        if provider_access:
+            logging.debug("Granting access for model server %s", provider)
         try:
-
             # Check if process has special configuration
             for process in results[provider]:
+                process_id = f"{provider}_{process['id']}"
+                process_access = process_id in realm_roles or process_id in client_roles
+                if not process['id'] in providers.PROVIDERS[provider]["processes"]:
+                    logging.debug("No configuration found for process %s", process['id'])
+                    continue
+                process_config = providers.PROVIDERS[provider]["processes"][process['id']]
+                public_access = 'anonymous-access' in process_config and process_config['anonymous-access']
+                if public_access or process_access or provider_access:
+                    logging.debug("Granting access for process %s", process['id'])
+
+                if not public_access and not provider_access and not process_access:
+                    logging.debug("Not granting access for %s", process['id'])
+                    continue
 
                 logging.debug(
-                    f"Checking  process {process['id']} of provider {providers.PROVIDERS[provider]['name']} "
+                    "Checking process %s of provider %s",
+                    process['id'],
+                    providers.PROVIDERS[provider]['name']
                 )
 
                 if providers.check_process_availability(provider, process["id"]):
@@ -60,12 +89,13 @@ def _processes_list(results):
                     processes.append(process)
 
                 else:
-                    logging.debug(f"Process ID  {process['id']} is not configured.")
+                    logging.debug("Process ID %s is not configured.", process['id'])
                     continue
 
         except Exception as e:
             logging.error(
-                f"Something seems to be wrong with the configuration of model servers: {e}"
+                "Something seems to be wrong with the configuration of model servers: %s",
+                e
             )
             traceback.print_exc()
 

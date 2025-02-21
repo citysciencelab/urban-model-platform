@@ -1,3 +1,7 @@
+CREATE DATABASE cut_dev;
+
+\c cut_dev
+
 CREATE TYPE status AS ENUM ('accepted', 'running', 'successful', 'failed', 'dismissed');
 
 CREATE TABLE IF NOT EXISTS jobs (

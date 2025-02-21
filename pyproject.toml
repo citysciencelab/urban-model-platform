@@ -2,39 +2,6 @@
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[project]
-name = "urban-model-platform"
-description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
-authors = [
-    { name = "Rico Herzog", email = "rico.herzog@hcu-hamburg.de"},
-    { name = "Maja Richter", email = "maja.richter@gv.hamburg.de" },
-    { name = "Stefan Schuhart", email = "stefan.schuhart@gv.hamburg.de" }
-]
-readme = "README.md"
-requires-python = ">=3.10"
-keywords = []
-dynamic = ["version"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Urban Modelling",
-    "Topic :: Software Development",
-    "Topic :: Utilities",
-    "Typing :: Typed",
-]
-dependencies = []
-
-[project.urls]
-Homepage = "https://citysciencelab.github.io/urban-model-platform"
-Documentation = "https://github.com/citysciencelab/urban-model-platform"
-Changelog = "https://github.com/citysciencelab/urban-model-platform/changelog.md"
-Repository = "https://github.com/citysciencelab/urban-model-platform"
-
 [tool.ruff]
 # Enable the pycodestyle (`E`) and Pyflakes (`F`) rules by default.
 # Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
@@ -73,8 +40,19 @@ exclude = [
 name = "ump"
 version = "1.1.0"
 description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
-authors = ["Stefan Schuhart <stefan.schuhart@gv.hamburg.de>"]
+authors = [
+    "Rico Herzog <rico.herzog@hcu-hamburg.de>",
+    "Maja Richter <maja.richter@gv.hamburg.de>",
+    "Stefan Schuhart <stefan.schuhart@gv.hamburg.de>"
+]
 readme = "README.md"
+package-mode = true
+
+[tool.poetry.urls]
+Homepage = "https://citysciencelab.github.io/urban-model-platform"
+Documentation = "https://github.com/citysciencelab/urban-model-platform"
+Changelog = "https://github.com/citysciencelab/urban-model-platform/changelog.md"
+Repository = "https://github.com/citysciencelab/urban-model-platform"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
@@ -87,6 +65,17 @@ psycopg2-binary = "^2.9.9"
 numpy = "~=1.26.4"
 geopandas = "^1.0.1"
 geoalchemy2 = "^0.15.2"
+apiflask = "^2.2.0"
+python-dotenv = "^1.0.1"
+gunicorn = "^23.0.0"
+pyyaml = "^6.0.2"
+flask-migrate = "^4.0.7"
+python-keycloak = "^4.3.0"
+sqlalchemy-serializer = "^1.4.22"
+watchdog = "^5.0.3"
+ema-workbench = "^2.5.2"
+ipyparallel = "^8.8.0"
+schedule = "^1.2.2"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests
@@ -101,6 +90,9 @@ pytest-sugar = ">=0.9.4,<1"
 pytest-xdist = ">=2.2.0,<3"
 types-toml = ">=0.10.1,<1"
 pre-commit = ">=3.4.0,<4"
+debugpy = "^1.8.5"
+flake8 = "^7.1.1"
+pylint = "^3.3.1"
 
 [tool.poetry.group.docs]
 optional = true

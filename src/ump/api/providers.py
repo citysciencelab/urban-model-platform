@@ -1,17 +1,30 @@
 import logging
-import traceback
+import os
 
 import aiohttp
 import yaml
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers.polling import PollingObserver
 
-import ump.config as config
+from ump import config
 
 PROVIDERS: dict = {}
 
-with open(config.PROVIDERS_FILE) as file:
+with open(config.PROVIDERS_FILE, encoding="UTF-8") as file:
     if content := yaml.safe_load(file):
         PROVIDERS.update(content)
 
+class ProviderLoader(FileSystemEventHandler):
+    def on_modified(self, event):
+        if event.src_path == config.PROVIDERS_FILE:
+            with open(config.PROVIDERS_FILE, encoding="UTF-8") as to_reload:
+                if new_content := yaml.safe_load(to_reload):
+                    logging.info('Reloading providers.yaml.')
+                    PROVIDERS.update(new_content)
+
+observer = PollingObserver()
+observer.schedule(ProviderLoader(), os.path.dirname(config.PROVIDERS_FILE), recursive=False)
+observer.start()
 
 def authenticate_provider(p):
     auth = None
@@ -24,18 +37,23 @@ def authenticate_provider(p):
 
 
 def check_process_availability(provider, process_id):
-
     available = False
 
     if provider in PROVIDERS and process_id in PROVIDERS[provider]["processes"]:
         available = True
 
         if "exclude" in PROVIDERS[provider]["processes"][process_id]:
-            logging.debug(f"Excluding process {process_id} based on configuration")
+            logging.debug("Excluding process %s based on configuration", process_id)
             available = False
 
     return available
 
 
 def check_result_storage(provider, process_id):
-    return PROVIDERS[provider]["processes"][process_id]["result-storage"]
+    return (
+        PROVIDERS
+        .get(provider, {})
+        .get("processes", {})
+        .get(process_id, {})
+        .get("result-storage", None)
+    )

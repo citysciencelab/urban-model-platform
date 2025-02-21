@@ -1,0 +1,16 @@
+FROM python:3.11-bookworm
+
+WORKDIR /app
+
+RUN apt update && apt -y upgrade && \
+    pip install poetry && \
+    rm -rf /var/lib/apt/lists/*
+
+EXPOSE 5000
+
+ENV FLASK_APP=/app/src/ump/main.py
+
+CMD poetry lock && \
+    poetry install --with dev && \
+    poetry run flask db upgrade head && \
+    poetry run flask -A /app/src/ump/main.py --debug run --host=0.0.0.0

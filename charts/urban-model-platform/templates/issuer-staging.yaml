@@ -1,0 +1,24 @@
+{{ if .Values.tls.enabled }}
+{{ if not .Values.tls.issuer.prodEnabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "ump.fullname" . }}-le-staging
+  labels:
+    {{- include "ump.labels" . | nindent 4 }}
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: analytics@gv.hamburg.de
+    privateKeySecretRef:
+      name: {{ include "ump.fullname" . }}-le-staging
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: {{ .Values.tls.gateway.name }}
+                namespace: ump-api 
+                kind: "Gateway"
+                group: "gateway.networking.k8s.io"
+{{- end }}
+{{- end -}}
