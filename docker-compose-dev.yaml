@@ -8,11 +8,8 @@ volumes:
 
 services:
   api:
-    image: ${CONTAINER_REGISTRY}/${IMAGE_REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}
+    image: ${CONTAINER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
     restart: "unless-stopped"
-    # env_file:
-    # - path: .env
-    #   required: true # default
     ports:
       - ${WEBAPP_PORT_EXTERNAL}:5000
     environment:
@@ -47,14 +44,14 @@ services:
   postgis:
     image: postgis/postgis:14-3.3
     volumes:
-      # - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
+      - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
       - postgres_data:/var/lib/postgresql/data/
-    #   - ./geoserver/data/pg_data:/var/lib/postgresql/data
-    env_file:
-    - path: .env
-      required: true # default
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
-      - ${POSTGRES_PORT_EXTERNAL}:5432
+      - ${POSTGRES_PORT}:5432
     networks:
       - dev
 

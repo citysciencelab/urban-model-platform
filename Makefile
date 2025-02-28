@@ -34,17 +34,17 @@ upload-image: build-image
 	docker compose -f docker-compose-build.yaml push app
 
 start-dev: stop-dev
-	docker compose -f docker-compose-local.yaml up
+	docker compose -f docker-compose-dev.yaml up
 	flask -A src/ump/main.py --debug run
 
 start-dev-with-modelserver: stop-dev
-	docker compose -f docker-compose-local.yaml up geoserver postgis modelserver keycloak -d
+	docker compose -f docker-compose-dev.yaml up geoserver postgis modelserver keycloak -d
 	flask -A src/ump/main.py --debug run
 
 restart-dev: stop-dev start-dev
 
 stop-dev:
-	docker compose -f docker-compose-local.yaml down
+	docker compose -f docker-compose-dev.yaml down
 
 build-docs:
 	jupyter-book build docs
