@@ -20,20 +20,13 @@ class Job:
         "processID",
         "type",
         "jobID",
-        "status",
-        "message",
         "created",
         "started",
         "finished",
         "updated",
         "progress",
         "links",
-        "parameters",
-        "results_metadata",
-        "name",
-        "process_title",
-        "process_version",
-        "user_id",
+        "metadata",
     ]
 
     SORTABLE_COLUMNS = [
@@ -66,6 +59,7 @@ class Job:
         self.provider_prefix = None
         self.process_id = None
         self.provider_url = None
+        self.additional_metadata = None 
 
         if job_id and not self._init_from_db(job_id, user):
             raise CustomException("Job could not be found!")
@@ -78,6 +72,7 @@ class Job:
         process_title=None,
         name=None,
         parameters=None,
+        additional_metadata=None,
         user=None,
         process_version=None,
     ):
@@ -88,6 +83,7 @@ class Job:
             process_title,
             name,
             parameters,
+            additional_metadata,
             user_id=user,
             process_version=process_version,
         )
@@ -98,9 +94,9 @@ class Job:
 
         query = """
             INSERT INTO jobs
-            (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id, process_title, name, process_version, hash)
+            (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id, process_title, name, process_version, additional_metadata, hash)
             VALUES
-            (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s, %(process_version)s, encode(sha512((%(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea), 'base64'))
+            (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s, %(process_version)s, %(additional_metadata)s, encode(sha512((%(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea), 'base64'))
         """
         with DBHandler() as db:
             db.run_query(query, query_params=self._to_dict())
@@ -115,6 +111,7 @@ class Job:
         process_title=None,
         name=None,
         parameters=None,
+        additional_metadata=None,
         user_id=None,
         process_version=None,
     ):
@@ -123,6 +120,7 @@ class Job:
         self.user_id = user_id
         self.process_title = process_title
         self.name = name
+        self.additional_metadata = additional_metadata
         self.process_version = process_version
 
         if remote_job_id and not job_id:
@@ -182,6 +180,7 @@ class Job:
         self.updated = data["updated"]
         self.progress = data["progress"]
         self.parameters = data["parameters"]
+        self.additional_metadata = data["additional_metadata"]
         self.results_metadata = data["results_metadata"]
         self.user_id = data["user_id"]
         self.process_title = data["process_title"]
@@ -205,6 +204,7 @@ class Job:
             "process_title": self.process_title,
             "name": self.name,
             "parameters": json.dumps(self.parameters),
+            "additional_metadata": self.additional_metadata,
             "results_metadata": json.dumps(self.results_metadata),
             "user_id": self.user_id,
             "process_version": self.process_version,
@@ -272,9 +272,28 @@ class Job:
         job_dict = self._to_dict()
         job_dict["type"] = "process"
         job_dict["jobID"] = job_dict.pop("job_id")
-        job_dict["parameters"] = self.parameters
-        job_dict["results_metadata"] = self.results_metadata
         job_dict["processID"] = self.process_id_with_prefix
+
+        # If additionMetadata is set to true, the following parameters will be diplayed under "metadata"
+        if self.additional_metadata: 
+            metadata = {}
+            if self.name is not None:
+                metadata["name"] = self.name
+            if self.parameters is not None:
+                metadata["parameters"] = self.parameters
+            if self.results_metadata is not None:
+                metadata["results_metadata"] = self.results_metadata
+            if self.process_title is not None:
+                metadata["process_title"] = self.process_title
+            if self.process_version is not None:
+                metadata["process_version"] = self.process_version
+
+            job_dict["metadata"] = metadata
+            logging.info("Included metadata in job_dict: %s", metadata)
+
+        for key in ["name", "parameters", "results_metadata", "process_title", "process_version"]:
+            job_dict.pop(key, None)
+
         job_dict["links"] = []
 
         for attr in job_dict:
@@ -286,21 +305,18 @@ class Job:
             JobStatus.running.value,
             JobStatus.accepted.value,
         ):
-
             job_result_url = f"{config.api_server_url}/api/jobs/{self.job_id}/results"
-
             job_dict["links"] = [
                 {
                     "href": job_result_url,
                     "rel": "service",
                     "type": "application/json",
                     "hreflang": "en",
-                    "title": f"Results of job {self.job_id} as geojson" +
-                        " - available when job is finished.",
+                    "title": f"Results of job {self.job_id} as geojson - available when job is finished.",
                 }
             ]
 
-        return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES}
+        return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES if k in job_dict}
 
     async def results(self):
         if self.status != JobStatus.successful.value:

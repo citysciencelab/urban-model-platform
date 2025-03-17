@@ -62,6 +62,7 @@ class Process:
                 and role not in auth["realm_access"]["roles"]
                 and role not in auth["resource_access"]["ump-client"]["roles"]
             ):
+            # if auth in providers.yaml is set and it is not required in the modelserver, this error is falsely raised.
                 raise InvalidUsage(
                     "Process ID %s is not known! Please check endpoint api/processes "
                     + "for a list of available processes.",
@@ -99,12 +100,6 @@ class Process:
     def validate_params(self, parameters):
         if not self.inputs:
             return
-
-        if not "job_name" in parameters:
-            raise InvalidUsage(
-                "Parameter job_name is required",
-                payload={"parameter_description": self.inputs["job_name"]},
-            )
 
         for input in self.inputs:
             try:
@@ -246,13 +241,23 @@ class Process:
         request_body["mode"] = "async"
         p = providers.PROVIDERS[self.provider_prefix]
 
-        # extract job_name from request_body
-        name = request_body.pop("job_name")
+        # extract job_name from request_body (default is none)
+        name = request_body.pop("job_name", None)
+
+        # extract additionalMetadata from request_body (default is none)
+        additional_metadata = request_body.pop("additionalMetadata", None)
+        logging.info("Extracted additionalMetadata: %s", additional_metadata)
+
+        # Convert the additionalMetadata string to a boolean
+        if isinstance(additional_metadata, str):
+            additional_metadata = additional_metadata.lower() == "true"
+
 
         job_id = self.check_for_cache(request_body, user)
         if job_id:
             logging.info("Job found, returning cached job.")
-            return Job(job_id, user)
+            job = Job(job_id, user)
+            return job
 
         try:
             auth = providers.authenticate_provider(p)
@@ -304,6 +309,7 @@ class Process:
                         parameters=request_body,
                         user=user,
                         process_version=self.version,
+                        additional_metadata=additional_metadata,
                     )
                     job.started = datetime.now(timezone.utc).strftime(
                         "%Y-%m-%dT%H:%M:%S.%fZ"
