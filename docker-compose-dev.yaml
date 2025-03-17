@@ -34,8 +34,6 @@ services:
       PGDATA: /var/lib/postgresql/data
       POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
-    #env:
-    #  PROVIDERS_FILE: ${PROVIDERS_FILE_CONTAINER}
     volumes:
       - ./providers.yaml:/home/pythonuser/providers.yaml
     networks:
@@ -70,7 +68,7 @@ services:
       - dev
 
   modelserver:
-    image: ${CONTAINER_REGISTRY}/${IMAGE_REPOSITORY}/ogcapi_processes_example:0.0.4
+    image: # insert image here
     env_file:
     - path: .env
       required: true # default
