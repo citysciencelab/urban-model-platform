@@ -100,12 +100,6 @@ class Process:
         if not self.inputs:
             return
 
-        if not "job_name" in parameters:
-            raise InvalidUsage(
-                "Parameter job_name is required",
-                payload={"parameter_description": self.inputs["job_name"]},
-            )
-
         for input in self.inputs:
             try:
                 if not "schema" in self.inputs[input]:
@@ -247,7 +241,7 @@ class Process:
         p = providers.PROVIDERS[self.provider_prefix]
 
         # extract job_name from request_body
-        name = request_body.pop("job_name")
+        name = request_body.pop("job_name",None)
 
         job_id = self.check_for_cache(request_body, user)
         if job_id:

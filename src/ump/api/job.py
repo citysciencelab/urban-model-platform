@@ -268,7 +268,7 @@ class Job:
 
         return self.results_metadata
 
-    def display(self):
+    def display(self,additional_metadata=False):
         job_dict = self._to_dict()
         job_dict["type"] = "process"
         job_dict["jobID"] = job_dict.pop("job_id")
@@ -276,6 +276,7 @@ class Job:
         job_dict["results_metadata"] = self.results_metadata
         job_dict["processID"] = self.process_id_with_prefix
         job_dict["links"] = []
+
 
         for attr in job_dict:
             if isinstance(job_dict[attr], datetime):
@@ -299,8 +300,15 @@ class Job:
                         " - available when job is finished.",
                 }
             ]
+        if isinstance(additional_metadata, str):
+             additional_metadata = additional_metadata.lower() == "true"
 
-        return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES}
+        if additional_metadata:
+            return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES}
+        else:
+            excluded_attributes = ["name", "parameters", "results_metadata", "process_title", "process_version"]
+            return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES if k not in excluded_attributes}
+
 
     async def results(self):
         if self.status != JobStatus.successful.value:
