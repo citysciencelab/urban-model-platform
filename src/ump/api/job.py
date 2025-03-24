@@ -28,13 +28,7 @@ class Job:
         "updated",
         "progress",
         "links",
-        "parameters",
-        "results_metadata",
-        "name",
-        "process_title",
-        "process_version",
-        "user_id",
-    ]
+    ] 
 
     SORTABLE_COLUMNS = [
         "created",
@@ -304,10 +298,29 @@ class Job:
              additional_metadata = additional_metadata.lower() == "true"
 
         if additional_metadata:
-            return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES}
+            metadata = {}
+            if self.name is not None:
+                metadata["name"] = self.name
+            if self.parameters is not None:
+                metadata["parameters"] = self.parameters
+            if self.results_metadata is not None:
+                metadata["results_metadata"] = self.results_metadata
+            if self.process_title is not None:
+                metadata["process_title"] = self.process_title
+            if self.process_version is not None:
+                metadata["process_version"] = self.process_version
+            if self.process_version is not None:
+                metadata["user_id"] = self.user_id
+            
+            job_dict["metadata"] = metadata
+
+            for key in ["name", "parameters", "results_metadata", "process_title", "process_version","user_id"]:
+             job_dict.pop(key, None)
+
+            return job_dict
+        
         else:
-            excluded_attributes = ["name", "parameters", "results_metadata", "process_title", "process_version"]
-            return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES if k not in excluded_attributes}
+            return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES}
 
 
     async def results(self):
