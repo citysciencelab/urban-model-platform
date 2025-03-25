@@ -12,8 +12,6 @@ services:
     restart: "unless-stopped"
     ports:
       - ${WEBAPP_PORT_EXTERNAL}:5000
-    env_file:
-      - .env
     environment:
       API_SERVER_URL: ${API_SERVER_URL}
       NUMBER_OF_WORKERS: ${NUMBER_OF_WORKERS}
@@ -32,6 +30,14 @@ services:
       PGDATA: ${PGDATA}
       POSTGRES_HOST: ${POSTGRES_HOST}
       POSTGRES_PORT: 5432
+      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
+      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
+      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
+      GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
+      GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
+      GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
+      CLEANUP_AGE: ${CLEANUP_AGE}
+
     volumes:
       - ./providers.yaml:/home/pythonuser/providers.yaml
     networks:
@@ -59,8 +65,14 @@ services:
       - ${GEOSERVER_PORT_EXTERNAL}:8080
     volumes:
       - ./geoserver/data/geoserver:/opt/geoserver/data_dir
-    env_file:
-    - .env
+    environment:
+      - GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
+      - GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
+      - GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
+      - GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
+      - GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
+      - GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
+
     networks:
       - dev
 
