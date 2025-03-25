@@ -36,6 +36,8 @@ upload-image: build-image
 start-dev: stop-dev
 	docker compose -f docker-compose-dev.yaml up api geoserver postgis keycloak -d
 	flask -A src/ump/main.py --debug run
+# ToDo: Add Alembic migration
+
 
 start-dev-with-modelserver: stop-dev
 	docker compose -f docker-compose-dev.yaml up api geoserver postgis modelserver keycloak -d

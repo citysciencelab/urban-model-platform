@@ -1,0 +1,121 @@
+networks:
+  dev:
+    external: true
+    name: ${DOCKER_NETWORK}
+
+volumes:
+  postgres_data:
+
+services:
+  api:
+    image: ${CONTAINER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+    restart: "unless-stopped"
+    ports:
+      - ${WEBAPP_PORT_EXTERNAL}:5000
+    environment:
+      API_SERVER_URL: ${API_SERVER_URL}
+      NUMBER_OF_WORKERS: ${NUMBER_OF_WORKERS}
+      LOGLEVEL: ${LOGLEVEL}
+      FLASK_DEBUG: ${FLASK_DEBUG}
+      PROVIDERS_FILE: /home/pythonuser/providers.yaml
+      CORS_URL_REGEX: ${CORS_URL_REGEX}
+      KEYCLOAK_USER: ${KEYCLOAK_USER}
+      KEYCLOAK_PASSWORD: ${KEYCLOAK_PASSWORD}
+      KEYCLOAK_HOST: ${KEYCLOAK_HOST}
+      KEYCLOAK_PROTOCOL: ${KEYCLOAK_PROTOCOL}
+      KEYCLOAK_PORT_EXTERNAL: ${KEYCLOAK_PORT_EXTERNAL}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: ${PGDATA}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: 5432
+      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
+      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
+      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
+      GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
+      GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
+      GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
+      CLEANUP_AGE: ${CLEANUP_AGE}
+
+    volumes:
+      - ./providers.yaml:/home/pythonuser/providers.yaml
+    networks:
+      - dev
+    depends_on:
+      - keycloak
+      - postgis
+
+  postgis:
+    image: postgis/postgis:14-3.3
+    volumes:
+      - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - ${POSTGRES_PORT}:5432
+    networks:
+      - dev
+
+  geoserver:
+    image: kartoza/geoserver:2.22.0
+    depends_on:
+      - postgis
+    ports:
+      - ${GEOSERVER_PORT_EXTERNAL}:8080
+    volumes:
+      - ./geoserver_data:/opt/geoserver/data_dir
+    environment:
+      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
+      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
+      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
+      GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
+      GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
+      GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
+
+    networks:
+      - dev
+
+# ToDo: Refactor Model Server with public image to deploy
+  modelserver:
+    image: lgvudh.azurecr.io/analytics/example_ogcapi_processes:main
+    env_file:
+    - path: .env
+      required: true # default
+    volumes:
+      - ./modelserver_example/pygeoapi-config.yml:/home/pythonuser/pygeoapi-config.yaml
+      - ./modelserver_example/example-openapi.yml:/home/pythonuser/pygeoapi-openapi.yaml
+    ports:
+      - ${PYGEOAPI_SERVER_PORT_EXTERNAL}:${PYGEOAPI_SERVER_PORT_INTERNAL}
+    command: [
+      '/bin/bash', '-c',
+      'pygeoapi openapi generate /home/pythonuser/pygeoapi-config.yaml --output-file /home/pythonuser/pygeoapi-openapi.yaml && pygeoapi serve --flask'
+    ]
+    networks:
+      - dev
+      
+  keycloak:
+    container_name: ump-keycloak
+    image: quay.io/keycloak/keycloak:25.0
+    ports: 
+      - ${KEYCLOAK_PORT_EXTERNAL}:8080
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgis
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME: ${KEYCLOAK_HOST}
+      KC_HOSTNAME_PATH: /auth
+      KC_HTTP_RELATIVE_PATH: /auth
+    depends_on:
+      - postgis
+    command: ['start', '--proxy-headers', 'xforwarded', '--http-enabled', 'true']
+    networks:
+      - dev
