@@ -17,7 +17,7 @@ services:
       NUMBER_OF_WORKERS: ${NUMBER_OF_WORKERS}
       LOGLEVEL: ${LOGLEVEL}
       FLASK_DEBUG: ${FLASK_DEBUG}
-      PROVIDERS_FILE: ${PROVIDERS_FILE}
+      PROVIDERS_FILE: /home/pythonuser/providers.yaml
       CORS_URL_REGEX: ${CORS_URL_REGEX}
       KEYCLOAK_USER: ${KEYCLOAK_USER}
       KEYCLOAK_PASSWORD: ${KEYCLOAK_PASSWORD}
@@ -42,6 +42,9 @@ services:
       - ./providers.yaml:/home/pythonuser/providers.yaml
     networks:
       - dev
+    depends_on:
+      - keycloak
+      - postgis
 
   postgis:
     image: postgis/postgis:14-3.3
@@ -64,14 +67,14 @@ services:
     ports:
       - ${GEOSERVER_PORT_EXTERNAL}:8080
     volumes:
-      - ./geoserver/data/geoserver:/opt/geoserver/data_dir
+      - ./geoserver_data:/opt/geoserver/data_dir
     environment:
-      - GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
-      - GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
-      - GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
-      - GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
-      - GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
-      - GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
+      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
+      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
+      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
+      GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
+      GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
+      GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
 
     networks:
       - dev
