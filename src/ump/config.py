@@ -26,3 +26,11 @@ geoserver_admin_user = os.environ.get("GEOSERVER_ADMIN_USER", "admin")
 geoserver_admin_password = os.environ.get("GEOSERVER_ADMIN_PASSWORD", "geoserver")
 GEOSERVER_TIMEOUT = 60
 CLEANUP_AGE = 4 * 60 # configure minutes, after which jobs and layers of anonymous users are deleted
+
+# KEYCLOAK
+keycloak_protocol = os.environ.get("KEYCLOAK_PROTOCOL", "http")
+keycloak_host = os.environ.get("KEYCLOAK_HOST", "keycloak")
+keycloak_realm = os.environ.get("KEYCLOAK_REALM", "UrbanModelPlatform")
+keycloak_client = os.environ.get("KEYCLOAK_CLIENT", "ump-client")
+keycloak_user = os.environ.get("KEYCLOAK_USER", "admin")
+keycloak_password = os.environ.get("KEYCLOAK_PASSWORD", "admin")

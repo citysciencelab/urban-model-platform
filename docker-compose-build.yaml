@@ -1,8 +1,8 @@
 version: "3.7"
 
 services:
-  app:
-    image: ${CONTAINER_REGISTRY}/${IMAGE_REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}
+  api:
+    image: ${CONTAINER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
     build:
       context: .
       dockerfile: Dockerfile

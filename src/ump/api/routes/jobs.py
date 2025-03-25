@@ -130,6 +130,9 @@ def create_comment(job_id):
 @jobs.route("/<path:job_id>", methods=["GET"])
 def show(job_id=None):
     auth = g.get("auth_token")
-    job = Job(job_id, None if auth is None else auth["sub"]).display()
+    if request.args.get("additionalMetadata") == "true":
+        job = Job(job_id, None if auth is None else auth["sub"]).display(additional_metadata=True)
+    else:
+        job = Job(job_id, None if auth is None else auth["sub"]).display()
     append_ensemble_list(job)
     return Response(json.dumps(job), mimetype="application/json")

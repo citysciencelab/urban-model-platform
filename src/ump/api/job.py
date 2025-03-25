@@ -28,13 +28,7 @@ class Job:
         "updated",
         "progress",
         "links",
-        "parameters",
-        "results_metadata",
-        "name",
-        "process_title",
-        "process_version",
-        "user_id",
-    ]
+    ] 
 
     SORTABLE_COLUMNS = [
         "created",
@@ -268,7 +262,7 @@ class Job:
 
         return self.results_metadata
 
-    def display(self):
+    def display(self,additional_metadata=False):
         job_dict = self._to_dict()
         job_dict["type"] = "process"
         job_dict["jobID"] = job_dict.pop("job_id")
@@ -276,6 +270,7 @@ class Job:
         job_dict["results_metadata"] = self.results_metadata
         job_dict["processID"] = self.process_id_with_prefix
         job_dict["links"] = []
+
 
         for attr in job_dict:
             if isinstance(job_dict[attr], datetime):
@@ -299,8 +294,34 @@ class Job:
                         " - available when job is finished.",
                 }
             ]
+        if isinstance(additional_metadata, str):
+             additional_metadata = additional_metadata.lower() == "true"
 
-        return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES}
+        if additional_metadata:
+            metadata = {}
+            if self.name is not None:
+                metadata["name"] = self.name
+            if self.parameters is not None:
+                metadata["parameters"] = self.parameters
+            if self.results_metadata is not None:
+                metadata["results_metadata"] = self.results_metadata
+            if self.process_title is not None:
+                metadata["process_title"] = self.process_title
+            if self.process_version is not None:
+                metadata["process_version"] = self.process_version
+            if self.process_version is not None:
+                metadata["user_id"] = self.user_id
+            
+            job_dict["metadata"] = metadata
+
+            for key in ["name", "parameters", "results_metadata", "process_title", "process_version","user_id"]:
+             job_dict.pop(key, None)
+
+            return job_dict
+        
+        else:
+            return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES}
+
 
     async def results(self):
         if self.status != JobStatus.successful.value:
