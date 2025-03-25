@@ -26,25 +26,25 @@ initiate-dev:
 
 
 build-image:
-	@echo 'Building release ${CONTAINER_REGISTRY}/analytics/$(IMAGE_NAME):$(IMAGE_TAG)'
+	@echo 'Building release ${CONTAINER_REGISTRY}/${CONTAINER_NAMESPACE}/$(IMAGE_NAME):$(IMAGE_TAG)'
 # build your image
-	docker compose -f docker-compose-build.yaml build --build-arg SOURCE_COMMIT=$(GIT_COMMIT) app
+	docker compose -f docker-compose-build.yaml build --build-arg SOURCE_COMMIT=$(GIT_COMMIT) api
 
 upload-image: build-image
 	docker compose -f docker-compose-build.yaml push app
 
 start-dev: stop-dev
-	docker compose -f docker-compose-local.yaml up
+	docker compose -f docker-compose-dev.yaml up api geoserver postgis keycloak -d
 	flask -A src/ump/main.py --debug run
 
 start-dev-with-modelserver: stop-dev
-	docker compose -f docker-compose-local.yaml up geoserver postgis modelserver keycloak -d
+	docker compose -f docker-compose-dev.yaml up api geoserver postgis modelserver keycloak -d
 	flask -A src/ump/main.py --debug run
 
 restart-dev: stop-dev start-dev
 
 stop-dev:
-	docker compose -f docker-compose-local.yaml down
+	docker compose -f docker-compose-dev.yaml down
 
 build-docs:
 	jupyter-book build docs
