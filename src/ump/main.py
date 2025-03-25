@@ -104,7 +104,8 @@ def cleanup():
 # cleanup is a different task and should NOT be part of
 # the main app, instead it should be outsourced to a module and should be optionally
 # I suggest to use celery and redis for this task
-schedule.every(config.cleanup_age).seconds.do(cleanup)
+
+schedule.every(int(config.cleanup_age)).seconds.do(cleanup)
 
 app = APIFlask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
