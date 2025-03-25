@@ -12,20 +12,20 @@ services:
     restart: "unless-stopped"
     ports:
       - ${WEBAPP_PORT_EXTERNAL}:5000
+    env_file:
+      - .env
     environment:
       API_SERVER_URL: ${API_SERVER_URL}
       NUMBER_OF_WORKERS: ${NUMBER_OF_WORKERS}
-      FETCH_JOB_RESULT_INTERVAL: ${FETCH_JOB_RESULT_INTERVAL}
       LOGLEVEL: ${LOGLEVEL}
       FLASK_DEBUG: ${FLASK_DEBUG}
-      PROVIDERS_FILE: /home/pythonuser/providers.yaml
+      PROVIDERS_FILE: ${PROVIDERS_FILE}
       CORS_URL_REGEX: ${CORS_URL_REGEX}
       KEYCLOAK_USER: ${KEYCLOAK_USER}
       KEYCLOAK_PASSWORD: ${KEYCLOAK_PASSWORD}
       KEYCLOAK_HOST: ${KEYCLOAK_HOST}
       KEYCLOAK_PROTOCOL: ${KEYCLOAK_PROTOCOL}
       KEYCLOAK_PORT_EXTERNAL: ${KEYCLOAK_PORT_EXTERNAL}
-      KEYCLOAK_PORT_INTERNAL: ${KEYCLOAK_PORT_INTERNAL}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -60,8 +60,7 @@ services:
     volumes:
       - ./geoserver/data/geoserver:/opt/geoserver/data_dir
     env_file:
-    - path: .env
-      required: true # default
+    - .env
     networks:
       - dev
 
@@ -96,7 +95,7 @@ services:
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: ${POSTGRES_USER}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KC_HOSTNAME: ${KC_KEYCLOAK_HOST}
+      KC_HOSTNAME: ${KEYCLOAK_HOST}
       KC_HOSTNAME_PATH: /auth
       KC_HTTP_RELATIVE_PATH: /auth
     depends_on:
