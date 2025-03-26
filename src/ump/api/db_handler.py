@@ -3,20 +3,36 @@ import psycopg2.pool
 
 import psycopg2 as db
 from psycopg2.extras import RealDictCursor
+from sqlalchemy import create_engine
 
 from ump import config
 
 logger = logging.getLogger(__name__)
+# Note: differnt part of the code use differnt Database handling strategies,
+# should be unified sometime!
 
 # Initialize the connection pool
 connection_pool = psycopg2.pool.SimpleConnectionPool(
     minconn=1,  # Minimum number of connections
-    maxconn=99,  # Maximum number of connections, lower than postgres default
+    maxconn=49,  # Maximum number of connections, lower than postgres default
     database = config.postgres_db,
     host     = config.postgres_host,
     user     = config.postgres_user,
     password = config.postgres_password,
     port     = config.postgres_port
+)
+
+db_engine = engine = create_engine(
+    (
+        "postgresql+psycopg2://"
+        f"{config.postgres_user}:{config.postgres_password}"
+        f"@{config.postgres_host}:{config.postgres_port}"
+        f"/{config.postgres_db}"
+    ),
+    pool_size=49,  # Maximum number of connections in the pool
+    max_overflow=1,  # Additional connections allowed beyond pool_size
+    pool_timeout=30,  # Timeout for getting a connection from the pool
+    pool_recycle=3600,  # Recycle connections after 1 hour
 )
 
 def close_pool():
