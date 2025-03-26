@@ -2,7 +2,6 @@ import re
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
-from os import environ as env
 from ump import config
 from ump.api.db_handler import DBHandler
 from ump.api.ensemble import Ensemble, JobsEnsembles
