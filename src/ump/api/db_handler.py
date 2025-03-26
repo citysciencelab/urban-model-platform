@@ -37,8 +37,14 @@ db_engine = engine = create_engine(
 
 def close_pool():
     """Close the connection pool."""
+    global connection_pool
+
     if connection_pool:
-        connection_pool.closeall()
+        try:
+            connection_pool.closeall()
+            connection_pool = None  # Mark the pool as closed
+        except psycopg2.pool.PoolError as e:
+            logger.warning("Connection pool is already closed: %s", e)
 
 class DBHandler():
     def __init__(self):
