@@ -9,13 +9,7 @@ logger = logging.getLogger(__name__)
 
 class DBHandler():
     def __init__(self):
-        self.connection = db.connect(
-            database = config.postgres_db,
-            host     = config.postgres_host,
-            user     = config.postgres_user,
-            password = config.postgres_password,
-            port     = config.postgres_port
-        )
+        self.connection = None
         self.sortable_columns = []
 
     def set_sortable_columns(self, sortable_columns):
@@ -68,11 +62,19 @@ class DBHandler():
 
     # needed so that this class can be used as a context manager
     def __enter__(self):
+        self.connection = db.connect(
+            database = config.postgres_db,
+            host     = config.postgres_host,
+            user     = config.postgres_user,
+            password = config.postgres_password,
+            port     = config.postgres_port
+        )
         return self
 
     def __exit__(self, exc_type, value, traceback):
         if self.connection:
             self.connection.close()
+            self.connection = None
 
         if exc_type is None and value is None and traceback is None:
             return True
