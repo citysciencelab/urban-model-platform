@@ -31,7 +31,7 @@ build-image:
 	docker compose -f docker-compose-build.yaml build --build-arg SOURCE_COMMIT=$(GIT_COMMIT) api
 
 upload-image: build-image
-	docker compose -f docker-compose-build.yaml push app
+	docker compose -f docker-compose-build.yaml push api
 
 start-dev: stop-dev
 	docker compose -f docker-compose-dev.yaml up api geoserver postgis keycloak -d
