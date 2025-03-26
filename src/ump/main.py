@@ -17,6 +17,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ump import config
+from ump.api.db_handler import close_pool
 from ump.api.routes.ensembles import ensembles
 from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
@@ -166,6 +167,10 @@ def handle_http_exception(error):
     response.content_type = "application/json"
     return response
 
+@app.teardown_appcontext
+def shutdown_pool(exception=None):
+    """Close the connection pool on application shutdown."""
+    close_pool()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0")
