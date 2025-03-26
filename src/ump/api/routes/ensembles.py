@@ -16,17 +16,15 @@ from ema_workbench.em_framework.samplers import (
     sample_parameters,
 )
 from flask import Response, g, request
-from sqlalchemy import create_engine, delete, or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
-from ump import config
 from ump.api.ensemble import Comment, Ensemble, EnsemblesUsers, JobsEnsembles, JobsUsers
 from ump.api.job import Job
 from ump.api.keycloak_utils import find_user_id_by_email
 from ump.api.process import Process
+from ump.api.db_handler import db_engine as engine
 
 ensembles = APIBlueprint("ensembles", __name__)
-
-engine = create_engine(f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")
 
 def add_job_fields(ensemble: Ensemble):
     """Adds the synthetic jobs_metadata field"""
