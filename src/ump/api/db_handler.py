@@ -1,4 +1,5 @@
 import logging
+import psycopg2.pool
 
 import psycopg2 as db
 from psycopg2.extras import RealDictCursor
@@ -6,6 +7,22 @@ from psycopg2.extras import RealDictCursor
 from ump import config
 
 logger = logging.getLogger(__name__)
+
+# Initialize the connection pool
+connection_pool = psycopg2.pool.SimpleConnectionPool(
+    minconn=1,  # Minimum number of connections
+    maxconn=99,  # Maximum number of connections, lower than postgres default
+    database = config.postgres_db,
+    host     = config.postgres_host,
+    user     = config.postgres_user,
+    password = config.postgres_password,
+    port     = config.postgres_port
+)
+
+def close_pool():
+    """Close the connection pool."""
+    if connection_pool:
+        connection_pool.closeall()
 
 class DBHandler():
     def __init__(self):
@@ -62,18 +79,12 @@ class DBHandler():
 
     # needed so that this class can be used as a context manager
     def __enter__(self):
-        self.connection = db.connect(
-            database = config.postgres_db,
-            host     = config.postgres_host,
-            user     = config.postgres_user,
-            password = config.postgres_password,
-            port     = config.postgres_port
-        )
+        self.connection = connection_pool.getconn()
         return self
 
     def __exit__(self, exc_type, value, traceback):
         if self.connection:
-            self.connection.close()
+            connection_pool.putconn(self.connection)
             self.connection = None
 
         if exc_type is None and value is None and traceback is None:
