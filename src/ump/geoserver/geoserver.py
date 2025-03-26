@@ -49,7 +49,7 @@ class Geoserver:
             auth=(config.geoserver_admin_user, config.geoserver_admin_password),
             data=f"<workspace><name>{self.workspace}</name></workspace>",
             headers={"Content-type": "text/xml", "Accept": "*/*"},
-            timeout=config.GEOSERVER_TIMEOUT,
+            timeout=config.geoserver_timeout,
         )
 
         if response.ok:
@@ -80,12 +80,12 @@ class Geoserver:
     def publish_layer(self, store_name: str, layer_name: str):
         try:
             response = requests.post(
-                f"{config.geoserver_workspaces_url}/{self.workspace}" +
-                    f"/datastores/{store_name}/featuretypes",
+                f"{config.geoserver_workspaces_url}/{self.workspace}"
+                + f"/datastores/{store_name}/featuretypes",
                 auth=(config.geoserver_admin_user, config.geoserver_admin_password),
                 data=f"<featureType><name>{layer_name}</name></featureType>",
                 headers={"Content-type": "text/xml"},
-                timeout=config.GEOSERVER_TIMEOUT,
+                timeout=config.geoserver_timeout,
             )
 
             if not response or not response.ok:
@@ -93,7 +93,7 @@ class Geoserver:
                     "Could not publish layer %s from store %s. Reason: %s",
                     layer_name,
                     store_name,
-                    response
+                    response,
                 )
 
         except Exception as e:
@@ -128,7 +128,7 @@ class Geoserver:
             auth=(config.geoserver_admin_user, config.geoserver_admin_password),
             data=xml_body,
             headers={"Content-type": "application/xml"},
-            timeout=config.GEOSERVER_TIMEOUT,
+            timeout=config.geoserver_timeout,
         )
 
         if not response or not response.ok:
