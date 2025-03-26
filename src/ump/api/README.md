@@ -96,7 +96,7 @@ psql -U <username> -d <db_name>
 | `PYGEOAPI_SERVER_PORT`           | `5000`                         | Port for the PyGeoAPI server. |
 | `PYGEOAPI_SERVER_PORT_CONTAINER` | `5005`                         | Internal container port for PyGeoAPI. |
 | `DOCKER_NETWORK`                 | `dev`                          | Name of the Docker network. |
-| `CONTAINER_REGISTRY`             | `lgvudh.azurecr.io`            | URL of the container registry. |
+| `CONTAINER_REGISTRY`             | `xyz.azurecr.io`               | URL of the container registry. |
 | `CONTAINER_NAMESPACE`            | `analytics`                    | Namespace for the container image. |
 | `IMAGE_NAME`                     | `urban-model-platform`         | Name of the Docker image. |
 | `IMAGE_TAG`                      | `1.1.0`                        | Tag for the Docker image version. |
