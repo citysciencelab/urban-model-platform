@@ -5,6 +5,7 @@ networks:
 
 volumes:
   postgres_data:
+  kc-db_data:
 
 services:
   api:
@@ -20,41 +21,36 @@ services:
       FLASK_DEBUG: ${FLASK_DEBUG}
       PROVIDERS_FILE: /home/pythonuser/providers.yaml
       CORS_URL_REGEX: ${CORS_URL_REGEX}
-      KEYCLOAK_USER: ${KEYCLOAK_USER}
-      KEYCLOAK_PASSWORD: ${KEYCLOAK_PASSWORD}
-      KEYCLOAK_HOST: ${KEYCLOAK_HOST}
-      KEYCLOAK_PROTOCOL: ${KEYCLOAK_PROTOCOL}
-      KEYCLOAK_PORT_EXTERNAL: ${KEYCLOAK_PORT_EXTERNAL}
-      KEYCLOAK_PORT_INTERNAL: ${KEYCLOAK_PORT_INTERNAL}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      PGDATA: ${PGDATA}
-      POSTGRES_HOST: ${POSTGRES_HOST}
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: admin
+      KEYCLOAK_HOST: keycloak
+      KEYCLOAK_PROTOCOL: http
+      POSTGRES_DB: ump
+      POSTGRES_USER: ump
+      POSTGRES_PASSWORD: ump
+      POSTGRES_HOST: api-db
       POSTGRES_PORT: 5432
     volumes:
       - ./providers.yaml:/home/pythonuser/providers.yaml
     networks:
       - dev
 
-  postgis:
+  api-db:
     image: postgis/postgis:14-3.3
     volumes:
-      - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
+      # - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
       - postgres_data:/var/lib/postgresql/data/
     environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ump
+      POSTGRES_USER: ump
+      POSTGRES_PASSWORD: ump
     ports:
-      - ${POSTGRES_PORT}:5432
+      - ${POSTGRES_PORT_EXTERNAL}:5432
     networks:
       - dev
 
   geoserver:
     image: kartoza/geoserver:2.22.0
-    depends_on:
-      - postgis
     ports:
       - ${GEOSERVER_PORT_EXTERNAL}:8080
     volumes:
@@ -83,7 +79,6 @@ services:
       - dev
       
   keycloak:
-    container_name: ump-keycloak
     image: quay.io/keycloak/keycloak:25.0
     ports: 
       - ${KEYCLOAK_PORT_EXTERNAL}:8080
@@ -91,16 +86,27 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_USER}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
       KC_DB: postgres
-      KC_DB_URL_HOST: postgis
+      KC_DB_URL_HOST: kc-db
       KC_DB_URL_PORT: 5432
       KC_DB_URL_DATABASE: keycloak
-      KC_DB_USERNAME: ${POSTGRES_USER}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KC_HOSTNAME: ${KC_KEYCLOAK_HOST}
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_HOSTNAME: ${KC_HOSTNAME}
       KC_HOSTNAME_PATH: /auth
       KC_HTTP_RELATIVE_PATH: /auth
-    depends_on:
-      - postgis
     command: ['start', '--proxy-headers', 'xforwarded', '--http-enabled', 'true']
+    networks:
+      - dev
+
+  kc-db:
+    image: postgis/postgis:14-3.3
+    volumes:
+      - kc-db_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    ports:
+      - ${POSTGRES_PORT_EXTERNAL}:5432
     networks:
       - dev
