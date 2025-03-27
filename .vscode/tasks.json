@@ -39,6 +39,9 @@
                 "FLASK_ENV": "development"
             }
         },
+        "dependsOn": [
+            "start-postgis-container"
+        ],
     },{
         "label": "setup-environment",
         "dependsOn": [
