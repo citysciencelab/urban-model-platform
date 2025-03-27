@@ -1,4 +1,5 @@
 """Extracts env variables"""
+
 import os
 
 PROVIDERS_FILE = os.environ.get("PROVIDERS_FILE", "providers.yaml")
@@ -24,8 +25,10 @@ geoserver_workspaces_url = f"{geoserver_rest_url}/workspaces"
 geoserver_workspace = os.environ.get("GEOSERVER_WORKSPACE", "CUT")
 geoserver_admin_user = os.environ.get("GEOSERVER_ADMIN_USER", "admin")
 geoserver_admin_password = os.environ.get("GEOSERVER_ADMIN_PASSWORD", "geoserver")
-GEOSERVER_TIMEOUT = 60
-CLEANUP_AGE = 4 * 60 # configure minutes, after which jobs and layers of anonymous users are deleted
+geoserver_timeout = os.environ.get("GEOSERVER_TIMEOUT", 60)
+cleanup_age = os.environ.get(
+    "CLEANUP_AGE", 240
+)  # configure minutes, after which jobs and layers of anonymous users are deleted
 
 # KEYCLOAK
 keycloak_protocol = os.environ.get("KEYCLOAK_PROTOCOL", "http")

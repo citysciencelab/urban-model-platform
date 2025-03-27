@@ -79,6 +79,7 @@ services:
     networks:
       - dev
 
+# ToDo: Refactor Model Server with public image to deploy
   modelserver:
     image: lgvudh.azurecr.io/analytics/example_ogcapi_processes:main
     env_file:
