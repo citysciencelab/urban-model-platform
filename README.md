@@ -1,10 +1,12 @@
-![ump_csl](https://github.com/citysciencelab/urban-model-platform/assets/61881523/1038090d-6c33-4d90-80cc-b1481d51a5a7)
+
+![UMP-Banner](https://github.com/user-attachments/assets/f70d498a-ef6d-4a3a-9e1e-429da130c65d)
 
 
 # Urban Model Platform
 The Urban Model Platform is an Open Urban Platform to distribute and access (simulation) models for Urban Digital Twins. It builds on the [OGC API Processes](https://docs.ogc.org/is/18-062r2/18-062r2.html) open standard and was developed by the City Science Lab at HafenCity University Hamburg and the Agency for Geoinformation and Suveying in the context of the [Connected Urban Twins](https://www.connectedurbantwins.de/) project.
 
-The repository contains a Python implementation of the OGC API Processes standard that can be used as a "system of systems" open platform. In the context of digital urban twins, such a platform can provide the infrastructure to integrate and combine domain-specific models ranging from simple regression models to advanced simulation and AI models. Instead of executing jobs and processes on the server itself, the Urban Model Platform is configured with multiple **providers** or model servers.
+The repository contains a Python implementation of the OGC API Processes standard that can be used as a "system of systems" open platform. In the context of digital urban twins, such a platform can provide the infrastructure to integrate and combine domain-specific models ranging from simple regression models to advanced simulation and AI models. Instead of executing jobs and processes on the server itself, the Urban Model Platform is configured with multiple providers or model servers.
+
 This architecture is independent of any frontend application. One could use e.g. the [Scenario Explorer](https://github.com/citysciencelab/scenario-explorer-addon) as a client frontend, but due to the standardized API, mutliple frontends are possible.
 
 
