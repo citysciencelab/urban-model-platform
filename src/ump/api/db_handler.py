@@ -43,13 +43,13 @@ def close_pool():
         try:
             connection_pool.closeall()
             connection_pool = None  # Mark the pool as closed
+            logger.info("Connection pool closed.")
         except psycopg2.pool.PoolError as e:
             logger.warning("Connection pool is already closed: %s", e)
 
 class DBHandler():
     def __init__(self):
-        self.connection = None
-        self.sortable_columns = []
+        self.connection = connection_pool.getconn()
 
     def set_sortable_columns(self, sortable_columns):
         self.sortable_columns = sortable_columns
@@ -101,13 +101,11 @@ class DBHandler():
 
     # needed so that this class can be used as a context manager
     def __enter__(self):
-        self.connection = connection_pool.getconn()
         return self
 
     def __exit__(self, exc_type, value, traceback):
         if self.connection:
             connection_pool.putconn(self.connection)
-            self.connection = None
 
         if exc_type is None and value is None and traceback is None:
             return True
