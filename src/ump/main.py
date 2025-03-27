@@ -1,8 +1,8 @@
+import atexit
 import json
 import os
 from datetime import datetime, timedelta
 from logging.config import dictConfig
-from os import environ as env
 
 import requests
 import schedule
@@ -175,9 +175,10 @@ def handle_http_exception(error):
     response.content_type = "application/json"
     return response
 
-@app.teardown_appcontext
-def shutdown_pool(exception=None):
-    """Close the connection pool on application shutdown."""
+
+@atexit.register
+def shutdown_pool_on_exit():
+    """Close the connection pool when the application shuts down."""
     close_pool()
 
 if __name__ == "__main__":
