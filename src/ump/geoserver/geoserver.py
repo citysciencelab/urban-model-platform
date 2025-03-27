@@ -5,7 +5,8 @@ import shutil
 import geopandas as gpd
 import requests
 from psycopg2.sql import Identifier
-from sqlalchemy import create_engine
+
+from ump.api.db_handler import db_engine as engine
 
 from ump import config
 from ump.errors import GeoserverException
@@ -141,11 +142,8 @@ class Geoserver:
         return response.ok
 
     def geojson_to_postgis(self, table_name: str, data: dict):
-        engine = create_engine(
-            f"postgresql://{config.postgres_user}:{config.postgres_password}"
-            + f"@{config.postgres_host}/{config.postgres_db}"
-        )
-        gdf = gpd.GeoDataFrame.from_features(data["features"], crs="EPSG:4326")
+
+        gdf = gpd.GeoDataFrame.from_features(data["features"], crs = 'EPSG:4326')
         table = Identifier(table_name)
         gdf.to_postgis(name=table.string, con=engine)
 

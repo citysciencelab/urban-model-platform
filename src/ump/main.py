@@ -1,8 +1,8 @@
+import atexit
 import json
 import os
 from datetime import datetime, timedelta
 from logging.config import dictConfig
-from os import environ as env
 
 import requests
 import schedule
@@ -12,11 +12,11 @@ from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from keycloak import KeycloakOpenID
-from sqlalchemy import create_engine
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ump import config
+from ump.api.db_handler import DBHandler, close_pool
 from ump.api.providers import PROVIDERS
 from ump.api.routes.ensembles import ensembles
 from ump.api.routes.health import health_bp
@@ -60,14 +60,11 @@ dictConfig(
 
 def cleanup():
     """Cleans up jobs and Geoserver layers of anonymous users"""
-    engine = create_engine(
-        f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"
-        + f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
-    )
     sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id, provider_prefix, process_id"
-    finished = datetime.now() - timedelta(minutes=cleanup_age)
-    with engine.begin() as conn:
-        result = conn.exec_driver_sql(sql, {"finished": finished})
+    finished = datetime.now() - timedelta(minutes = cleanup_age)
+    
+    with DBHandler() as conn:
+        result = conn.run_query(sql, query_params={'finished': finished})
         for row in result:
             # get additional job metadata
             job_id, provider_prefix, process_id = row
@@ -178,6 +175,11 @@ def handle_http_exception(error):
     response.content_type = "application/json"
     return response
 
+
+@atexit.register
+def shutdown_pool_on_exit():
+    """Close the connection pool when the application shuts down."""
+    close_pool()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0")
