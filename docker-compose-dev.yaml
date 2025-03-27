@@ -41,9 +41,6 @@ services:
       - ./providers.yaml:/home/pythonuser/providers.yaml
     networks:
       - dev
-    depends_on:
-      - keycloak
-      - postgis
 
   api-db:
     image: postgis/postgis:14-3.3
