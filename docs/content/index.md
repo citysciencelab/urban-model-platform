@@ -16,7 +16,7 @@ It is a key building block to provide simulation models and other algorithms in 
 
 
 ## Key Features
-- Access point to 
+- Access point to multiple model servers 🌐
 - Build with the open OGC API Processes standard 🚀
 - Dynamic configuration ⚙️
 - Authorization and authentification 🔐

@@ -6,42 +6,39 @@ root: content/index.md
 parts:
   - caption: Getting Started
     chapters:
-      - file: content/intro/01-intro.md
-      - file: content/intro/02-quick_start.md
-      - file: content/intro/03-contributing.md
-      - file: content/intro/04-changelog.md
+      - file: content/01-intro/01-intro.md
+      - file: content/01-intro/02-quick_start.md
+      - title: Contributing
+        file: content/01-intro/03-contributing.md
+      - title: Changelog
+        file: content/01-intro/04-changelog.md
+      - file: content/01-intro/05-authors.md
       
   - caption: User Guide
     chapters:
-      - file: content/user_guide/deployment overview.md
-      - file: content/user_guide/configuration_options.md
-      - file: content/user_guide/setup_docker_compose.md
+      - file: content/02-user_guide/deployment overview.md
+      - file: content/02-user_guide/configuration_options.md
+      - file: content/02-user_guide/setup_docker_compose.md
         # sections:
         # - file: start/overview
-  
-  - caption: About
-    chapters:
-      # - file: start/your-first-book
-      # sections:
-      - file: content/about/project_description.md
-      - file: content/about/authors.md
+
 
   - caption: Architecture
     chapters:
-      - file: content/architecture/overview.md
-      - file: content/architecture/api.md
-      - file: content/architecture/keycloak.md
-      - file: content/architecture/geoserver.md
+      - file: content/03-architecture/overview.md
+      - file: content/03-architecture/api.md
+      - file: content/03-architecture/keycloak.md
+      - file: content/03-architecture/geoserver.md
         # sections:
         # - file: start/overview
 
   - caption: Developing
     chapters:
       - title: Setup development environment
-        file: content/developers/dev_environment_setup.md
+        file: content/04-developers/dev_environment_setup.md
 
       - title: Some useful commands.md
-        file: content/developers/useful_commands.md
+        file: content/04-developers/useful_commands.md
 
       - title: API reference
         file: autoapi/index # this directory is virtual!

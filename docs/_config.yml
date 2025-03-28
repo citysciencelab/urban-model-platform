@@ -3,7 +3,7 @@
 
 # Add a bibtex file so that we can create citations
 bibtex_bibfiles:
-  - references.bib
+  - ./references.bib
 
 #######################################################################################
 # Book settings
@@ -109,6 +109,7 @@ sphinx:
       - "show-module-summary"
       - "special-members"
       # - imported-members'
+    bibtex_reference_style: author_year
 
     autoyaml_root: ../ # Look for YAML files relatively to this directory.
     autoyaml_doc_delimiter: "###" # (###) Character(s) which start a documentation comment.
