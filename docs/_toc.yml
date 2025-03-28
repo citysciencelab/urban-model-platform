@@ -4,6 +4,13 @@
 format: jb-book
 root: content/index.md
 parts:
+  - caption: Getting Started
+    chapters:
+      - file: content/intro/01-intro.md
+      - file: content/intro/02-quick_start.md
+      - file: content/intro/03-contributing.md
+      - file: content/intro/04-changelog.md
+      
   - caption: User Guide
     chapters:
       - file: content/user_guide/deployment overview.md
@@ -22,7 +29,9 @@ parts:
   - caption: Architecture
     chapters:
       - file: content/architecture/overview.md
-      - file: content/architecture/technical_components.md
+      - file: content/architecture/api.md
+      - file: content/architecture/keycloak.md
+      - file: content/architecture/geoserver.md
         # sections:
         # - file: start/overview
 
