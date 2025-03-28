@@ -1,3 +1,5 @@
+
+
 # Documentation Urban Model Platform
 
 <!-- This is a small sample book to give you a feel for how book content is
@@ -31,6 +33,10 @@ To get started with the Urban Model Platform, follow these steps:
 3. Set up a local development environment by following the [Development Setup](./developers/dev_environment_setup.md) instructions.
 4. Contribute to the project by following our [Contributing Guidelines](./intro/03-contributing.md).
 
+
+## Developers
+The Urban Model Platform is developed collaboratively by:
+![UMP-Developer-Banner](https://github.com/user-attachments/assets/18f4826f-e828-4206-920a-9d1e248523e5)
 
 
 
