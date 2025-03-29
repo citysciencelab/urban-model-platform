@@ -1,10 +1,3 @@
 # Deployment
 
-Describe the necessary steps (for your service provider) to deploy the your application.
-This involves:
-* Pulling the image
-* configuring the runtime
-* Updatting to a new version
-* ...
-
-TODO:
+There is a docker-compose file for production deployment in `docker-compose-prod.yaml`. This file is used to deploy the application in a production environment. It includes configurations for the backend API, PostgreSQL database, and Geoserver.

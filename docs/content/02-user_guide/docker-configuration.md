@@ -1,4 +1,4 @@
-(docker-configuration)=
+(dockerconfiguration)=
 # Configuration of the Docker Environment
 
 
