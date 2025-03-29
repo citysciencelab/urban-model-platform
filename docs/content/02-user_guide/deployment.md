@@ -1,4 +1,4 @@
-# Deployment overview
+# Deployment
 
 Describe the necessary steps (for your service provider) to deploy the your application.
 This involves:

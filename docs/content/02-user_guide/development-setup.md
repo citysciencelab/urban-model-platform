@@ -1,5 +1,12 @@
+(dev-setup)=
+# Development Setup
 
-## Dev environment setup
+This User Guide section provides a step-by-step guide to set up the Urban Model Platform for development.
+
+
+```{seealso}
+The [Quickstart Section](quickstart) provides a step-by-step guide to get started with the Urban Model Platform.
+```
 
 ### Initial setup
 You only need two tools, [Poetry](https://github.com/python-poetry/poetry)

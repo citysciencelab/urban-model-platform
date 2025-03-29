@@ -14,6 +14,7 @@ The Urban Model Platform is an Open Urban Platform to distribute and access (sim
 
 It is a key building block to provide simulation models and other algorithms in urban digital twins. By providing a single access point to multiple servers that run the algorithms, the Urban Model Platform is a novel middleware that can serve various front-end digital twin applications. 
 
+![Architecture Overview](../Architecture-Overview.png)
 
 ## Key Features
 - Access point to multiple model servers 🌐
@@ -30,8 +31,8 @@ To get started with the Urban Model Platform, follow these steps:
 
 1. Check out our [Quickstart Guide](quickstart) to get familiar
 2. Learn about the [Platform Architecture](architecture-overview) to understand its components and workflows.
-3. Set up a local development environment by following the [Development Setup](./developers/dev_environment_setup.md) instructions.
-4. Contribute to the project by following our [Contributing Guidelines](./intro/03-contributing.md).
+3. Set up a local development environment by following the [Development Setup](dev-setup) instructions.
+4. Contribute to the project by following our [Contributing Guidelines](contributing).
 
 
 ## Developers
