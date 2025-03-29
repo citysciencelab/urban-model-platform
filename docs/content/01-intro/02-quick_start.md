@@ -1,3 +1,4 @@
+(quickstart)=
 # Quick Start
 
 This section provides a quick start guide to get you up and running with the Urban Model Platform. It covers the basic steps to set up your development environment, run the application, and test it.
@@ -41,7 +42,7 @@ Once the application is running, you can access it at the following URLs:
 
 
 ## Configuring Providers
-Providers of processes and model servers are defined in the [`providers.yaml`](../../providers.yaml) file. This file contains the configuration for connecting to external model servers and processes. Each provider entry specifies the necessary details, such as the server URL, authentication credentials, and process identifiers. Find more information about the providers in the [providers documentation](../03-architecture/providers.md).
+Providers of processes and model servers are defined in the [`providers.yaml`](../../providers.yaml) file. This file contains the configuration for connecting to external model servers and processes. Each provider entry specifies the necessary details, such as the server URL, authentication credentials, and process identifiers. Find more information about the providers in the [providers documentation](providers).
 
 ```{note}
 The `providers.yaml` file is essential for the Urban Model Platform to interact with external model servers and processes. Make sure to configure it correctly to ensure seamless integration.

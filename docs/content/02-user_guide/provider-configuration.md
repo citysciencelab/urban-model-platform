@@ -1,5 +1,7 @@
+(providers)=
 # Configuring Providers
 As the Urban Model Platform does not provide any processes by itself, it needs to be connected to external model servers. This is done by configuring providers in the `providers.yaml` file. The following example shows how to configure a model server and its processes:
+
 
 ```code
 # providers.yaml

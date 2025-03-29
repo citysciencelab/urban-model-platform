@@ -16,8 +16,9 @@ parts:
       
   - caption: User Guide
     chapters:
+      - file: content/02-user_guide/docker-configuration.md
+      - file: content/02-user_guide/provider-configuration.md
       - file: content/02-user_guide/deployment overview.md
-      - file: content/02-user_guide/configuration_options.md
       - file: content/02-user_guide/setup_docker_compose.md
         # sections:
         # - file: start/overview
@@ -26,7 +27,6 @@ parts:
   - caption: Architecture
     chapters:
       - file: content/03-architecture/overview.md
-      - file: content/03-architecture/providers.md
       - file: content/03-architecture/api.md
       - file: content/03-architecture/keycloak.md
       - file: content/03-architecture/geoserver.md

@@ -1,6 +1,10 @@
+(Keycloak)=
 # Keycloak
 
  Keycloak is an open-source Identity and Access Management (IAM) solution that provides user authentication, authorization, and single sign-on capabilities. It enables secure access to applications and services by managing user identities and permissions. In the Urban Model Platform, Keycloak serves as the central authentication server, handling access control across components.
+
+## Securing Model Servers and Processes
+ You can secure processes and model servers in keycloak by adding users to special client roles. In order to secure a specific process, create a role named `modelserver_processid`, in order to secure all processes of a model server just create a role named `modelserver`. The ids correspond to the keys used in the providers.yaml.
 
 # Configure keycloak
 
