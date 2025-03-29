@@ -1,5 +1,3 @@
-```{include} ../../../CONTRIBUTING.md
-```
 
 ## Dev environment setup
 

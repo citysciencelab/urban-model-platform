@@ -26,6 +26,7 @@ parts:
   - caption: Architecture
     chapters:
       - file: content/03-architecture/overview.md
+      - file: content/03-architecture/providers.md
       - file: content/03-architecture/api.md
       - file: content/03-architecture/keycloak.md
       - file: content/03-architecture/geoserver.md
