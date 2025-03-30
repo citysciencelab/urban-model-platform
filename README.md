@@ -10,7 +10,21 @@ The repository contains a Python implementation of the OGC API Processes standar
 This architecture is independent of any frontend application. One could use e.g. the [Scenario Explorer](https://github.com/citysciencelab/scenario-explorer-addon) as a client frontend, but due to the standardized API, mutliple frontends are possible.
 
 
+## Documentation
+
+➡️📑 Check out the full **documentation** [here](https://citysciencelab.github.io/urban-model-platform/)
+
+➡️🧑‍💻 Check out how to [Contribute](CONTRIBUTING.md)
+
+➡️🗓️ Find the latest [Changes](CHANGELOG.md)
+
+
+
 ## Application architecture and dependency diagram
+
+<img width="1311" alt="Architecture-Overview" src="https://github.com/user-attachments/assets/a16d1110-939c-4ef6-9785-5c16422bec53" />
+
+
 
 ```mermaid
 flowchart TB
@@ -70,4 +84,9 @@ flowchart TB
         end
     end
 ```
+_________
+
+The Urban Model Platform was developed in the context of the "Connected Urban Twins" Project and was funded by the KfW and the Federal Ministry for Housing and Urban Development 
+
+![UMP-Sponsors-Banner](https://github.com/user-attachments/assets/cdc8c433-8c19-474d-b10f-383a11d74617)
 
