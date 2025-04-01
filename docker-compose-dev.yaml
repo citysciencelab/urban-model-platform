@@ -36,7 +36,6 @@ services:
       GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
       GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
       CLEANUP_AGE: ${CLEANUP_AGE}
-
     volumes:
       - ./providers.yaml:/home/pythonuser/providers.yaml
     networks:
@@ -101,8 +100,8 @@ services:
     ports: 
       - ${KEYCLOAK_PORT_EXTERNAL}:8080
     environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_USER}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
       KC_DB: postgres
       KC_DB_URL_HOST: kc-db
       KC_DB_URL_PORT: 5432
