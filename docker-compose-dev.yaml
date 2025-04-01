@@ -74,13 +74,19 @@ services:
       - dev
 
   modelserver:
-    image: lgvudh.azurecr.io/analytics/example_ogcapi_processes:main
-    env_file:
-    - path: .env
-      required: true # default
-    volumes:
-      - ./modelserver_example/pygeoapi-config.yml:/home/pythonuser/pygeoapi-config.yaml
-      - ./modelserver_example/example-openapi.yml:/home/pythonuser/pygeoapi-openapi.yaml
+    image: ${CONTAINER_REGISTRY}/${IMAGE_NAME}/example_ogcapi_processes:main
+    build:
+      context: ./modelserver_example
+      dockerfile: Dockerfile
+    environment:
+      PYGEOAPI_CONFIG: /home/pythonuser/pygeoapi-config.yaml
+      PYGEOAPI_OPENAPI: /home/pythonuser/pygeoapi-openapi.yaml
+      PYGEOAPI_SERVER_HOST: localhost
+      PYGEOAPI_SERVER_PORT_INTERNAL: 5000
+      PYGEOAPI_SERVER_PORT_EXTERNAL: 5005
+    # volumes:
+    #   - ./modelserver_example/pygeoapi-config.yml:/home/pythonuser/pygeoapi-config.yaml
+    #   - ./modelserver_example/example-openapi.yml:/home/pythonuser/pygeoapi-openapi.yaml
     ports:
       - ${PYGEOAPI_SERVER_PORT_EXTERNAL}:${PYGEOAPI_SERVER_PORT_INTERNAL}
     command: [
@@ -103,7 +109,7 @@ services:
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak
-      KC_HOSTNAME: ${KC_HOSTNAME}
+      KC_HOSTNAME: localhost
       KC_HOSTNAME_PATH: /auth
       KC_HTTP_RELATIVE_PATH: /auth
     command: ['start', '--proxy-headers', 'xforwarded', '--http-enabled', 'true']
@@ -118,7 +124,7 @@ services:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: keycloak
-    ports:
-      - ${POSTGRES_PORT_EXTERNAL}:5432
+    expose:
+      - 5432
     networks:
       - dev
