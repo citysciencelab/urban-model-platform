@@ -101,7 +101,7 @@ def cleanup():
 # cleanup is a different task and should NOT be part of
 # the main app, instead it should be outsourced to a module and should be optionally
 # I suggest to use celery and redis for this task
-
+# also it does not work, cleanup is called when the routes are accessed, not on a regular basis
 schedule.every(int(config.cleanup_age)).seconds.do(cleanup)
 
 app = APIFlask(__name__)
