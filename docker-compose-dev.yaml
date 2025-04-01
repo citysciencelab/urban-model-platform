@@ -1,3 +1,4 @@
+# !NOTE: This is NOT a prodiuction ready docker-compose file. It is meant for development purposes only.
 networks:
   dev:
     external: true
