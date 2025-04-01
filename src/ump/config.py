@@ -1,5 +1,5 @@
 """Extracts env variables"""
-
+#TODO : add a config class to handle the configuration and type casting
 import os
 
 PROVIDERS_FILE = os.environ.get("PROVIDERS_FILE", "providers.yaml")
@@ -26,9 +26,9 @@ geoserver_workspace = os.environ.get("GEOSERVER_WORKSPACE", "CUT")
 geoserver_admin_user = os.environ.get("GEOSERVER_ADMIN_USER", "admin")
 geoserver_admin_password = os.environ.get("GEOSERVER_ADMIN_PASSWORD", "geoserver")
 geoserver_timeout = os.environ.get("GEOSERVER_TIMEOUT", 60)
-cleanup_age = os.environ.get(
+cleanup_age = int(os.environ.get(
     "CLEANUP_AGE", 240
-)  # configure minutes, after which jobs and layers of anonymous users are deleted
+))  # configure minutes, after which jobs and layers of anonymous users are deleted
 
 # KEYCLOAK
 keycloak_protocol = os.environ.get("KEYCLOAK_PROTOCOL", "http")
