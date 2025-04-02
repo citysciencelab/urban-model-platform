@@ -23,7 +23,7 @@ services:
       CORS_URL_REGEX: ${CORS_URL_REGEX}
       KEYCLOAK_USER: admin
       KEYCLOAK_PASSWORD: admin
-      KEYCLOAK_HOST: keycloak
+      KEYCLOAK_HOST: keycloak:8080
       KEYCLOAK_PROTOCOL: http
       POSTGRES_DB: ump
       POSTGRES_USER: ump
