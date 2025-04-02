@@ -105,6 +105,9 @@ class Geoserver:
             ) from e
 
         return response.ok
+    # TODO: to simplify the dev setup the UMP and geoserver database hosts
+    # can be the same but in production they should be different, at least the database used
+    # also the user should decide if he/she wants to use the same database (host) for ump and geoserver
 
     def create_store(self, store_name: str):
         logging.info(" --> Storing results to geoserver store %s", store_name)
