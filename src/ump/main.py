@@ -23,7 +23,7 @@ from ump.api.routes.health import health_bp
 from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
 from ump.api.routes.users import users
-from ump.config import cleanup_age
+from ump.config import UMP_JOB_DELETE_INTERVAL
 from ump.errors import CustomException
 
 if (
@@ -61,7 +61,7 @@ dictConfig(
 def cleanup():
     """Cleans up jobs and Geoserver layers of anonymous users"""
     sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id, provider_prefix, process_id"
-    finished = datetime.now() - timedelta(minutes = cleanup_age)
+    finished = datetime.now() - timedelta(minutes = UMP_JOB_DELETE_INTERVAL)
     
     with DBHandler() as conn:
         result = conn.run_query(sql, query_params={'finished': finished})
@@ -78,22 +78,22 @@ def cleanup():
             )
             if result_storage == "geoserver":
                 requests.delete(
-                    f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}"
+                    f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{config.UMP_GEOSEVER_WORKSPACE_NAME}"
                     + f"/layers/{job_id}.xml",
-                    auth=(config.geoserver_admin_user, config.geoserver_admin_password),
-                    timeout=config.geoserver_timeout,
+                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
+                    timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
-                    f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}"
+                    f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{config.UMP_GEOSEVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}/featuretypes/{job_id}.xml",
-                    auth=(config.geoserver_admin_user, config.geoserver_admin_password),
-                    timeout=config.geoserver_timeout,
+                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
+                    timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
-                    f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}"
+                    f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{config.UMP_GEOSEVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}.xml",
-                    auth=(config.geoserver_admin_user, config.geoserver_admin_password),
-                    timeout=config.geoserver_timeout,
+                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
+                    timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
 
 
@@ -102,15 +102,15 @@ def cleanup():
 # the main app, instead it should be outsourced to a module and should be optionally
 # I suggest to use celery and redis for this task
 # also it does not work, cleanup is called when the routes are accessed, not on a regular basis
-schedule.every(int(config.cleanup_age)).seconds.do(cleanup)
+schedule.every(int(config.UMP_JOB_DELETE_INTERVAL)).seconds.do(cleanup)
 
 app = APIFlask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", 0)
 app.config["SQLALCHEMY_DATABASE_URI"] = (
-    f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"
-    + f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
+    f"postgresql+psycopg2://{config.UMP_DATABASE_USER}:{config.UMP_DATABASE_PASSWORD}"
+    + f"@{config.UMP_DATABASE_HOST}:{config.UMP_DATABASE_PORT}/{config.UMP_DATABASE_NAME}"
 )
 
 db = SQLAlchemy(app)
@@ -128,9 +128,9 @@ api.register_blueprint(health_bp, url_prefix="/health")
 app.register_blueprint(api)
 
 keycloak_openid = KeycloakOpenID(
-    server_url=f"{config.keycloak_protocol}://{config.keycloak_host}/auth/",
-    client_id=f"{config.keycloak_client}",
-    realm_name=f"{config.keycloak_realm}",
+    server_url=f"{config.UMP_KEYCLOAK_PROTOCOL}://{config.UMP_KEYCLOAK_HOST}/auth/",
+    client_id=f"{config.UMP_KEYCLOAK_CLIENT}",
+    realm_name=f"{config.UMP_KEYCLOAK_REALM}",
 )
 
 

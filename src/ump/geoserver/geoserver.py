@@ -6,9 +6,8 @@ import geopandas as gpd
 import requests
 from psycopg2.sql import Identifier
 
-from ump.api.db_handler import db_engine as engine
-
 from ump import config
+from ump.api.db_handler import db_engine as engine
 from ump.errors import GeoserverException
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "WARNING"))
@@ -18,17 +17,17 @@ class Geoserver:
     RESULTS_FILENAME = "results.geojson"
 
     def __init__(self):
-        self.workspace = config.geoserver_workspace
+        self.workspace = config.UMP_GEOSEVER_WORKSPACE_NAME
         self.errors = []
         self.path_to_results = None
         self.job_id = None
 
     def create_workspace(self):
-        url = f"{config.geoserver_workspaces_url}/{self.workspace}.json?quietOnNotFound=True"
+        url = f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{self.workspace}.json?quietOnNotFound=True"
 
         response = requests.get(
             url,
-            auth=(config.geoserver_admin_user, config.geoserver_admin_password),
+            auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
             headers={"Content-type": "application/json", "Accept": "application/json"},
             timeout=60,
         )
@@ -45,11 +44,11 @@ class Geoserver:
             )
 
         response = requests.post(
-            config.geoserver_workspaces_url,
-            auth=(config.geoserver_admin_user, config.geoserver_admin_password),
+            config.UMP_GEOSERVER_PATH_WORKSPACE,
+            auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
             data=f"<workspace><name>{self.workspace}</name></workspace>",
             headers={"Content-type": "text/xml", "Accept": "*/*"},
-            timeout=config.geoserver_timeout,
+            timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
         )
 
         if response.ok:
@@ -80,12 +79,12 @@ class Geoserver:
     def publish_layer(self, store_name: str, layer_name: str):
         try:
             response = requests.post(
-                f"{config.geoserver_workspaces_url}/{self.workspace}"
+                f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{self.workspace}"
                 + f"/datastores/{store_name}/featuretypes",
-                auth=(config.geoserver_admin_user, config.geoserver_admin_password),
+                auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
                 data=f"<featureType><name>{layer_name}</name></featureType>",
                 headers={"Content-type": "text/xml"},
-                timeout=config.geoserver_timeout,
+                timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
             )
 
             if not response or not response.ok:
@@ -114,21 +113,21 @@ class Geoserver:
     <dataStore>
       <name>{store_name}</name>
       <connectionParameters>
-        <host>{config.geoserver_postgis_host}</host>
-        <port>{config.postgres_port}</port>
-        <database>{config.postgres_db}</database>
-        <user>{config.postgres_user}</user>
-        <passwd>{config.postgres_password}</passwd>
+        <host>{config.UMP_GEOSERVER_DB_HOST}</host>
+        <port>{config.UMP_DATABASE_PORT}</port>
+        <database>{config.UMP_DATABASE_NAME}</database>
+        <user>{config.UMP_DATABASE_USER}</user>
+        <passwd>{config.UMP_DATABASE_PASSWORD}</passwd>
         <dbtype>postgis</dbtype>
       </connectionParameters>
     </dataStore>
     """
         response = requests.post(
-            f"{config.geoserver_workspaces_url}/{self.workspace}/datastores",
-            auth=(config.geoserver_admin_user, config.geoserver_admin_password),
+            f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{self.workspace}/datastores",
+            auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
             data=xml_body,
             headers={"Content-type": "application/xml"},
-            timeout=config.geoserver_timeout,
+            timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
         )
 
         if not response or not response.ok:

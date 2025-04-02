@@ -11,7 +11,7 @@ from ump import config
 PROVIDERS: dict = {}
 
 try:
-    with open(config.PROVIDERS_FILE, encoding="UTF-8") as file:
+    with open(config.UMP_PROVIDERS_FILE, encoding="UTF-8") as file:
         if content := yaml.safe_load(file):
             PROVIDERS.update(content)
 except (FileNotFoundError, yaml.YAMLError) as e:
@@ -20,9 +20,9 @@ except (FileNotFoundError, yaml.YAMLError) as e:
 
 class ProviderLoader(FileSystemEventHandler):
     def on_modified(self, event):
-        if event.src_path == config.PROVIDERS_FILE:
+        if event.src_path == config.UMP_PROVIDERS_FILE:
             try:
-                with open(config.PROVIDERS_FILE, encoding="UTF-8") as to_reload:
+                with open(config.UMP_PROVIDERS_FILE, encoding="UTF-8") as to_reload:
                     if new_content := yaml.safe_load(to_reload):
                         logging.info("Reloading providers.yaml.")
                         PROVIDERS.update(new_content)
@@ -32,7 +32,7 @@ class ProviderLoader(FileSystemEventHandler):
 
 observer = PollingObserver()
 observer.schedule(
-    ProviderLoader(), os.path.dirname(config.PROVIDERS_FILE), recursive=False
+    ProviderLoader(), os.path.dirname(config.UMP_PROVIDERS_FILE), recursive=False
 )
 observer.start()
 
