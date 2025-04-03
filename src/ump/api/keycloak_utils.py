@@ -1,7 +1,5 @@
 """Keycloak helper functions"""
 
-from os import environ as env
-
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 
 from ump.config import app_settings as config
