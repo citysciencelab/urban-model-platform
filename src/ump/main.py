@@ -22,10 +22,8 @@ from ump.api.routes.health import health_bp
 from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
 from ump.api.routes.users import users
-from ump.config import UMP_JOB_DELETE_INTERVAL
 from ump.config import app_settings as config
 from ump.errors import CustomException
-
 
 dictConfig(
     {
@@ -42,7 +40,10 @@ dictConfig(
                 "formatter": "default",
             }
         },
-        "root": {"level": os.environ.get("LOGLEVEL", "WARNING"), "handlers": ["wsgi"]},
+        "root": {
+            "level": config.UMP_LOG_LEVEL,
+            "handlers": ["wsgi"]
+        },
     }
 )
 
@@ -50,7 +51,7 @@ dictConfig(
 def cleanup():
     """Cleans up jobs and Geoserver layers of anonymous users"""
     sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id, provider_prefix, process_id"
-    finished = datetime.now() - timedelta(minutes = UMP_JOB_DELETE_INTERVAL)
+    finished = datetime.now() - timedelta(minutes = config.UMP_JOB_DELETE_INTERVAL)
     
     with DBHandler() as conn:
         result = conn.run_query(sql, query_params={'finished': finished})
@@ -67,19 +68,19 @@ def cleanup():
             )
             if result_storage == "geoserver":
                 requests.delete(
-                    f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{config.UMP_GEOSEVER_WORKSPACE_NAME}"
+                    f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/layers/{job_id}.xml",
                     auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
-                    f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{config.UMP_GEOSEVER_WORKSPACE_NAME}"
+                    f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}/featuretypes/{job_id}.xml",
                     auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
-                    f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{config.UMP_GEOSEVER_WORKSPACE_NAME}"
+                    f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}.xml",
                     auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
