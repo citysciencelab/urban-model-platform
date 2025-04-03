@@ -34,7 +34,7 @@ services:
       UMP_GEOSERVER_WORKSPACE_NAME: ${UMP_GEOSERVER_WORKSPACE_NAME} # !using the same as for the local app
       UMP_GEOSERVER_USER: admin
       UMP_GEOSERVER_PASSWORD: geoserver
-      UMP_GEOSERVER_URL: ${GEOSERVER_BASE_URL}
+      UMP_GEOSERVER_URL: http://geoserver:8080/geoserver
       #---
       # using the same db as for the api, to ease dev setup
       # for production usage consider dedicated databases!
