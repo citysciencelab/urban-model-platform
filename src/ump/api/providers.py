@@ -1,5 +1,5 @@
 import logging
-import os
+from pathlib import Path
 
 import aiohttp
 import yaml
@@ -32,7 +32,9 @@ class ProviderLoader(FileSystemEventHandler):
 
 observer = PollingObserver()
 observer.schedule(
-    ProviderLoader(), os.path.dirname(config.UMP_PROVIDERS_FILE), recursive=False
+    ProviderLoader(),
+    Path(config.UMP_PROVIDERS_FILE).absolute().as_posix(),
+    recursive=False
 )
 observer.start()
 
