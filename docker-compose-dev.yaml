@@ -19,28 +19,33 @@ services:
     ports:
       - ${WEBAPP_PORT_EXTERNAL}:5000
     environment:
-      API_SERVER_URL: ${API_SERVER_URL}
-      NUMBER_OF_WORKERS: ${NUMBER_OF_WORKERS}
-      LOGLEVEL: ${LOGLEVEL}
-      FLASK_DEBUG: ${FLASK_DEBUG}
-      PROVIDERS_FILE: /home/pythonuser/providers.yaml
-      CORS_URL_REGEX: ${CORS_URL_REGEX}
-      KEYCLOAK_USER: admin
-      KEYCLOAK_PASSWORD: admin
-      KEYCLOAK_HOST: keycloak:8080
-      KEYCLOAK_PROTOCOL: http
-      POSTGRES_DB: ump
-      POSTGRES_USER: ump
-      POSTGRES_PASSWORD: ump
-      POSTGRES_HOST: api-db
-      POSTGRES_PORT: 5432
-      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
-      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
-      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
-      GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
-      GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
-      GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
-      CLEANUP_AGE: ${CLEANUP_AGE}
+      UMP_API_SERVER_URL: localhost:${WEBAPP_PORT_EXTERNAL}
+      UMP_API_SERVER_WORKERS: 1
+      UMP_LOG_LEVEL: DEBUG
+      UMP_PROVIDERS_FILE: /home/pythonuser/providers.yaml
+      UMP_KEYCLOAK_USER: admin
+      UMP_KEYCLOAK_PASSWORD: admin
+      UMP_KEYCLOAK_URL: http://keycloak:8080
+      UMP_DATABASE_NAME: ump
+      UMP_DATABASE_USER: ump
+      UMP_DATABAE_PASSWORD: ump
+      UMP_DATABASE_HOST: api-db
+      UMP_DATABASE_PORT: 5432
+      UMP_GEOSERVER_WORKSPACE_NAME: ${UMP_GEOSERVER_WORKSPACE_NAME} # !using the same as for the local app
+      UMP_GEOSERVER_USER: admin
+      UMP_GEOSERVER_PASSWORD: geoserver
+      UMP_GEOSERVER_URL: ${GEOSERVER_BASE_URL}
+      #---
+      # using the same db as for the api, to ease dev setup
+      # for production usage consider dedicated databases!
+      UMP_GEOSERVER_DB_PORT: 5432
+      UMP_GEOSERVER_DB_NAME: ump
+      UMP_GEOSERVER_DB_USER: ump
+      UMP_GEOSERVER_DB_PASSWORD: ump
+      UMP_GEOSERVER_DB_HOST: api-db
+      #---
+      UMP_GEOSERVER_CONNECTION_TIMEOUT: 60 # seconds
+      UMP_JOB_DELETE_INTERVAL: 240 # minutes
     volumes:
       - ./providers.yaml:/home/pythonuser/providers.yaml
     networks:
@@ -59,7 +64,7 @@ services:
       POSTGRES_USER: ump
       POSTGRES_PASSWORD: ump
     ports:
-      - ${POSTGRES_PORT_EXTERNAL}:5432
+      - ${API_DB_PORT_EXTERNAL}:5432
     networks:
       - dev
 
@@ -74,10 +79,14 @@ services:
     environment:
       GEOSERVER_ADMIN_USER: admin
       GEOSERVER_ADMIN_PASSWORD: geoserver
+      #---
+      # using the same db as for the api, to ease dev setup
+      # for production usage consider dedicated databases!
       HOST: api-db
       POSTGRES_DB: ump
       POSTGRES_USER: ump
       POSTGRES_PASS: ump
+      #---
     networks:
       - dev
 
