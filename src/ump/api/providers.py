@@ -1,3 +1,7 @@
+# TODO: currently false in providers.yaml evaluates to boolean True,
+# the user is forced to use explicitly False to evaluate to boolean False
+# this is not user friendly, instead it should be more error tolerant
+
 import logging
 from pathlib import Path
 
