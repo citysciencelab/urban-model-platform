@@ -1,6 +1,6 @@
 import logging
 
-from pydantic import FilePath, HttpUrl, SecretStr, computed_field
+from pydantic import FilePath, HttpUrl, SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings
 from rich import print
 
@@ -52,6 +52,12 @@ class UmpSettings(BaseSettings):
         logger.info("UMP Settings:")
         print(self)
 
+    @field_validator("UMP_KEYCLOAK_URL", mode="before")
+    def ensure_trailing_slash(cls, value: str) -> str:
+        """Ensure UMP_KEYCLOAK_URL has a trailing slash."""
+        if not value.endswith("/"):
+            value += "/"
+        return value
 
 app_settings = UmpSettings()
 app_settings.print_settings()
