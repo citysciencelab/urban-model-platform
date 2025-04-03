@@ -26,17 +26,6 @@ from ump.config import UMP_JOB_DELETE_INTERVAL
 from ump.config import app_settings as config
 from ump.errors import CustomException
 
-if (
-    # The WERKZEUG_RUN_MAIN is set to true when running the subprocess for
-    # reloading, we want to start debugpy only once during the first
-    # invocation and never during reloads.
-    # See https://github.com/microsoft/debugpy/issues/1296#issuecomment-2012778330
-    os.environ.get("WERKZEUG_RUN_MAIN") != "true"
-    and os.environ.get("FLASK_DEBUG") == "1"
-):
-    import debugpy
-
-    debugpy.listen(("0.0.0.0", 5678))
 
 dictConfig(
     {
