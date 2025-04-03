@@ -1,7 +1,3 @@
-# TODO: currently false in providers.yaml evaluates to boolean True,
-# the user is forced to use explicitly False to evaluate to boolean False
-# this is not user friendly, instead it should be more error tolerant
-
 import logging
 from pathlib import Path
 
@@ -24,7 +20,7 @@ except (FileNotFoundError, yaml.YAMLError) as e:
 
 class ProviderLoader(FileSystemEventHandler):
     def on_modified(self, event):
-        if event.src_path == config.UMP_PROVIDERS_FILE:
+        if event.src_path == config.UMP_PROVIDERS_FILE.absolute().as_posix():
             try:
                 with open(config.UMP_PROVIDERS_FILE, encoding="UTF-8") as to_reload:
                     if new_content := yaml.safe_load(to_reload):
