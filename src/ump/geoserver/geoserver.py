@@ -10,9 +10,6 @@ from ump.api.db_handler import db_engine as engine
 from ump.config import app_settings as config
 from ump.errors import GeoserverException
 
-logging.basicConfig(level=os.environ.get("LOGLEVEL", "WARNING"))
-
-
 class Geoserver:
     RESULTS_FILENAME = "results.geojson"
 
@@ -113,20 +110,23 @@ class Geoserver:
         logging.info(" --> Storing results to geoserver store %s", store_name)
 
         xml_body = f"""
-    <dataStore>
-      <name>{store_name}</name>
-      <connectionParameters>
-        <host>{config.UMP_GEOSERVER_DB_HOST}</host>
-        <port>{config.UMP_DATABASE_PORT}</port>
-        <database>{config.UMP_DATABASE_NAME}</database>
-        <user>{config.UMP_DATABASE_USER}</user>
-        <passwd>{config.UMP_DATABASE_PASSWORD}</passwd>
-        <dbtype>postgis</dbtype>
-      </connectionParameters>
-    </dataStore>
-    """
+            <dataStore>
+            <name>{store_name}</name>
+            <connectionParameters>
+                <host>{config.UMP_GEOSERVER_DB_HOST}</host>
+                <port>{config.UMP_GEOSERVER_DB_PORT}</port>
+                <database>{config.UMP_GEOSERVER_DB_NAME}</database>
+                <user>{config.UMP_GEOSERVER_DB_USER}</user>
+                <passwd>{config.UMP_GEOSERVER_DB_PASSWORD}</passwd>
+                <dbtype>postgis</dbtype>
+            </connectionParameters>
+            </dataStore>
+        """
         response = requests.post(
-            f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{self.workspace}/datastores",
+            (
+                f"{str(config.UMP_GEOSERVER_URL_WORKSPACE)}"
+                f"/{self.workspace}/datastores"
+            ),
             auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
             data=xml_body,
             headers={"Content-type": "application/xml"},
