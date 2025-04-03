@@ -78,6 +78,7 @@ ipyparallel = "^8.8.0"
 schedule = "^1.2.2"
 pydantic-settings = "^2.8.1"
 pydantic = "^2.11.1"
+rich = "^14.0.0"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests
