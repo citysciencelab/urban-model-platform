@@ -7,6 +7,7 @@ networks:
 volumes:
   postgres_data:
   kc-db_data:
+  geoserver_data:
 
 services:
   api:
@@ -61,15 +62,10 @@ services:
     ports:
       - ${GEOSERVER_PORT_EXTERNAL}:8080
     volumes:
-      - ./geoserver_data:/opt/geoserver/data_dir
+      - geoserver_data:/opt/geoserver/data_dir
     environment:
-      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
       GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
       GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
-      GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
-      GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
-      GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
-
     networks:
       - dev
 
