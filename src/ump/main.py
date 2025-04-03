@@ -1,3 +1,9 @@
+#TODO: this file has become a hodgepodge of very different things,
+# it should be split into dedicated files:
+# - an app factory for migrations
+# - logging setup
+# - a geoserver cleanup runner
+# - the flask app 
 import atexit
 import json
 import os
