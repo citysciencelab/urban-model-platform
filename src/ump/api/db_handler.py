@@ -5,7 +5,7 @@ import psycopg2.pool
 from psycopg2.extras import RealDictCursor
 from sqlalchemy import create_engine
 
-from ump import config
+from ump.config import app_settings as config
 
 logger = logging.getLogger(__name__)
 # Note: differnt part of the code use differnt Database handling strategies,

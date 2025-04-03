@@ -2,14 +2,12 @@ import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from ump import config
+
 from ump.api.db_handler import DBHandler
+from ump.api.db_handler import db_engine as engine
 from ump.api.ensemble import Ensemble, JobsEnsembles
 from ump.api.job import Job
 from ump.api.job_status import JobStatus
-from ump.api.db_handler import db_engine as engine
-
-
 
 def append_ensemble_list(job):
     with Session(engine) as session:

@@ -6,8 +6,8 @@ import geopandas as gpd
 import requests
 from psycopg2.sql import Identifier
 
-from ump import config
 from ump.api.db_handler import db_engine as engine
+from ump.config import app_settings as config
 from ump.errors import GeoserverException
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "WARNING"))

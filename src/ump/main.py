@@ -15,7 +15,6 @@ from keycloak import KeycloakOpenID
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from ump import config
 from ump.api.db_handler import DBHandler, close_pool
 from ump.api.providers import PROVIDERS
 from ump.api.routes.ensembles import ensembles
@@ -24,6 +23,7 @@ from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
 from ump.api.routes.users import users
 from ump.config import UMP_JOB_DELETE_INTERVAL
+from ump.config import app_settings as config
 from ump.errors import CustomException
 
 if (

@@ -6,7 +6,7 @@ import yaml
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers.polling import PollingObserver
 
-from ump import config
+from ump.config import app_settings as config
 
 PROVIDERS: dict = {}
 

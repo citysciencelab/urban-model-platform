@@ -4,7 +4,7 @@ from os import environ as env
 
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 
-from ump import config
+from ump.config import app_settings as config
 
 keycloak_connection = KeycloakOpenIDConnection(
     server_url=f"{config.UMP_KEYCLOAK_PROTOCOL}://{config.UMP_KEYCLOAK_HOST}/auth/",
