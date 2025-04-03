@@ -1,39 +1,55 @@
-"""Extracts env variables"""
-#TODO : add a config class to handle the configuration and type casting
-import os
+import logging
 
-PROVIDERS_FILE = os.environ.get("PROVIDERS_FILE", "providers.yaml")
+from pydantic import FilePath, HttpUrl, SecretStr, computed_field
+from pydantic_settings import BaseSettings
+from rich import print
 
-api_server_url = os.environ.get("API_SERVER_URL", "localhost:3000")
-fetch_job_results_interval = os.environ.get("FETCH_JOB_RESULTS_INTERVAL", 5)
+logger = logging.getLogger(__name__)
+# using pydantic_settings to manage environment variables
+# and do automatic type casting in a central place
+class UmpSettings(BaseSettings):
+    UMP_LOG_LEVEL: str = "INFO"
+    UMP_PROVIDERS_FILE: FilePath = "providers.yaml"
+    UMP_API_SERVER_URL: str = "localhost:3000"
+    UMP_API_SERVER_WORKERS: int = 4
+    UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL: int = 5
+    UMP_DATABASE_NAME: str = "ump"
+    UMP_DATABASE_HOST: str = "postgres"
+    UMP_DATABASE_PORT: int = 5432
+    UMP_DATABASE_USER: str = "postgres"
+    UMP_DATABASE_PASSWORD: SecretStr = "postgres"
+    UMP_GEOSERVER_URL: HttpUrl | None = HttpUrl("http://geoserver:8080/geoserver")
+    UMP_GEOSERVER_DB_HOST: str = "postgis"
+    UMP_GEOSERVER_DB_PORT: int = 5432
+    UMP_GEOSERVER_WORKSPACE_NAME: str = "UMP"
+    UMP_GEOSERVER_USER: str = "geoserver"
+    UMP_GEOSERVER_PASSWORD: SecretStr = "geoserver"
+    UMP_GEOSERVER_CONNECTION_TIMEOUT: int = 60 # seconds
+    UMP_JOB_DELETE_INTERVAL: int = 240 # minutes
+    UMP_KEYCLOAK_PROTOCOL: str = "http"
+    UMP_KEYCLOAK_HOST: str = "keycloak"
+    UMP_KEYCLOAK_REALM: str = "UrbanModelPlatform"
+    UMP_KEYCLOAK_CLIENT: str = "ump-client"
+    UMP_KEYCLOAK_USER: str = "admin"
+    UMP_KEYCLOAK_PASSWORD: SecretStr = "admin"
 
-# DATABASE
-postgres_db = os.environ.get("POSTGRES_DB", "cut_dev")
-postgres_host = os.environ.get("POSTGRES_HOST", "postgis")
-postgres_user = os.environ.get("POSTGRES_USER", "postgres")
-postgres_password = os.environ.get("POSTGRES_PASSWORD", "postgres")
-postgres_port = os.environ.get("POSTGRES_PORT", "5432")
+    @computed_field
+    @property
+    def UMP_GEOSERVER_URL_REST(self) -> HttpUrl:
+        """Constructs the full URL for the GeoServer REST API"""
+        return HttpUrl(str(self.UMP_GEOSERVER_URL) + "/rest")
 
-# GEOSERVER
-geoserver_base_url = os.environ.get(
-    "GEOSERVER_BASE_URL", "http://geoserver:8080/geoserver"
-)
-geoserver_postgis_host = os.environ.get("GEOSERVER_POSTGIS_HOST", "postgis")
-geoserver_rest_url = f"{geoserver_base_url}/rest"
-geoserver_workspaces_url = f"{geoserver_rest_url}/workspaces"
+    @computed_field
+    @property
+    def UMP_GEOSERVER_URL_WORKSPACE(self) -> HttpUrl:
+        """Constructs the full URL for the GeoServer workspace"""
+        return HttpUrl(str(self.UMP_GEOSERVER_URL) + "/rest/workspaces")
 
-geoserver_workspace = os.environ.get("GEOSERVER_WORKSPACE", "CUT")
-geoserver_admin_user = os.environ.get("GEOSERVER_ADMIN_USER", "admin")
-geoserver_admin_password = os.environ.get("GEOSERVER_ADMIN_PASSWORD", "geoserver")
-geoserver_timeout = os.environ.get("GEOSERVER_TIMEOUT", 60)
-cleanup_age = int(os.environ.get(
-    "CLEANUP_AGE", 240
-))  # configure minutes, after which jobs and layers of anonymous users are deleted
+    def print_settings(self):
+        """Prints the settings for debugging purposes"""
+        logger.info("UMP Settings:")
+        print(self)
 
-# KEYCLOAK
-keycloak_protocol = os.environ.get("KEYCLOAK_PROTOCOL", "http")
-keycloak_host = os.environ.get("KEYCLOAK_HOST", "keycloak")
-keycloak_realm = os.environ.get("KEYCLOAK_REALM", "UrbanModelPlatform")
-keycloak_client = os.environ.get("KEYCLOAK_CLIENT", "ump-client")
-keycloak_user = os.environ.get("KEYCLOAK_USER", "admin")
-keycloak_password = os.environ.get("KEYCLOAK_PASSWORD", "admin")
+
+app_settings = UmpSettings()
+app_settings.print_settings()
