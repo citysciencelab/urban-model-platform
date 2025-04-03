@@ -57,7 +57,6 @@ services:
   api-db:
     image: postgis/postgis:14-3.3
     volumes:
-      # - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
       - postgres_data:/var/lib/postgresql/data/
     environment:
       POSTGRES_DB: ump
@@ -101,9 +100,6 @@ services:
       PYGEOAPI_SERVER_HOST: ${PYGEOAPI_SERVER_HOST}
       PYGEOAPI_SERVER_PORT_INTERNAL: ${PYGEOAPI_SERVER_PORT_INTERNAL}
       PYGEOAPI_SERVER_PORT_EXTERNAL: ${PYGEOAPI_SERVER_PORT_EXTERNAL}
-    # volumes:
-    #   - ./modelserver_example/pygeoapi-config.yml:/home/pythonuser/pygeoapi-config.yaml
-    #   - ./modelserver_example/example-openapi.yml:/home/pythonuser/pygeoapi-openapi.yaml
     ports:
       - ${PYGEOAPI_SERVER_PORT_EXTERNAL}:${PYGEOAPI_SERVER_PORT_INTERNAL}
     command: [
