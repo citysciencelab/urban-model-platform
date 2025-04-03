@@ -26,6 +26,8 @@ services:
       UMP_KEYCLOAK_USER: admin
       UMP_KEYCLOAK_PASSWORD: admin
       UMP_KEYCLOAK_URL: http://keycloak:8080
+      UMP_KEYCLOAK_CLIENT_ID: ump-client
+      UMP_KEYCLOAK_REALM: UrbanModelPlatform
       UMP_DATABASE_NAME: ump
       UMP_DATABASE_USER: ump
       UMP_DATABAE_PASSWORD: ump
