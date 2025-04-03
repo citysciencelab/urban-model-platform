@@ -5,9 +5,9 @@ from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 from ump.config import app_settings as config
 
 keycloak_connection = KeycloakOpenIDConnection(
-    server_url=f"{config.UMP_KEYCLOAK_PROTOCOL}://{config.UMP_KEYCLOAK_HOST}/auth/",
+    server_url=str(config.UMP_KEYCLOAK_URL),
     username=f"{config.UMP_KEYCLOAK_USER}",
-    password=f"{config.UMP_KEYCLOAK_PASSWORD}",
+    password=f"{config.UMP_KEYCLOAK_PASSWORD.get_secret_value()}",
     realm_name="master",
     user_realm_name="master",
     client_id="admin-cli",

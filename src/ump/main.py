@@ -70,19 +70,22 @@ def cleanup():
                 requests.delete(
                     f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/layers/{job_id}.xml",
-                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
+                    auth=(
+                        config.UMP_GEOSERVER_USER,
+                        config.UMP_GEOSERVER_PASSWORD.get_secret_value
+                    ),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
                     f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}/featuretypes/{job_id}.xml",
-                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
+                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
                     f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}.xml",
-                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
+                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
 
@@ -99,7 +102,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", 0)
 app.config["SQLALCHEMY_DATABASE_URI"] = (
-    f"postgresql+psycopg2://{config.UMP_DATABASE_USER}:{config.UMP_DATABASE_PASSWORD}"
+    f"postgresql+psycopg2://{config.UMP_DATABASE_USER}:{config.UMP_DATABASE_PASSWORD.get_secret_value()}"
     + f"@{config.UMP_DATABASE_HOST}:{config.UMP_DATABASE_PORT}/{config.UMP_DATABASE_NAME}"
 )
 

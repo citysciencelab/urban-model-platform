@@ -14,17 +14,17 @@ class Geoserver:
     RESULTS_FILENAME = "results.geojson"
 
     def __init__(self):
-        self.workspace = config.UMP_GEOSEVER_WORKSPACE_NAME
+        self.workspace = config.UMP_GEOSERVER_WORKSPACE_NAME
         self.errors = []
         self.path_to_results = None
         self.job_id = None
 
     def create_workspace(self):
-        url = f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{self.workspace}.json?quietOnNotFound=True"
+        url = f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{self.workspace}.json?quietOnNotFound=True"
 
         response = requests.get(
             url,
-            auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
+            auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
             headers={"Content-type": "application/json", "Accept": "application/json"},
             timeout=60,
         )
@@ -41,8 +41,8 @@ class Geoserver:
             )
 
         response = requests.post(
-            config.UMP_GEOSERVER_PATH_WORKSPACE,
-            auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
+            config.UMP_GEOSERVER_URL_WORKSPACE,
+            auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
             data=f"<workspace><name>{self.workspace}</name></workspace>",
             headers={"Content-type": "text/xml", "Accept": "*/*"},
             timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
@@ -78,7 +78,7 @@ class Geoserver:
             response = requests.post(
                 f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{self.workspace}"
                 + f"/datastores/{store_name}/featuretypes",
-                auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
+                auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
                 data=f"<featureType><name>{layer_name}</name></featureType>",
                 headers={"Content-type": "text/xml"},
                 timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
@@ -117,7 +117,7 @@ class Geoserver:
                 <port>{config.UMP_GEOSERVER_DB_PORT}</port>
                 <database>{config.UMP_GEOSERVER_DB_NAME}</database>
                 <user>{config.UMP_GEOSERVER_DB_USER}</user>
-                <passwd>{config.UMP_GEOSERVER_DB_PASSWORD}</passwd>
+                <passwd>{config.UMP_GEOSERVER_DB_PASSWORD.get_secret_value()}</passwd>
                 <dbtype>postgis</dbtype>
             </connectionParameters>
             </dataStore>
@@ -127,7 +127,7 @@ class Geoserver:
                 f"{str(config.UMP_GEOSERVER_URL_WORKSPACE)}"
                 f"/{self.workspace}/datastores"
             ),
-            auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD),
+            auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
             data=xml_body,
             headers={"Content-type": "application/xml"},
             timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,

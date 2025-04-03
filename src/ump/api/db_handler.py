@@ -18,14 +18,14 @@ connection_pool = psycopg2.pool.SimpleConnectionPool(
     database = config.UMP_DATABASE_NAME,
     host     = config.UMP_DATABASE_HOST,
     user     = config.UMP_DATABASE_USER,
-    password = config.UMP_DATABASE_PASSWORD,
+    password = config.UMP_DATABASE_PASSWORD.get_secret_value(),
     port     = config.UMP_DATABASE_PORT
 )
 
 db_engine = engine = create_engine(
     (
         "postgresql+psycopg2://"
-        f"{config.UMP_DATABASE_USER}:{config.UMP_DATABASE_PASSWORD}"
+        f"{config.UMP_DATABASE_USER}:{config.UMP_DATABASE_PASSWORD.get_secret_value()}"
         f"@{config.UMP_DATABASE_HOST}:{config.UMP_DATABASE_PORT}"
         f"/{config.UMP_DATABASE_NAME}"
     ),
