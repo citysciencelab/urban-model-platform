@@ -118,9 +118,9 @@ api.register_blueprint(health_bp, url_prefix="/health")
 app.register_blueprint(api)
 
 keycloak_openid = KeycloakOpenID(
-    server_url=f"{config.UMP_KEYCLOAK_PROTOCOL}://{config.UMP_KEYCLOAK_HOST}/auth/",
-    client_id=f"{config.UMP_KEYCLOAK_CLIENT}",
-    realm_name=f"{config.UMP_KEYCLOAK_REALM}",
+    server_url=str(config.UMP_KEYCLOAK_URL),
+    client_id=config.UMP_KEYCLOAK_CLIENT_ID,
+    realm_name=config.UMP_KEYCLOAK_REALM,
 )
 
 

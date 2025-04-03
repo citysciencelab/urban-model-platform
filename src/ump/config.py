@@ -29,10 +29,9 @@ class UmpSettings(BaseSettings):
     UMP_GEOSERVER_PASSWORD: SecretStr = "geoserver"
     UMP_GEOSERVER_CONNECTION_TIMEOUT: int = 60 # seconds
     UMP_JOB_DELETE_INTERVAL: int = 240 # minutes
-    UMP_KEYCLOAK_PROTOCOL: str = "http"
-    UMP_KEYCLOAK_HOST: str = "keycloak"
+    UMP_KEYCLOAK_URL: HttpUrl = "http://keycloak:8080/auth"
     UMP_KEYCLOAK_REALM: str = "UrbanModelPlatform"
-    UMP_KEYCLOAK_CLIENT: str = "ump-client"
+    UMP_KEYCLOAK_CLIENT_ID: str = "ump-client"
     UMP_KEYCLOAK_USER: str = "admin"
     UMP_KEYCLOAK_PASSWORD: SecretStr = "admin"
 
