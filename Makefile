@@ -58,13 +58,19 @@ start-dev:
 	
 	docker compose -f docker-compose-dev.yaml up -d api-db geoserver keycloak kc-db
 
+	@ initilize the database
+	flask db init
+
 	@ echo running database migrations
 	flask db upgrade
+
+	@ echo 'Current database state'
+	flask db current
 	
 	@ echo 'Now start a debug session with your preferred IDE, e.g. VSCode using launch.json'
 
 
-start-dev-example: start-dev-environment
+start-dev-example: start-dev
 	@echo 'Starting development environment containers: ump database, geoserver, keycloak, keycloak database and an example modelserver'
 	docker compose -f docker-compose-dev.yaml up -d modelserver
 
