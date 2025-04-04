@@ -17,7 +17,7 @@ from flask import g, jsonify, request
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-from keycloak import KeycloakOpenID
+from keycloak import KeycloakOpenID, KeycloakGetError, KeycloakConnectionError
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -126,6 +126,7 @@ api.register_blueprint(health_bp, url_prefix="/health")
 
 app.register_blueprint(api)
 
+# this does not check the connection yet, so app can fail later on!
 keycloak_openid = KeycloakOpenID(
     server_url=str(config.UMP_KEYCLOAK_URL),
     client_id=config.UMP_KEYCLOAK_CLIENT_ID,
@@ -139,11 +140,23 @@ def check_jwt():
     schedule.run_pending()
     auth = request.authorization
     if auth is not None:
-        decoded = keycloak_openid.decode_token(auth.token)
+        # need exception handling here to avoid app failure!
+        try:
+            decoded = keycloak_openid.decode_token(auth.token)
+        except KeycloakGetError as e:
+            raise CustomException(
+                message="Keycloak: Resource not found. Check Keycloak URL path.",
+                status_code=404,
+            )
+        except KeycloakConnectionError as e:
+            raise CustomException(
+                message="Keycloak: Connection error. Check Keycloak URL host.",
+                status_code=500,
+            )
         g.auth_token = decoded
     else:
         g.auth_token = None
-
+    pass
 
 @app.after_request
 def set_headers(response):
