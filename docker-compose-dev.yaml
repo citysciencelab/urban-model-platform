@@ -30,7 +30,7 @@ services:
       UMP_KEYCLOAK_REALM: UrbanModelPlatform
       UMP_DATABASE_NAME: ump
       UMP_DATABASE_USER: ump
-      UMP_DATABAE_PASSWORD: ump
+      UMP_DATABASE_PASSWORD: ump
       UMP_DATABASE_HOST: api-db
       UMP_DATABASE_PORT: 5432
       UMP_GEOSERVER_WORKSPACE_NAME: ${UMP_GEOSERVER_WORKSPACE_NAME} # !using the same as for the local app
