@@ -10,7 +10,7 @@ import geopandas as gpd
 import ump.api.providers as providers
 import ump.config as config
 from ump.api.db_handler import DBHandler
-from ump.api.job_status import JobStatus
+from ump.api.models.job_status import JobStatus
 from ump.errors import CustomException, InvalidUsage
 from ump.geoserver.geoserver import Geoserver
 

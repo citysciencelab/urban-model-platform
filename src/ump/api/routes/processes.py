@@ -6,7 +6,7 @@ from apiflask import APIBlueprint
 from flask import Response, g, request
 
 import ump.api.providers as providers
-from ump.api.process import Process
+from ump.api.models.process import Process
 from ump.api.processes import all_processes
 
 processes = APIBlueprint("processes", __name__)

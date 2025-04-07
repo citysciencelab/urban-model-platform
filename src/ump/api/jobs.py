@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 from os import environ as env
 from ump import config
 from ump.api.db_handler import DBHandler
-from ump.api.ensemble import Ensemble, JobsEnsembles
-from ump.api.job import Job
-from ump.api.job_status import JobStatus
+from ump.api.models.ensemble import Ensemble, JobsEnsembles
+from ump.api.models.job import Job
+from ump.api.models.job_status import JobStatus
 
 engine = create_engine(f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")
 def append_ensemble_list(job):

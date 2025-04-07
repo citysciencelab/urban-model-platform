@@ -19,10 +19,10 @@ from flask import Response, g, request
 from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.orm import Session
 from ump import config
-from ump.api.ensemble import Comment, Ensemble, EnsemblesUsers, JobsEnsembles, JobsUsers
-from ump.api.job import Job
+from ump.api.models.ensemble import Comment, Ensemble, EnsemblesUsers, JobsEnsembles, JobsUsers
+from ump.api.models.job import Job
 from ump.api.keycloak_utils import find_user_id_by_email
-from ump.api.process import Process
+from ump.api.models.process import Process
 
 ensembles = APIBlueprint("ensembles", __name__)
 

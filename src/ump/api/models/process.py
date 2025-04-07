@@ -12,7 +12,7 @@ from sqlalchemy import create_engine
 
 import ump.api.providers as providers
 import ump.config as config
-from ump.api.job import Job, JobStatus
+from ump.api.models.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
 
 logging.basicConfig(level=logging.INFO)
