@@ -9,6 +9,7 @@
             "type": "debugpy",
             "request": "launch",
             "module": "flask",
+            "envFile": "${workspaceFolder}/.env",
             "env": {
                 "FLASK_APP": "src/ump/main.py",
                 "FLASK_DEBUG": "1"
@@ -22,7 +23,10 @@
                 "${command:pickArgs}"
             ],
             "jinja": true,
-            "autoStartBrowser": false
+            "autoStartBrowser": false,
+            "preLaunchTask": "setup-environment",
+            "postDebugTask": "stop-postgis-container",
+            "justMyCode": false,
         },
         {
             "name": "Python Debugger: Remote Attach",

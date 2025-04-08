@@ -1,17 +1,17 @@
 import logging
-import os
+from pathlib import Path
 
 import aiohttp
 import yaml
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers.polling import PollingObserver
 
-from ump import config
+from ump.config import app_settings as config
 
 PROVIDERS: dict = {}
 
 try:
-    with open(config.PROVIDERS_FILE, encoding="UTF-8") as file:
+    with open(config.UMP_PROVIDERS_FILE, encoding="UTF-8") as file:
         if content := yaml.safe_load(file):
             PROVIDERS.update(content)
 except (FileNotFoundError, yaml.YAMLError) as e:
@@ -20,9 +20,9 @@ except (FileNotFoundError, yaml.YAMLError) as e:
 
 class ProviderLoader(FileSystemEventHandler):
     def on_modified(self, event):
-        if event.src_path == config.PROVIDERS_FILE:
+        if event.src_path == config.UMP_PROVIDERS_FILE.absolute().as_posix():
             try:
-                with open(config.PROVIDERS_FILE, encoding="UTF-8") as to_reload:
+                with open(config.UMP_PROVIDERS_FILE, encoding="UTF-8") as to_reload:
                     if new_content := yaml.safe_load(to_reload):
                         logging.info("Reloading providers.yaml.")
                         PROVIDERS.update(new_content)
@@ -32,7 +32,9 @@ class ProviderLoader(FileSystemEventHandler):
 
 observer = PollingObserver()
 observer.schedule(
-    ProviderLoader(), os.path.dirname(config.PROVIDERS_FILE), recursive=False
+    ProviderLoader(),
+    Path(config.UMP_PROVIDERS_FILE).absolute().as_posix(),
+    recursive=False
 )
 observer.start()
 
