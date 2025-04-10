@@ -31,7 +31,7 @@ To get started with the Urban Model Platform, follow these steps:
 
 1. Check out our [Quickstart Guide](quickstart) to get familiar
 2. Learn about the [Platform Architecture](architecture-overview) to understand its components and workflows.
-3. Set up a local development environment by following the [Development Setup](dev-setup) instructions.
+3. Set up a local development environment by following the [Contributing](contributing) guidelines.
 4. Contribute to the project by following our [Contributing Guidelines](contributing).
 
 
