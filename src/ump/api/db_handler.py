@@ -1,11 +1,11 @@
 import logging
-import psycopg2.pool
 
 import psycopg2 as db
+import psycopg2.pool
 from psycopg2.extras import RealDictCursor
 from sqlalchemy import create_engine
 
-from ump import config
+from ump.config import app_settings as config
 
 logger = logging.getLogger(__name__)
 # Note: differnt part of the code use differnt Database handling strategies,
@@ -15,19 +15,19 @@ logger = logging.getLogger(__name__)
 connection_pool = psycopg2.pool.SimpleConnectionPool(
     minconn=1,  # Minimum number of connections
     maxconn=49,  # Maximum number of connections, lower than postgres default
-    database = config.postgres_db,
-    host     = config.postgres_host,
-    user     = config.postgres_user,
-    password = config.postgres_password,
-    port     = config.postgres_port
+    database = config.UMP_DATABASE_NAME,
+    host     = config.UMP_DATABASE_HOST,
+    user     = config.UMP_DATABASE_USER,
+    password = config.UMP_DATABASE_PASSWORD.get_secret_value(),
+    port     = config.UMP_DATABASE_PORT
 )
 
 db_engine = engine = create_engine(
     (
         "postgresql+psycopg2://"
-        f"{config.postgres_user}:{config.postgres_password}"
-        f"@{config.postgres_host}:{config.postgres_port}"
-        f"/{config.postgres_db}"
+        f"{config.UMP_DATABASE_USER}:{config.UMP_DATABASE_PASSWORD.get_secret_value()}"
+        f"@{config.UMP_DATABASE_HOST}:{config.UMP_DATABASE_PORT}"
+        f"/{config.UMP_DATABASE_NAME}"
     ),
     pool_size=49,  # Maximum number of connections in the pool
     max_overflow=1,  # Additional connections allowed beyond pool_size

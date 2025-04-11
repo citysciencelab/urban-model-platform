@@ -1,3 +1,4 @@
+# !NOTE: This is NOT a prodiuction ready docker-compose file. It is meant for development purposes only.
 networks:
   dev:
     external: true
@@ -6,81 +7,101 @@ networks:
 volumes:
   postgres_data:
   kc-db_data:
+  geoserver_data:
 
 services:
+  # !NOTE: this is for testing the current app version in a container, only!
+  # development is executed locally
+  # and the prod deployment differs anyway!
   api:
     image: ${CONTAINER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
     restart: "unless-stopped"
     ports:
       - ${WEBAPP_PORT_EXTERNAL}:5000
     environment:
-      API_SERVER_URL: ${API_SERVER_URL}
-      NUMBER_OF_WORKERS: ${NUMBER_OF_WORKERS}
-      LOGLEVEL: ${LOGLEVEL}
-      FLASK_DEBUG: ${FLASK_DEBUG}
-      PROVIDERS_FILE: /home/pythonuser/providers.yaml
-      CORS_URL_REGEX: ${CORS_URL_REGEX}
-      KEYCLOAK_USER: admin
-      KEYCLOAK_PASSWORD: admin
-      KEYCLOAK_HOST: keycloak
-      KEYCLOAK_PROTOCOL: http
-      POSTGRES_DB: ump
-      POSTGRES_USER: ump
-      POSTGRES_PASSWORD: ump
-      POSTGRES_HOST: api-db
-      POSTGRES_PORT: 5432
-      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
-      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
-      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
-      GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
-      GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
-      GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
-      CLEANUP_AGE: ${CLEANUP_AGE}
-
+      UMP_API_SERVER_URL: localhost:${WEBAPP_PORT_EXTERNAL}
+      UMP_API_SERVER_WORKERS: 1
+      UMP_LOG_LEVEL: DEBUG
+      UMP_PROVIDERS_FILE: /home/pythonuser/providers.yaml
+      UMP_KEYCLOAK_USER: admin
+      UMP_KEYCLOAK_PASSWORD: admin
+      UMP_KEYCLOAK_URL: http://keycloak:8080
+      UMP_KEYCLOAK_CLIENT_ID: ump-client
+      UMP_KEYCLOAK_REALM: UrbanModelPlatform
+      UMP_DATABASE_NAME: ump
+      UMP_DATABASE_USER: ump
+      UMP_DATABASE_PASSWORD: ump
+      UMP_DATABASE_HOST: api-db
+      UMP_DATABASE_PORT: 5432
+      UMP_GEOSERVER_WORKSPACE_NAME: ${UMP_GEOSERVER_WORKSPACE_NAME} # !using the same as for the local app
+      UMP_GEOSERVER_USER: admin
+      UMP_GEOSERVER_PASSWORD: geoserver
+      UMP_GEOSERVER_URL: http://geoserver:8080/geoserver
+      #---
+      # using the same db as for the api, to ease dev setup
+      # for production usage consider dedicated databases!
+      UMP_GEOSERVER_DB_PORT: 5432
+      UMP_GEOSERVER_DB_NAME: ump
+      UMP_GEOSERVER_DB_USER: ump
+      UMP_GEOSERVER_DB_PASSWORD: ump
+      UMP_GEOSERVER_DB_HOST: api-db
+      #---
+      UMP_GEOSERVER_CONNECTION_TIMEOUT: 60 # seconds
+      UMP_JOB_DELETE_INTERVAL: 240 # minutes
     volumes:
       - ./providers.yaml:/home/pythonuser/providers.yaml
     networks:
       - dev
 
+# !NOTE: here starts the dev environment setup!
+# these apps a required dependencies for the UMP
+# and are not part of the UMP itself
   api-db:
     image: postgis/postgis:14-3.3
     volumes:
-      # - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
       - postgres_data:/var/lib/postgresql/data/
     environment:
       POSTGRES_DB: ump
       POSTGRES_USER: ump
       POSTGRES_PASSWORD: ump
     ports:
-      - ${POSTGRES_PORT_EXTERNAL}:5432
+      - ${API_DB_PORT_EXTERNAL}:5432
     networks:
       - dev
 
+ # !NOTE: using the same database for geoserver and ump to ease dev setup
+#  for production usage consider dedicated databases!
   geoserver:
     image: kartoza/geoserver:2.22.0
     ports:
       - ${GEOSERVER_PORT_EXTERNAL}:8080
     volumes:
-      - ./geoserver_data:/opt/geoserver/data_dir
+      - geoserver_data:/opt/geoserver/data_dir
     environment:
-      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
-      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
-      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
-      GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
-      GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
-      GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
-
+      GEOSERVER_ADMIN_USER: admin
+      GEOSERVER_ADMIN_PASSWORD: geoserver
+      #---
+      # using the same db as for the api, to ease dev setup
+      # for production usage consider dedicated databases!
+      HOST: api-db
+      POSTGRES_DB: ump
+      POSTGRES_USER: ump
+      POSTGRES_PASS: ump
+      #---
     networks:
       - dev
 
   modelserver:
-    image: lgvudh.azurecr.io/analytics/example_ogcapi_processes:main
-    env_file:
-    - path: .env
-      required: true # default
-    volumes:
-      - ./modelserver_example/pygeoapi-config.yml:/home/pythonuser/pygeoapi-config.yaml
-      - ./modelserver_example/example-openapi.yml:/home/pythonuser/pygeoapi-openapi.yaml
+    image: ${CONTAINER_REGISTRY}/${IMAGE_NAME}/example_ogcapi_processes:main
+    build:
+      context: ./modelserver_example
+      dockerfile: Dockerfile
+    environment:
+      PYGEOAPI_CONFIG: /home/pythonuser/pygeoapi-config.yaml
+      PYGEOAPI_OPENAPI: /home/pythonuser/pygeoapi-openapi.yaml
+      PYGEOAPI_SERVER_HOST: ${PYGEOAPI_SERVER_HOST}
+      PYGEOAPI_SERVER_PORT_INTERNAL: ${PYGEOAPI_SERVER_PORT_INTERNAL}
+      PYGEOAPI_SERVER_PORT_EXTERNAL: ${PYGEOAPI_SERVER_PORT_EXTERNAL}
     ports:
       - ${PYGEOAPI_SERVER_PORT_EXTERNAL}:${PYGEOAPI_SERVER_PORT_INTERNAL}
     command: [
@@ -95,15 +116,15 @@ services:
     ports: 
       - ${KEYCLOAK_PORT_EXTERNAL}:8080
     environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_USER}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
       KC_DB: postgres
       KC_DB_URL_HOST: kc-db
       KC_DB_URL_PORT: 5432
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak
-      KC_HOSTNAME: ${KC_HOSTNAME}
+      KC_HOSTNAME: localhost
       KC_HOSTNAME_PATH: /auth
       KC_HTTP_RELATIVE_PATH: /auth
     command: ['start', '--proxy-headers', 'xforwarded', '--http-enabled', 'true']
@@ -118,7 +139,7 @@ services:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: keycloak
-    ports:
-      - ${POSTGRES_PORT_EXTERNAL}:5432
+    expose:
+      - 5432
     networks:
       - dev

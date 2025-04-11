@@ -5,15 +5,15 @@ import re
 import time
 from datetime import datetime, timezone
 from multiprocessing import dummy
+
 import aiohttp
 from flask import g
 
-
 import ump.api.providers as providers
 import ump.config as config
+from ump.api.db_handler import db_engine as engine
 from ump.api.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
-from ump.api.db_handler import db_engine as engine
 
 logging.basicConfig(level=logging.INFO)
 
@@ -377,7 +377,7 @@ class Process:
                         f"Job did not finish within {timeout/60} minutes. Giving up."
                     )
 
-                time.sleep(config.fetch_job_results_interval)
+                time.sleep(config.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL)
 
             logging.info(
                 " --> Remote execution job %s: success = %s. Took approx. %s minutes.",

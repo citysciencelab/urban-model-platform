@@ -5,7 +5,6 @@ import copy
 import json
 import logging
 from uuid import uuid1
-from os import environ as env
 from apiflask import APIBlueprint
 from ema_workbench import CategoricalParameter, RealParameter
 from ema_workbench.em_framework.samplers import (
