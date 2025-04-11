@@ -12,8 +12,7 @@ parts:
       
   - caption: User Guide
     chapters:
-      - file: content/02-user_guide/development-setup.md
-      - file: content/02-user_guide/docker-configuration.md
+      - file: content/02-user_guide/setup.md
       - file: content/02-user_guide/provider-configuration.md
       - file: content/02-user_guide/deployment.md
         # sections:
