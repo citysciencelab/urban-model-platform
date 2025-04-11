@@ -13,8 +13,11 @@ modelserver:
     timeout:  1800
     processes:
       hello-world:
-        result-storage: "geoserver"
+        result-storage: "remote"
+        anonymous-access: true
       squareroot:
         result-storage: "remote"
+        anonymous-access: false
       hello-geo-world:
-        result-storage: "remote"
+        result-storage: "geoserver"
+        anonymous-access: true

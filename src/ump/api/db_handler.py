@@ -1,22 +1,55 @@
 import logging
 
 import psycopg2 as db
+import psycopg2.pool
 from psycopg2.extras import RealDictCursor
+from sqlalchemy import create_engine
 
-from ump import config
+from ump.config import app_settings as config
 
 logger = logging.getLogger(__name__)
+# Note: differnt part of the code use differnt Database handling strategies,
+# should be unified sometime!
+
+# Initialize the connection pool
+connection_pool = psycopg2.pool.SimpleConnectionPool(
+    minconn=1,  # Minimum number of connections
+    maxconn=49,  # Maximum number of connections, lower than postgres default
+    database = config.UMP_DATABASE_NAME,
+    host     = config.UMP_DATABASE_HOST,
+    user     = config.UMP_DATABASE_USER,
+    password = config.UMP_DATABASE_PASSWORD.get_secret_value(),
+    port     = config.UMP_DATABASE_PORT
+)
+
+db_engine = engine = create_engine(
+    (
+        "postgresql+psycopg2://"
+        f"{config.UMP_DATABASE_USER}:{config.UMP_DATABASE_PASSWORD.get_secret_value()}"
+        f"@{config.UMP_DATABASE_HOST}:{config.UMP_DATABASE_PORT}"
+        f"/{config.UMP_DATABASE_NAME}"
+    ),
+    pool_size=49,  # Maximum number of connections in the pool
+    max_overflow=1,  # Additional connections allowed beyond pool_size
+    pool_timeout=30,  # Timeout for getting a connection from the pool
+    pool_recycle=3600,  # Recycle connections after 1 hour
+)
+
+def close_pool():
+    """Close the connection pool."""
+    global connection_pool
+
+    if connection_pool:
+        try:
+            connection_pool.closeall()
+            connection_pool = None  # Mark the pool as closed
+            logger.info("Connection pool closed.")
+        except psycopg2.pool.PoolError as e:
+            logger.warning("Connection pool is already closed: %s", e)
 
 class DBHandler():
     def __init__(self):
-        self.connection = db.connect(
-            database = config.postgres_db,
-            host     = config.postgres_host,
-            user     = config.postgres_user,
-            password = config.postgres_password,
-            port     = config.postgres_port
-        )
-        self.sortable_columns = []
+        self.connection = connection_pool.getconn()
 
     def set_sortable_columns(self, sortable_columns):
         self.sortable_columns = sortable_columns
@@ -72,7 +105,7 @@ class DBHandler():
 
     def __exit__(self, exc_type, value, traceback):
         if self.connection:
-            self.connection.close()
+            connection_pool.putconn(self.connection)
 
         if exc_type is None and value is None and traceback is None:
             return True

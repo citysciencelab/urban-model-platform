@@ -1,0 +1,53 @@
+{
+    "version": "2.0.0",
+    "tasks": [{
+        "label": "start-postgis-container",
+        "type": "shell",
+        "command": "docker",
+        "args": [
+            "compose",
+            "-f",
+            "docker-compose-dev.yaml",
+            "up",
+            "-d",
+            "api-db",
+        ],
+    },{
+            "label": "stop-postgis-container",
+            "type": "shell",
+            "command": "docker",
+            "args": [
+                "compose",
+                "-f",
+                "docker-compose-dev.yaml",
+                "rm",
+                "-s",
+                "api-db",
+                "--force"
+            ],
+    },{
+        "label":"run-db-migrations",
+        "type": "shell",
+        "command": "flask",
+        "args": [
+            "db",
+            "upgrade"
+        ],
+        "options": {
+            "env": {
+                "FLASK_APP": "src/ump/main.py",
+                "FLASK_ENV": "development"
+            }
+        },
+        "dependsOn": [
+            "start-postgis-container"
+        ],
+    },{
+        "label": "setup-environment",
+        "dependsOn": [
+            "start-postgis-container",
+            "run-db-migrations"
+        ]
+
+    }]
+}

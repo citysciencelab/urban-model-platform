@@ -5,18 +5,19 @@ import re
 import time
 from datetime import datetime, timezone
 from multiprocessing import dummy
-from os import environ as env
+
 import aiohttp
 from flask import g
-from sqlalchemy import create_engine
 
 import ump.api.providers as providers
 import ump.config as config
+from ump.api.db_handler import db_engine as engine
 from ump.api.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
 
 logging.basicConfig(level=logging.INFO)
-engine = create_engine(f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")
+
+
 class Process:
     def __init__(self, process_id_with_prefix=None):
 
@@ -376,7 +377,7 @@ class Process:
                         f"Job did not finish within {timeout/60} minutes. Giving up."
                     )
 
-                time.sleep(config.fetch_job_results_interval)
+                time.sleep(config.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL)
 
             logging.info(
                 " --> Remote execution job %s: success = %s. Took approx. %s minutes.",

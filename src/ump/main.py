@@ -1,8 +1,14 @@
+#TODO: this file has become a hodgepodge of very different things,
+# it should be split into dedicated files:
+# - an app factory for migrations
+# - logging setup
+# - a geoserver cleanup runner
+# - the flask app 
+import atexit
 import json
 import os
 from datetime import datetime, timedelta
 from logging.config import dictConfig
-from os import environ as env
 
 import requests
 import schedule
@@ -11,32 +17,19 @@ from flask import g, jsonify, request
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-from keycloak import KeycloakOpenID
-from sqlalchemy import create_engine
+from keycloak import KeycloakOpenID, KeycloakGetError, KeycloakConnectionError
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from ump import config
+from ump.api.db_handler import DBHandler, close_pool
 from ump.api.providers import PROVIDERS
 from ump.api.routes.ensembles import ensembles
 from ump.api.routes.health import health_bp
 from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
 from ump.api.routes.users import users
-from ump.config import cleanup_age
+from ump.config import app_settings as config
 from ump.errors import CustomException
-
-if (
-    # The WERKZEUG_RUN_MAIN is set to true when running the subprocess for
-    # reloading, we want to start debugpy only once during the first
-    # invocation and never during reloads.
-    # See https://github.com/microsoft/debugpy/issues/1296#issuecomment-2012778330
-    os.environ.get("WERKZEUG_RUN_MAIN") != "true"
-    and os.environ.get("FLASK_DEBUG") == "1"
-):
-    import debugpy
-
-    debugpy.listen(("0.0.0.0", 5678))
 
 dictConfig(
     {
@@ -53,21 +46,21 @@ dictConfig(
                 "formatter": "default",
             }
         },
-        "root": {"level": os.environ.get("LOGLEVEL", "WARNING"), "handlers": ["wsgi"]},
+        "root": {
+            "level": config.UMP_LOG_LEVEL,
+            "handlers": ["wsgi"]
+        },
     }
 )
 
 
 def cleanup():
     """Cleans up jobs and Geoserver layers of anonymous users"""
-    engine = create_engine(
-        f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"
-        + f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
-    )
     sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id, provider_prefix, process_id"
-    finished = datetime.now() - timedelta(minutes=cleanup_age)
-    with engine.begin() as conn:
-        result = conn.exec_driver_sql(sql, {"finished": finished})
+    finished = datetime.now() - timedelta(minutes = config.UMP_JOB_DELETE_INTERVAL)
+    
+    with DBHandler() as conn:
+        result = conn.run_query(sql, query_params={'finished': finished})
         for row in result:
             # get additional job metadata
             job_id, provider_prefix, process_id = row
@@ -81,22 +74,25 @@ def cleanup():
             )
             if result_storage == "geoserver":
                 requests.delete(
-                    f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}"
+                    f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/layers/{job_id}.xml",
-                    auth=(config.geoserver_admin_user, config.geoserver_admin_password),
-                    timeout=config.geoserver_timeout,
+                    auth=(
+                        config.UMP_GEOSERVER_USER,
+                        config.UMP_GEOSERVER_PASSWORD.get_secret_value
+                    ),
+                    timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
-                    f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}"
+                    f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}/featuretypes/{job_id}.xml",
-                    auth=(config.geoserver_admin_user, config.geoserver_admin_password),
-                    timeout=config.geoserver_timeout,
+                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
+                    timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
-                    f"{config.geoserver_workspaces_url}/{config.geoserver_workspace}"
+                    f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}.xml",
-                    auth=(config.geoserver_admin_user, config.geoserver_admin_password),
-                    timeout=config.geoserver_timeout,
+                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
+                    timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
 
 
@@ -104,16 +100,16 @@ def cleanup():
 # cleanup is a different task and should NOT be part of
 # the main app, instead it should be outsourced to a module and should be optionally
 # I suggest to use celery and redis for this task
-
-schedule.every(int(config.cleanup_age)).seconds.do(cleanup)
+# also it does not work, cleanup is called when the routes are accessed, not on a regular basis
+schedule.every(int(config.UMP_JOB_DELETE_INTERVAL)).seconds.do(cleanup)
 
 app = APIFlask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", 0)
 app.config["SQLALCHEMY_DATABASE_URI"] = (
-    f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"
-    + f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
+    f"postgresql+psycopg2://{config.UMP_DATABASE_USER}:{config.UMP_DATABASE_PASSWORD.get_secret_value()}"
+    + f"@{config.UMP_DATABASE_HOST}:{config.UMP_DATABASE_PORT}/{config.UMP_DATABASE_NAME}"
 )
 
 db = SQLAlchemy(app)
@@ -130,10 +126,11 @@ api.register_blueprint(health_bp, url_prefix="/health")
 
 app.register_blueprint(api)
 
+# this does not check the connection yet, so app can fail later on!
 keycloak_openid = KeycloakOpenID(
-    server_url=f"{config.keycloak_protocol}://{config.keycloak_host}/auth/",
-    client_id=f"{config.keycloak_client}",
-    realm_name=f"{config.keycloak_realm}",
+    server_url=str(config.UMP_KEYCLOAK_URL),
+    client_id=config.UMP_KEYCLOAK_CLIENT_ID,
+    realm_name=config.UMP_KEYCLOAK_REALM,
 )
 
 
@@ -143,11 +140,23 @@ def check_jwt():
     schedule.run_pending()
     auth = request.authorization
     if auth is not None:
-        decoded = keycloak_openid.decode_token(auth.token)
+        # need exception handling here to avoid app failure!
+        try:
+            decoded = keycloak_openid.decode_token(auth.token)
+        except KeycloakGetError as e:
+            raise CustomException(
+                message="Keycloak: Resource not found. Check Keycloak URL path.",
+                status_code=404,
+            )
+        except KeycloakConnectionError as e:
+            raise CustomException(
+                message="Keycloak: Connection error. Check Keycloak URL host.",
+                status_code=500,
+            )
         g.auth_token = decoded
     else:
         g.auth_token = None
-
+    pass
 
 @app.after_request
 def set_headers(response):
@@ -178,6 +187,11 @@ def handle_http_exception(error):
     response.content_type = "application/json"
     return response
 
+
+@atexit.register
+def shutdown_pool_on_exit():
+    """Close the connection pool when the application shuts down."""
+    close_pool()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0")
