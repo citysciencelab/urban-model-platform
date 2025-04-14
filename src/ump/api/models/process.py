@@ -13,6 +13,7 @@ import ump.api.providers as providers
 import ump.config as config
 from ump.api.models.job import Job, JobStatus
 from ump.errors import CustomException, InvalidUsage
+from ump.api.db_handler import engine
 
 logging.basicConfig(level=logging.INFO)
 
