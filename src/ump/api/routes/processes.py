@@ -30,6 +30,7 @@ def execute(process_id_with_prefix=None):
     result = process.execute(request.json, None if auth is None else auth['sub'])
     return Response(json.dumps(result), status=201, mimetype="application/json")
 
+# TODO: this lists ALL providers in providers.yaml, ignoring "exclude: True"
 @processes.route("/providers", methods=["GET"])
 def get_providers():
     """Returns the providers config"""
