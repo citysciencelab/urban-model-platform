@@ -42,7 +42,6 @@ class GraphProperties(BaseModel):
     )
 
 class Process(BaseModel):
-    name: str
     description: str | None = None
     version: str | None = None
     result_storage: Literal["geoserver", "remote"] = Field(alias="result-storage")
@@ -74,6 +73,15 @@ class Process(BaseModel):
             "by anonymous users will be cleaned up after some time."
         )
     )
+    deterministic: bool = Field(
+        default=False,
+        description= (
+            "If set to True, the process is regarded deterministic. "
+            "This means that such a process will always produce "
+            "the same result for the same input. So, outputs can be "
+            "cached based in inputs"
+        )
+    )
 
     @model_validator(mode="after")
     def validate_result_path_for_geoserver(self):
@@ -83,11 +91,11 @@ class Process(BaseModel):
         return self
 
 class Authentication(BaseModel):
-    type: str
+    type: Literal["BasicAuth"]
     user: str
     password: SecretStr
 
-class ModelServer(BaseModel):
+class Provider(BaseModel):
     name: str
     server_url: HttpUrl = Field(
         alias="url",
@@ -103,7 +111,7 @@ class ModelServer(BaseModel):
             "Default is 60 seconds."
         )
     )
-    authentication: Authentication
+    authentication: Authentication | None = None
     processes: dict[ProviderName, Process] = Field(
         description= (
             "Processes are defined as a dictionary with process name as key "
@@ -113,7 +121,7 @@ class ModelServer(BaseModel):
 
 # a TypeAlias to give context to an otherwise generic dict
 ModelServers: TypeAlias = Annotated[
-    dict[str, ModelServer],
+    dict[str, Provider],
     Field(
         description= (
             "A dictionary of model servers with their names as keys and "
@@ -128,4 +136,4 @@ model_servers_adapter = TypeAdapter(ModelServers)
 
 if __name__ == "__main__":
 
-    print(ModelServer.model_json_schema())
+    print(Provider.model_json_schema())
