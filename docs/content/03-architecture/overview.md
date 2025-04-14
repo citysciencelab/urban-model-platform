@@ -11,5 +11,6 @@ Its main components are:
 - **Keycloak**: With Keycloak, the Urban Model Platform provides authentication and authorization for users. It allows users to log in and access the platform securely and platform administrators to manage user roles and permissions.[Learn more](Keycloak)
 - **GeoServer**: The Urban Model Platform can be configured to store results in a GeoServer instance. This allows users to visualize the results of their simulations on a map with the respective WFS and WMS layers.[Learn more](GeoServer)
 
+Additionally you need a **PostgreSQL** database to store jobs for the UMP and geoserver layers (provided you configured "geoserver" as result storage) 
 
 To learn how to properly configure providers, check out the [User Guide](providers) section.
