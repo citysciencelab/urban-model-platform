@@ -282,7 +282,7 @@ class Job:
             JobStatus.accepted.value,
         ):
 
-            job_result_url = f"{config.api_server_url}/api/jobs/{self.job_id}/results"
+            job_result_url = f"{config.UMP_API_SERVER_URL}/api/jobs/{self.job_id}/results"
 
             job_dict["links"] = [
                 {

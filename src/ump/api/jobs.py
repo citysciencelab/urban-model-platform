@@ -1,15 +1,14 @@
 import re
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from os import environ as env
-from ump import config
+
 from ump.api.db_handler import DBHandler
+from ump.api.db_handler import db_engine as engine
 from ump.api.models.ensemble import Ensemble, JobsEnsembles
 from ump.api.models.job import Job
 from ump.api.models.job_status import JobStatus
 
-engine = create_engine(f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")
 def append_ensemble_list(job):
     with Session(engine) as session:
         stmt = select(JobsEnsembles).where(JobsEnsembles.job_id == job['jobID'])
@@ -65,10 +64,9 @@ def get_jobs(args, user = None):
         )
     conditions.append("status IN %(status)s")
 
-    db_handler = DBHandler()
-    db_handler.set_sortable_columns(Job.SORTABLE_COLUMNS)
+    with DBHandler() as db:
+        db.set_sortable_columns(Job.SORTABLE_COLUMNS)
 
-    with db_handler as db:
         job_ids = db.run_query(query,
             conditions   = conditions,
             query_params = query_params,
