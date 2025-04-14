@@ -41,7 +41,7 @@ class GraphProperties(BaseModel):
         )
     )
 
-class Process(BaseModel):
+class ProcessConfig(BaseModel):
     description: str | None = None
     version: str | None = None
     result_storage: Literal["geoserver", "remote"] = Field(alias="result-storage")
@@ -112,7 +112,7 @@ class Provider(BaseModel):
         )
     )
     authentication: Authentication | None = None
-    processes: dict[ProviderName, Process] = Field(
+    processes: dict[ProviderName, ProcessConfig] = Field(
         description= (
             "Processes are defined as a dictionary with process name as key "
             "and process properties as value."
@@ -136,4 +136,4 @@ model_servers_adapter = TypeAdapter(ModelServers)
 
 if __name__ == "__main__":
 
-    print(Provider.model_json_schema())
+    print(model_servers_adapter.json_schema())
