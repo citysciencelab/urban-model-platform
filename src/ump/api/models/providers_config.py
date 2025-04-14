@@ -46,7 +46,8 @@ class ProcessConfig(BaseModel):
     version: str | None = None
     result_storage: Literal["geoserver", "remote"] = Field(alias="result-storage")
     exclude: bool = False
-    result_path: str = Field(
+    result_path: str | None = Field(
+        default=None,
         alias="result-path",
         description= (
             "If the results should be stored in Geoserver,"
