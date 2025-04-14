@@ -3,30 +3,30 @@
 As the Urban Model Platform does not provide any processes by itself, it needs to be connected to external model servers. This is done by configuring providers in the `providers.yaml` file. The following example shows how to configure a model server and its processes:
 
 
-```code
+```yaml
 # providers.yaml
 modelserver-1:
-    url: "http://localhost:5005"
-    name: "Example Modelserver"
-    authentication:
-      type: "BasicAuth"
-      user: "user"
-      password: "password"
-    timeout:  60
-    processes:
-      process-1:
-        result-storage: "geoserver"
-        result-path: simulation_geometry
-        graph-properties:
-            root-path: results.simulation_results
-            x-path: results.simulation_results.x
-            y-path: results.simulation_results.y
-        anonymous-access: True
-      process-2
-        result-storage: "remote"
-        deterministic: True
-      process-3
-        exclude: True
+  url: "http://localhost:5005"
+  name: "Example Modelserver"
+  authentication:
+    type: "BasicAuth"
+    user: "user"
+    password: "password"
+  timeout:  60
+  processes:
+    process-1:
+      result-storage: "geoserver"
+      result-path: simulation_geometry
+      graph-properties:
+        root-path: results.simulation_results
+        x-path: results.simulation_results.x
+        y-path: results.simulation_results.y
+      anonymous-access: True
+    process-2:
+      result-storage: "remote"
+      deterministic: True
+    process-3:
+      exclude: True
 ```
 
 ```{warning}
