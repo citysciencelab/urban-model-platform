@@ -1,5 +1,15 @@
-from typing import Literal
-from pydantic import BaseModel, Field, HttpUrl, SecretStr, model_validator
+from typing import Annotated, Literal, TypeAlias
+
+from pydantic import BaseModel, Field, HttpUrl, SecretStr, TypeAdapter, model_validator
+
+# a type alias to give context to an otherwise generic str
+ProviderName: TypeAlias = Annotated[str, Field(
+    description= (
+        "The name of the provider. "
+        "This should be a valid identifier."
+    )
+)]
+
 
 class GraphProperties(BaseModel):
     root_path: str = Field(
@@ -77,9 +87,10 @@ class Authentication(BaseModel):
     user: str
     password: SecretStr
 
-class ModelServers(BaseModel):
+class ModelServer(BaseModel):
     name: str
     server_url: HttpUrl = Field(
+        alias="url",
         description= (
             "The URL of the model server pointing to an OGC Processes api. "
             "It should be a valid HTTP or HTTPS URL with path to the landing page."
@@ -93,13 +104,28 @@ class ModelServers(BaseModel):
         )
     )
     authentication: Authentication
-    processes: dict[str, Process] = Field(
+    processes: dict[ProviderName, Process] = Field(
         description= (
             "Processes are defined as a dictionary with process name as key "
             "and process properties as value."
         )
     )
 
+# a TypeAlias to give context to an otherwise generic dict
+ModelServers: TypeAlias = Annotated[
+    dict[str, ModelServer],
+    Field(
+        description= (
+            "A dictionary of model servers with their names as keys and "
+            "ModelServer objects as values."
+        )
+    )
+]
+
+# a TypeAdapter allows us to use pydantics model_validate method
+# on arbitrary python types
+model_servers_adapter = TypeAdapter(ModelServers)
+
 if __name__ == "__main__":
 
-    print(ModelServers.model_json_schema())
+    print(ModelServer.model_json_schema())
