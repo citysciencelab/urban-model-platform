@@ -96,7 +96,7 @@ class Authentication(BaseModel):
     user: str
     password: SecretStr
 
-class Provider(BaseModel):
+class ProviderConfig(BaseModel):
     name: str
     server_url: HttpUrl = Field(
         alias="url",
@@ -122,7 +122,7 @@ class Provider(BaseModel):
 
 # a TypeAlias to give context to an otherwise generic dict
 ModelServers: TypeAlias = Annotated[
-    dict[str, Provider],
+    dict[str, ProviderConfig],
     Field(
         description= (
             "A dictionary of model servers with their names as keys and "

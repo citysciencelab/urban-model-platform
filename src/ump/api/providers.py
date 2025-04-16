@@ -12,7 +12,7 @@ from watchdog.observers.polling import PollingObserver
 from ump.api.models.providers_config import (
     ModelServers,
     ProcessConfig,
-    Provider,
+    ProviderConfig,
     model_servers_adapter,
 )
 from ump.config import app_settings as config
@@ -66,7 +66,7 @@ atexit.register(observer.stop)
 def get_providers() -> ModelServers:
     return PROVIDERS
 
-def authenticate_provider(provider: Provider):
+def authenticate_provider(provider: ProviderConfig):
     auth = None
     if provider.authentication:
         auth = aiohttp.BasicAuth(
