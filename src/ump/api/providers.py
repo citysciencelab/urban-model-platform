@@ -25,18 +25,21 @@ PROVIDERS_LOCK = Lock()  # Thread-safe lock for updating PROVIDERS
 
 class ProviderLoader(FileSystemEventHandler):
     def on_modified(self, event):
+        logger.info("File modified: %s", event.src_path)
         if event.src_path == config.UMP_PROVIDERS_FILE.absolute().as_posix():
             self.load_providers()
 
     def load_providers(self):
+        logger.info("(Re)Loading providers from %s", config.UMP_PROVIDERS_FILE)
         try:
             with open(config.UMP_PROVIDERS_FILE, encoding="UTF-8") as file:
                 if content := yaml.safe_load(file):
                     validated_content = model_servers_adapter.validate_python(content)
-                    logger.info("Loading providers.yaml.")
                     with PROVIDERS_LOCK:  # Ensure thread-safe update
-                        global PROVIDERS
-                        PROVIDERS = validated_content
+                        # Update PROVIDERS in place
+                        PROVIDERS.clear()
+                        PROVIDERS.update(validated_content)
+                        logger.info("Providers (re)loaded successfully")
         except FileNotFoundError:
             logger.error("Providers file not found: %s", config.UMP_PROVIDERS_FILE)
         except yaml.YAMLError as e:
@@ -60,6 +63,8 @@ observer.start()
 # Graceful shutdown for observer
 atexit.register(observer.stop)
 
+def get_providers() -> ModelServers:
+    return PROVIDERS
 
 def authenticate_provider(provider: Provider):
     auth = None
