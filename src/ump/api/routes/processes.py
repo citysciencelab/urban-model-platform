@@ -7,13 +7,13 @@ from flask import Response, g, request
 
 import ump.api.providers as providers
 from ump.api.models.process import Process
-from ump.api.processes import all_processes
+from ump.api.processes import load_processes
 
 processes = APIBlueprint("processes", __name__)
 
 @processes.route("/", defaults={"page": "index"})
 def index(page):
-    result = asyncio.run(all_processes())
+    result = asyncio.run(load_processes())
     return Response(json.dumps(result), mimetype="application/json")
 
 
