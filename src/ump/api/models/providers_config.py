@@ -33,7 +33,7 @@ class GraphProperties(BaseModel):
         )
     )
     y_path: str = Field(
-        alias="x-path",
+        alias="y-path",
         description= (
             "If the results are stored in Geoserver,"
             "you can specify the graph properties using "
