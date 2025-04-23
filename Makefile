@@ -56,16 +56,19 @@ start-dev:
 
 	@ echo 'Starting development environment containers: ump database, geoserver, keycloak, keycloak database'
 	
-	docker compose -f docker-compose-dev.yaml up -d api-db geoserver keycloak kc-db
+	docker compose -f docker-compose-dev.yaml up -d api-db keycloak kc-db
+	
+	@ echo 'Waiting for database to be ready'
+	sleep 7
 
-	@ initilize the database
-	flask db init
+	@ echo 'initialize the database'
+	FLASK_APP=src.ump.main flask db init   
 
-	@ echo running database migrations
-	flask db upgrade
+	@ echo 'running database migrations'
+	FLASK_APP=src.ump.main flask db upgrade
 
 	@ echo 'Current database state'
-	flask db current
+	FLASK_APP=src.ump.main flask db current
 	
 	@ echo 'Now start a debug session with your preferred IDE, e.g. VSCode using launch.json'
 
@@ -81,7 +84,7 @@ stop-dev:
 	docker compose -f docker-compose-dev.yaml stop
 
 clean-dev:
-	@echo 'Removing dev containers AND volumes'
+	@echo 'Removing dev containers AND volumes. All data is lost!'
 	docker compose -f docker-compose-dev.yaml down --volumes
 
 build-docs:
