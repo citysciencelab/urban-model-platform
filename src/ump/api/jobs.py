@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 
 from ump.api.db_handler import DBHandler
 from ump.api.db_handler import db_engine as engine
-from ump.api.ensemble import Ensemble, JobsEnsembles
-from ump.api.job import Job
-from ump.api.job_status import JobStatus
+from ump.api.models.ensemble import Ensemble, JobsEnsembles
+from ump.api.models.job import Job
+from ump.api.models.job_status import JobStatus
 
 def append_ensemble_list(job):
     with Session(engine) as session:

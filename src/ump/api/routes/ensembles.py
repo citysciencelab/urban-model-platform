@@ -17,11 +17,11 @@ from ema_workbench.em_framework.samplers import (
 from flask import Response, g, request
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
-from ump.api.ensemble import Comment, Ensemble, EnsemblesUsers, JobsEnsembles, JobsUsers
-from ump.api.job import Job
+from ump import config
+from ump.api.models.ensemble import Comment, Ensemble, EnsemblesUsers, JobsEnsembles, JobsUsers
+from ump.api.models.job import Job
 from ump.api.keycloak_utils import find_user_id_by_email
-from ump.api.process import Process
-from ump.api.db_handler import db_engine as engine
+from ump.api.models.process import Process
 
 ensembles = APIBlueprint("ensembles", __name__)
 

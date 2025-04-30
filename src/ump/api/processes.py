@@ -1,102 +1,174 @@
-import logging
+import asyncio
 import traceback
+from logging import getLogger
 
 import aiohttp
 from aiohttp import ClientTimeout
 from flask import g
 
-import ump.api.providers as providers
+from ump.api.models.providers_config import ProcessConfig
+from ump.api.providers import (
+    authenticate_provider,
+    get_providers,
+)
 
+logger = getLogger(__name__)
 
-async def all_processes():
-    processes = {}
-    async with aiohttp.ClientSession() as session:
-        for provider in providers.PROVIDERS:
-            try:
-                p = providers.PROVIDERS[provider]
-
-                auth = providers.authenticate_provider(p)
-                timeout_value = int(p.get("timeout"))
-
-                response = await session.get(
-                    f"{p['url']}/processes",
-                    auth=auth,
-                    headers={
-                        "Content-type": "application/json",
-                        "Accept": "application/json",
-                    },
-                    timeout=ClientTimeout(total=timeout_value / 1000),
-                )
-                async with response:
-                    assert (
-                        response.status == 200
-                    ), f"Response status {response.status}, {response.reason}"
-                    results = await response.json()
-
-                    if "processes" in results:
-                        processes[provider] = results["processes"]
-
-            except Exception as e:
-                logging.error(
-                    "Cannot access %s provider at url \"%s/processes\"! %s",
-                    provider,
-                    p['url'],
-                    e
-                )
-                traceback.print_exc()
-                processes[provider] = []
-
-    return _processes_list(processes)
-
-
-def _processes_list(results):
+#TODO: add validation of loaded processes through pydantic model or existing Process class
+async def load_processes():
     processes = []
     auth = g.get("auth_token", {}) or {}
     realm_roles = auth.get("realm_access", {}).get("roles", [])
+    # TODO: another hard-coded one: "ump-client"
     client_roles = (
         auth.get("resource_access", {}).get("ump-client", {}).get("roles", [])
     )
 
-    for provider in providers.PROVIDERS:
-        provider_access = provider in realm_roles or provider in client_roles
-        if provider_access:
-            logging.debug("Granting access for model server %s", provider)
-        try:
-            # Check if process has special configuration
-            for process in results[provider]:
-                process_id = f"{provider}_{process['id']}"
-                process_access = process_id in realm_roles or process_id in client_roles
-                if not process['id'] in providers.PROVIDERS[provider]["processes"]:
-                    logging.debug("No configuration found for process %s", process['id'])
-                    continue
-                process_config = providers.PROVIDERS[provider]["processes"][process['id']]
-                public_access = 'anonymous-access' in process_config and process_config['anonymous-access']
-                if public_access or process_access or provider_access:
-                    logging.debug("Granting access for process %s", process['id'])
-
-                if not public_access and not provider_access and not process_access:
-                    logging.debug("Not granting access for %s", process['id'])
-                    continue
-
-                logging.debug(
-                    "Checking process %s of provider %s",
-                    process['id'],
-                    providers.PROVIDERS[provider]['name']
-                )
-
-                if providers.check_process_availability(provider, process["id"]):
-                    process["id"] = f"{provider}:{process['id']}"
-                    processes.append(process)
-
-                else:
-                    logging.debug("Process ID %s is not configured.", process['id'])
-                    continue
-
-        except Exception as e:
-            logging.error(
-                "Something seems to be wrong with the configuration of model servers: %s",
-                e
+    async with aiohttp.ClientSession() as session:
+        # Create a list of tasks for fetching processes concurrently
+        tasks = [
+            fetch_provider_processes(
+                session, provider_name, provider_config, realm_roles, client_roles
             )
-            traceback.print_exc()
+            for provider_name, provider_config in get_providers().items()
+        ]
+
+        # Run all tasks in an async manner and gather results
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error("Error fetching processes: %s", result)
+            else:
+                processes.extend(result)
 
     return {"processes": processes}
+
+
+async def fetch_provider_processes(
+        session, provider_name, provider_config,
+        realm_roles, client_roles
+):
+    """Fetch processes for a specific provider and filter them."""
+    provider_processes = []
+    try:
+        provider_auth = authenticate_provider(provider_config)
+        
+        results = await fetch_processes_from_provider(
+            session, provider_config, provider_auth
+        )
+
+        if "processes" in results:
+            for process in results["processes"]:
+                process_id = process["id"]
+                if process_id not in provider_config.processes:
+                    logger.info(
+                        "No configuration found for process %s, ignoring it.",
+                        process_id
+                    )
+                    # next process
+                    continue
+
+                process_config = provider_config.processes[process_id]
+                if is_process_visible(
+                    process_id, provider_name, process_config,
+                    realm_roles, client_roles
+                ):
+                    process["id"] = f"{provider_name}:{process_id}"
+                    provider_processes.append(process)
+
+    except aiohttp.ClientError as e:
+        logger.error("HTTP error while accessing provider %s: %s", provider_name, e)
+    except Exception as e:
+        logger.error("Unexpected error while processing provider %s: %s", provider_name, e)
+        traceback.print_exc()
+
+    return provider_processes
+
+
+async def fetch_processes_from_provider(session, provider_config, provider_auth):
+    """Fetch processes from the provider's API."""
+    try:
+        response = await session.get(
+            f"{provider_config.server_url}/processes",
+            auth=provider_auth,
+            headers={
+                "Content-type": "application/json",
+                "Accept": "application/json",
+            },
+            timeout=ClientTimeout(total=provider_config.timeout),
+        )
+        async with response:
+            assert response.status == 200, f"Response status {response.status}, {response.reason}"
+            return await response.json()
+    except aiohttp.ClientError as e:
+        logger.error("Failed to fetch processes from %s: %s", provider_config.server_url, e)
+        raise
+
+def is_process_visible(
+    process_id: str,
+    provider_name: str,
+    process_config: ProcessConfig,
+    realm_roles: list[str],
+    client_roles: list[str],
+) -> bool:
+    """
+    Determines if a process is visible to the user based on the following checks:
+    0. The process is configured to be excluded or not.
+    1. Anonymous access is allowed.
+    2. The user has access to all processes of a provider(/ModelServer).
+    3. The user has access to the specific process.
+    """
+    # Check if the process is excluded
+    if process_config.exclude:
+        logger.info("Process ID %s is configured to be excluded.", process_id)
+        return False
+
+    # Check provider/ModelServer-level access
+    access_to_all_processes_granted = (
+        provider_name in realm_roles
+        or provider_name in client_roles
+    )
+
+    # Check process-specific access
+    access_to_this_process_granted = (
+        f"{provider_name}_{process_id}" in realm_roles
+        or f"{provider_name}_{process_id}" in client_roles
+    )
+
+    # Log the specific condition(s) that grant access
+    if process_config.anonymous_access:
+        logger.info(
+            "Granting access for process %s: Anonymous access is allowed.",
+            process_id
+        )
+
+
+    if access_to_all_processes_granted:
+        logger.info(
+            "Granting access for process %s: User has provider-level access. Role: %s",
+            process_id,
+            provider_name
+        )
+
+    if access_to_this_process_granted:
+        logger.info(
+            "Granting access for process %s: User has process-specific access. Role: %s_%s",
+            process_id,
+            provider_name,
+            process_id
+        )
+
+    # Grant access if any of the conditions are met
+    if (
+        process_config.anonymous_access
+        or access_to_all_processes_granted
+        or access_to_this_process_granted
+    ):
+        return True
+
+    logger.info(
+        "Not granting access for process %s", process_id
+    )
+    return False
