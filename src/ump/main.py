@@ -50,6 +50,18 @@ dictConfig(
             "level": config.UMP_LOG_LEVEL,
             "handlers": ["wsgi"]
         },
+        "loggers": {
+            "ump.api.providers": {  # Configure the logger for providers.py
+                "level": config.UMP_LOG_LEVEL,
+                "handlers": ["wsgi"],
+                "propagate": False,  # Prevent duplicate logging
+            },
+            "ump.api.processes": {  # Configure the logger for processes.py
+                "level": config.UMP_LOG_LEVEL,
+                "handlers": ["wsgi"],
+                "propagate": False,
+            },
+        },
     }
 )
 
@@ -127,30 +139,42 @@ api.register_blueprint(health_bp, url_prefix="/health")
 app.register_blueprint(api)
 
 # this does not check the connection yet, so app can fail later on!
+
 keycloak_openid = KeycloakOpenID(
     server_url=str(config.UMP_KEYCLOAK_URL),
     client_id=config.UMP_KEYCLOAK_CLIENT_ID,
     realm_name=config.UMP_KEYCLOAK_REALM,
 )
 
-
 @app.before_request
 def check_jwt():
     """Decodes the JWT token and runs pending scheduled jobs"""
+    # TODO: this is senseless, too
     schedule.run_pending()
     auth = request.authorization
+
     if auth is not None:
         # need exception handling here to avoid app failure!
         try:
+            # TODO: generally token verification is done offline,
+            # but decode_token connects to keycloak on every request (for retrieving keys)
             decoded = keycloak_openid.decode_token(auth.token)
         except KeycloakGetError as e:
+            app.logger.error(e)
             raise CustomException(
                 message="Keycloak: Resource not found. Check Keycloak URL path.",
                 status_code=404,
             )
         except KeycloakConnectionError as e:
+            app.logger.error(e)
             raise CustomException(
                 message="Keycloak: Connection error. Check Keycloak URL host.",
+                status_code=500,
+            )
+        except Exception as e:
+            app.logger.error(e)
+            raise CustomException(
+                message="Keycloak: Unknown error. Check Keycloak URL.",
                 status_code=500,
             )
         g.auth_token = decoded

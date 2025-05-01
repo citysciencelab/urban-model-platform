@@ -10,11 +10,14 @@ import aiohttp
 from flask import g
 
 import ump.api.providers as providers
-import ump.config as config
-from ump.api.db_handler import db_engine as engine
-from ump.api.job import Job, JobStatus
+from ump.api.db_handler import engine
+from ump.api.models.job import Job, JobStatus
+from ump.api.models.providers_config import ProcessConfig, ProviderConfig
+from ump.config import app_settings as config
 from ump.errors import CustomException, InvalidUsage
 
+#TODO: unify logging setup, because this takes not into
+# account that an admin wants to configure log level 
 logging.basicConfig(level=logging.INFO)
 
 
@@ -50,8 +53,9 @@ class Process:
 
         auth = g.get("auth_token")
         role = f"{self.provider_prefix}_{self.process_id}"
+
         restricted_access = (
-            "authentication" in providers.PROVIDERS[self.provider_prefix]
+            "authentication" in providers.get_providers()[self.provider_prefix]
         )
 
         if restricted_access:
@@ -72,14 +76,13 @@ class Process:
         asyncio.run(self.set_details())
 
     async def set_details(self):
-        p = providers.PROVIDERS[self.provider_prefix]
-
+        provider = providers.get_providers()[self.provider_prefix]
         # Check for Authentification
-        auth = providers.authenticate_provider(p)
+        auth = providers.authenticate_provider(provider)
 
         async with aiohttp.ClientSession() as session:
             response = await session.get(
-                f"{p['url']}/processes/{self.process_id}",
+                f"{provider.server_url}/processes/{self.process_id}",
                 auth=auth,
                 headers={
                     "Content-type": "application/json",
@@ -193,9 +196,13 @@ class Process:
         """
         Checks if the job has already been executed. Returns the job id if it has, None otherwise.
         """
-        p = providers.PROVIDERS[self.provider_prefix]["processes"][self.process_id]
-        if "deterministic" not in p or not p["deterministic"]:
+        # p = providers.PROVIDERS[self.provider_prefix]["processes"][self.process_id]
+        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
+        process_config: ProcessConfig = provider.processes[self.process_id]
+        
+        if process_config.deterministic:
             return None
+
         sql = """
         select job_id from jobs where hash = encode(sha512((%(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea), 'base64')
         """
@@ -213,14 +220,14 @@ class Process:
         return None
 
     def execute(self, parameters, user):
-        p = providers.PROVIDERS[self.provider_prefix]
+        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
         self.validate_params(parameters)
 
         logging.info(
             " --> Executing %s on model server %s with params %s as process %s for user %s",
             self.process_id,
-            p["url"],
+            str(provider.server_url),
             parameters,
             self.process_id_with_prefix,
             user,
@@ -238,8 +245,9 @@ class Process:
         # execution mode:
         # to maintain backwards compatibility to models using
         # pre-1.0.0 versions of OGC api processes
+        #TODO: need to add prefer-header
         request_body["mode"] = "async"
-        p = providers.PROVIDERS[self.provider_prefix]
+        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
         # extract job_name from request_body
         name = request_body.pop("job_name",None)
@@ -250,11 +258,11 @@ class Process:
             return Job(job_id, user)
 
         try:
-            auth = providers.authenticate_provider(p)
+            auth = providers.authenticate_provider(provider)
 
             async with aiohttp.ClientSession() as session:
                 process_response = await session.get(
-                    f"{p['url']}/processes/{self.process_id}",
+                    f"{provider.server_url}/processes/{self.process_id}",
                     auth=auth,
                     headers={
                         "Content-type": "application/json",
@@ -262,7 +270,7 @@ class Process:
                     },
                 )
                 response = await session.post(
-                    f"{p['url']}/processes/{self.process_id}/execution",
+                    f"{provider.server_url}/processes/{self.process_id}/execution",
                     json=request_body,
                     auth=auth,
                     headers={
@@ -305,7 +313,7 @@ class Process:
                     )
 
                     status_response = await session.get(
-                        f"{p['url']}/jobs/{remote_job_id}?f=json",
+                        f"{provider.server_url}/jobs/{remote_job_id}?f=json",
                         auth=auth,
                         headers={
                             "Content-type": "application/json",
@@ -337,8 +345,10 @@ class Process:
         logging.info(" --> Waiting for results in Thread")
 
         finished = False
-        p = providers.PROVIDERS[self.provider_prefix]
-        timeout = float(p["timeout"])
+        
+        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
+        
+        timeout = float(provider.timeout)
         start = time.time()
         job_details = {}
 
@@ -347,9 +357,9 @@ class Process:
 
                 async with aiohttp.ClientSession() as session:
 
-                    auth = providers.authenticate_provider(p)
+                    auth = providers.authenticate_provider(provider)
                     async with session.get(
-                        f"{p['url']}/jobs/{job.remote_job_id}?f=json",
+                        f"{provider.server_url}/jobs/{job.remote_job_id}?f=json",
                         auth=auth,
                         headers={
                             "Content-type": "application/json",

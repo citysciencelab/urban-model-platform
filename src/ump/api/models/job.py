@@ -8,9 +8,10 @@ import aiohttp
 import geopandas as gpd
 
 import ump.api.providers as providers
-import ump.config as config
+from ump.config import app_settings as config
 from ump.api.db_handler import DBHandler
-from ump.api.job_status import JobStatus
+from ump.api.models.job_status import JobStatus
+from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.errors import CustomException, InvalidUsage
 from ump.geoserver.geoserver import Geoserver
 
@@ -139,7 +140,7 @@ class Job:
 
             self.provider_prefix = match.group(1)
             self.process_id = match.group(2)
-            self.provider_url = providers.PROVIDERS[self.provider_prefix]["url"]
+            self.provider_url = providers.get_providers()[self.provider_prefix].server_url
 
         if not self.job_id:
             self.job_id = str(uuid.uuid4())
@@ -188,7 +189,7 @@ class Job:
             "job_id": self.job_id,
             "remote_job_id": self.remote_job_id,
             "provider_prefix": self.provider_prefix,
-            "provider_url": self.provider_url,
+            "provider_url": str(self.provider_url),
             "status": self.status,
             "message": self.message,
             "created": self.created,
@@ -330,11 +331,11 @@ class Job:
                 "message": self.message,
             }
 
-        p = providers.PROVIDERS[self.provider_prefix]
-        self.provider_url = p["url"]
+        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
+        self.provider_url = provider.server_url
 
         async with aiohttp.ClientSession() as session:
-            auth = providers.authenticate_provider(p)
+            auth = providers.authenticate_provider(provider)
 
             response = await session.get(
                 f"{self.provider_url}/jobs/{self.remote_job_id}/results?f=json",
@@ -355,13 +356,16 @@ class Job:
 
     async def results_to_geoserver(self):
         try:
-            p = providers.PROVIDERS[self.provider_prefix]['processes'][self.process_id]
+            provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
+
+            process_config: ProcessConfig = provider.processes[self.process_id] 
 
             results = await self.results()
-            if 'result-path' in p:
-                parts = p['result-path'].split('.')
+            if result_path:= process_config.result_path:
+                parts =result_path.split('.')
                 for part in parts:
                     results = results[part]
+
             geoserver = Geoserver()
 
             self.set_results_metadata(results)

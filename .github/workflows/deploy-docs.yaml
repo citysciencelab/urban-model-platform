@@ -1,0 +1,64 @@
+name: deploy-book
+
+# Run this when the master or main branch changes
+on:
+  push:
+    branches:
+    - main
+    - documentation
+    # If your git repository has the Jupyter Book within some-subfolder next to
+    # unrelated files, you can make this run only if a file within that specific
+    # folder has been modified.
+    #
+    # paths:
+    # - some-subfolder/**
+
+# This job installs dependencies, builds the book, and pushes it to `gh-pages`
+jobs:
+  deploy-book:
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+    - uses: actions/checkout@v4
+
+    # Install dependencies
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: pip # Implicitly uses requirements.txt for cache key
+    
+    # Install the dependencies
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install jupyter-book sphinx-autoapi sphinxcontrib-autoyaml
+
+
+    #- name: Install and configure Poetry
+    #  uses: snok/install-poetry@v1
+    #  with:
+    #    version: 1.8.5
+    #    installer-parallel: true
+
+    #- name: Install the project dependencies
+    #  run: |
+    #    poetry install --only=docs
+
+    # Build the book
+    - name: Build the book
+      run: |
+        jupyter-book build docs
+
+    # Upload the book's HTML as an artifact
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: "docs/_build/html"
+
+    # Deploy the book's HTML to GitHub Pages
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4

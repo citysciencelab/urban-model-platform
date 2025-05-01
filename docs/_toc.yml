@@ -4,35 +4,36 @@
 format: jb-book
 root: content/index.md
 parts:
+  - caption: Getting Started
+    chapters:
+      - file: content/01-intro/intro.md
+      - file: content/01-intro/quick_start.md
+      - file: content/01-intro/authors.md
+      
   - caption: User Guide
     chapters:
-      - file: content/user_guide/deployment overview.md
-      - file: content/user_guide/configuration_options.md
-      - file: content/user_guide/setup_docker_compose.md
+      - file: content/02-user_guide/setup.md
+      - file: content/02-user_guide/provider-configuration.md
+      - file: content/02-user_guide/deployment.md
         # sections:
         # - file: start/overview
 
-  - caption: Technical background
+  - caption: Architecture
     chapters:
-      - file: content/technical_background/requirements.md
-      - file: content/technical_background/implementation.md
+      - file: content/03-architecture/overview.md
+      - file: content/03-architecture/api.md
+      - file: content/03-architecture/keycloak.md
+      - file: content/03-architecture/geoserver.md
         # sections:
         # - file: start/overview
 
-  - caption: Developer zone
+  - caption: Developing
     chapters:
-      - title: Setup development environment
-        file: content/developers/dev_environment_setup.md
-
-      - title: Some useful commands.md
-        file: content/developers/useful_commands.md
-
+      - title: Contributing
+        file: content/04-developing/contributing.md
+      - title: Changelog
+        file: content/04-developing/changelog.md
       - title: API reference
         file: autoapi/index # this directory is virtual!
 
-  - caption: About
-    chapters:
-      # - file: start/your-first-book
-      # sections:
-      - file: content/about/project_description.md
-      - file: content/about/authors.md
+

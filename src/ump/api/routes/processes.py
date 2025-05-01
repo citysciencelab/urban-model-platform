@@ -6,14 +6,14 @@ from apiflask import APIBlueprint
 from flask import Response, g, request
 
 import ump.api.providers as providers
-from ump.api.process import Process
-from ump.api.processes import all_processes
+from ump.api.models.process import Process
+from ump.api.processes import load_processes
 
 processes = APIBlueprint("processes", __name__)
 
 @processes.route("/", defaults={"page": "index"})
 def index(page):
-    result = asyncio.run(all_processes())
+    result = asyncio.run(load_processes())
     return Response(json.dumps(result), mimetype="application/json")
 
 
@@ -30,10 +30,11 @@ def execute(process_id_with_prefix=None):
     result = process.execute(request.json, None if auth is None else auth['sub'])
     return Response(json.dumps(result), status=201, mimetype="application/json")
 
+# TODO: this lists ALL providers' processes in providers.yaml, ignoring "exclude: True"
 @processes.route("/providers", methods=["GET"])
 def get_providers():
     """Returns the providers config"""
-    response = copy.deepcopy(providers.PROVIDERS)
+    response = copy.deepcopy(providers.get_providers())
     for key in response:
         if 'authentication' in response[key]:
             del response[key]['authentication']
