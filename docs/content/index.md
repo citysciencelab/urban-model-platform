@@ -1,4 +1,6 @@
-# Documentation for urban-model-platform
+
+
+# Documentation Urban Model Platform
 
 <!-- This is a small sample book to give you a feel for how book content is
 structured.
@@ -7,5 +9,35 @@ It does not go in-depth into any particular topic - check out [the Jupyter Book 
 
 Check out the content pages bundled with this sample book to see more. -->
 
-```{include} ../../README.md
-```
+
+The Urban Model Platform is an Open Urban Platform to distribute and access (simulation) models for Urban Digital Twins. It builds on the [OGC API Processes](https://docs.ogc.org/is/18-062r2/18-062r2.html) open standard and was developed by the City Science Lab at HafenCity University Hamburg and the Agency for Geoinformation and Suveying in the context of the [Connected Urban Twins](https://www.connectedurbantwins.de/) project.
+
+It is a key building block to provide simulation models and other algorithms in urban digital twins. By providing a single access point to multiple servers that run the algorithms, the Urban Model Platform is a novel middleware that can serve various front-end digital twin applications. 
+
+![Architecture Overview](../Architecture-Overview.png)
+
+## Key Features
+- Access point to multiple model servers 🌐
+- Build with the open OGC API Processes standard 🚀
+- Dynamic configuration ⚙️
+- Authorization and authentification 🔐
+- GeoServer integration 🌍
+- Ensemble Modeling 🔄
+- Open Source (GPL-3.0 License) 💻
+
+
+## Getting started
+To get started with the Urban Model Platform, follow these steps:
+
+1. Check out our [Quickstart Guide](quickstart) to get familiar
+2. Learn about the [Platform Architecture](architecture-overview) to understand its components and workflows.
+3. Set up a local development environment by following the [Contributing](contributing) guidelines.
+4. Contribute to the project by following our [Contributing Guidelines](contributing).
+
+
+## Developers
+The Urban Model Platform is developed collaboratively by:
+![UMP-Developer-Banner](https://github.com/user-attachments/assets/18f4826f-e828-4206-920a-9d1e248523e5)
+
+
+

@@ -43,6 +43,9 @@ initiate-dev:
 	@ echo 'Creating docker network for development'
 	docker network create ump_dev
 
+	@echo 'Installing app dependencies:'
+	poetry install
+
 build-image:
 	@echo 'Building release ${CONTAINER_REGISTRY}/${CONTAINER_NAMESPACE}/$(IMAGE_NAME):$(IMAGE_TAG)'
 # build your image
