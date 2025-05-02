@@ -338,7 +338,7 @@ class Job:
             auth = providers.authenticate_provider(provider)
 
             response = await session.get(
-                f"{self.provider_url}/jobs/{self.remote_job_id}/results?f=json",
+                f"{self.provider_url}jobs/{self.remote_job_id}/results?f=json",
                 auth=auth,
                 headers={
                     "Content-type": "application/json",

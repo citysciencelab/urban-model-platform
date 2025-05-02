@@ -265,7 +265,7 @@ class Process:
 
             async with aiohttp.ClientSession() as session:
                 process_response = await session.get(
-                    f"{provider.server_url}/processes/{self.process_id}",
+                    f"{provider.server_url}processes/{self.process_id}",
                     auth=auth,
                     headers={
                         "Content-type": "application/json",
@@ -273,7 +273,7 @@ class Process:
                     },
                 )
                 response = await session.post(
-                    f"{provider.server_url}/processes/{self.process_id}/execution",
+                    f"{provider.server_url}processes/{self.process_id}/execution",
                     json=request_body,
                     auth=auth,
                     headers={
@@ -316,7 +316,7 @@ class Process:
                     )
 
                     status_response = await session.get(
-                        f"{provider.server_url}/jobs/{remote_job_id}?f=json",
+                        f"{provider.server_url}jobs/{remote_job_id}?f=json",
                         auth=auth,
                         headers={
                             "Content-type": "application/json",
@@ -362,7 +362,7 @@ class Process:
 
                     auth = providers.authenticate_provider(provider)
                     async with session.get(
-                        f"{provider.server_url}/jobs/{job.remote_job_id}?f=json",
+                        f"{provider.server_url}jobs/{job.remote_job_id}?f=json",
                         auth=auth,
                         headers={
                             "Content-type": "application/json",
