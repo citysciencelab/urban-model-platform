@@ -24,7 +24,7 @@ async def load_processes():
         auth.get("resource_access", {}).get("ump-client", {}).get("roles", [])
     )
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(raise_for_status=True) as session:
         # Create a list of tasks for fetching processes concurrently
         tasks = [
             fetch_provider_processes(
@@ -91,7 +91,7 @@ async def fetch_processes_from_provider(session, provider_config, provider_auth)
     """Fetch processes from the provider's API."""
     try:
         response = await session.get(
-            f"{provider_config.server_url}/processes",
+            f"{provider_config.server_url}processes",
             auth=provider_auth,
             headers={
                 "Content-type": "application/json",
@@ -99,11 +99,12 @@ async def fetch_processes_from_provider(session, provider_config, provider_auth)
             },
             timeout=ClientTimeout(total=provider_config.timeout),
         )
-        async with response:
-            assert response.status == 200, f"Response status {response.status}, {response.reason}"
-            return await response.json()
+        return await response.json()
     except aiohttp.ClientError as e:
-        logger.error("Failed to fetch processes from %s: %s", provider_config.server_url, e)
+        logger.error(
+            "Failed to fetch processes from %s: %s",
+            provider_config.server_url,e
+        )
         raise
 
 def is_process_visible(
