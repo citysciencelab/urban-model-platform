@@ -82,7 +82,7 @@ class Process:
 
         async with aiohttp.ClientSession() as session:
             response = await session.get(
-                f"{provider.server_url}/processes/{self.process_id}",
+                f"{provider.server_url}processes/{self.process_id}",
                 auth=auth,
                 headers={
                     "Content-type": "application/json",
@@ -91,6 +91,9 @@ class Process:
             )
 
             if response.status != 200:
+                # TODO: need to differentiate errors better and give more information(url!)
+                # widespread usage of InvalidUsage error is impractical, because it
+                # catches UMP user errors as well as programming errors
                 raise InvalidUsage(
                     f"Model/process not found! {response.status}: {response.reason}. "
                     + "Check /api/processes endpoint for available models/processes.",
