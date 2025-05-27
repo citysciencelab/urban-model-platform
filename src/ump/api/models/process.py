@@ -260,6 +260,9 @@ class Process:
             logging.info("Job found, returning cached job.")
             return Job(job_id, user)
 
+        # TODO: this try...except block is too big!
+        # also it does not catch the exact error from the backend server in some cases
+        # only telling the user that he has a Bad request 
         try:
             auth = providers.authenticate_provider(provider)
 
