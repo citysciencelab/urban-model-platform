@@ -5,7 +5,7 @@ fullnameOverride: ""
 image:
   repository: lgvanalytics.azurecr.io/urban-model-platform
   pullPolicy: IfNotPresent
-  tag: "dev_improvements"
+  tag: "1.2.0"
   pullSecrets:
     - name: secret
 
@@ -40,13 +40,28 @@ service:
   targetPort: 5000 port the container itsel uses
 
 config:
-  corsUrlRegex: "*"
-  serverUrl: "0.0.0.0:5000"
-  providersFileMountPath: /app
-  providersFilePath: /app/providers.yaml
-  numberOfWorkers: "1"
-  postgresHost: ""
-  postgresPort: 5432
+  logLevel: "DEBUG"
+  providersFile: "./providers.yaml"
+  apiServerUrl: "localhost:5003"
+  remoteJobStatusRequestInterval: "5"
+  databaseName: "ump"
+  databaseHost: "api-db"
+  databasePort: 5432
+  databaseUser: "ump"
+  databasePassword: "ump"
+  geoserverUrl: "http://geoserver:8080/geoserver"
+  geoserverDbHost: "localhost"
+  geoserverDbPort: 5432
+  geoserverWorkspaceName: "UMP"
+  geoserverUser: "admin"
+  geoserverPassword: "geoserver"
+  geoserverConnectionTimeout: "60"
+  jobDeleteInterval: "240"
+  keycloakUrl: "http://keycloak:8080/auth"
+  keycloakRealm: "UrbanModelPlatform"
+  keycloakClientId: "ump-client"
+  keycloakUser: "ump"
+  keycloakPassword: "ump"
 
 postgresConnection: 
   existingSecret:

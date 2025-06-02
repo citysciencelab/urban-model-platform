@@ -9,9 +9,25 @@ metadata:
   labels:
     {{- include "ump.labels" . | nindent 4 }}
 data:
-  PROVIDERS_FILE: {{ .Values.config.providersFilePath | quote }}
-  CORS_URL_REGEX: {{ .Values.config.corsUrlRegex | quote }}
-  API_SERVER_URL: {{ .Values.config.serverUrl | quote }}
-  NUMBER_OF_WORKERS: {{ .Values.config.numberOfWorkers | quote }}
-  POSTGRES_PORT: {{ .Values.config.postgresPort | quote }}
-  POSTGRES_HOST: {{ .Values.config.postgresHost | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  PROVIDERS_FILE: {{ .Values.config.providersFile | quote }}
+  API_SERVER_URL: {{ .Values.config.apiServerUrl | quote }}
+  REMOTE_JOB_STATUS_REQUEST_INTERVAL: {{ .Values.config.remoteJobStatusRequestInterval | quote }}
+  DATABASE_NAME: {{ .Values.config.databaseName | quote }}
+  DATABASE_HOST: {{ .Values.config.databaseHost | quote }}
+  DATABASE_PORT: {{ .Values.config.databasePort | quote }}
+  DATABASE_USER: {{ .Values.config.databaseUser | quote }}
+  DATABASE_PASSWORD: {{ .Values.config.databasePassword | quote }}
+  GEOSERVER_URL: {{ .Values.config.geoserverUrl | quote }}
+  GEOSERVER_DB_HOST: {{ .Values.config.geoserverDbHost | quote }}
+  GEOSERVER_DB_PORT: {{ .Values.config.geoserverDbPort | quote }}
+  GEOSERVER_WORKSPACE_NAME: {{ .Values.config.geoserverWorkspaceName | quote }}
+  GEOSERVER_USER: {{ .Values.config.geoserverUser | quote }}
+  GEOSERVER_PASSWORD: {{ .Values.config.geoserverPassword | quote }}
+  GEOSERVER_CONNECTION_TIMEOUT: {{ .Values.config.geoserverConnectionTimeout | quote }}
+  JOB_DELETE_INTERVAL: {{ .Values.config.jobDeleteInterval | quote }}
+  KEYCLOAK_URL: {{ .Values.config.keycloakUrl | quote }}
+  KEYCLOAK_REALM: {{ .Values.config.keycloakRealm | quote }}
+  KEYCLOAK_CLIENT_ID: {{ .Values.config.keycloakClientId | quote }}
+  KEYCLOAK_USER: {{ .Values.config.keycloakUser | quote }}
+  KEYCLOAK_PASSWORD: {{ .Values.config.keycloakPassword | quote }}
