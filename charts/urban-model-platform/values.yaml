@@ -42,32 +42,20 @@ service:
 config:
   logLevel: "DEBUG"
   providersFile: "./providers.yaml"
-  apiServerUrl: "localhost:5003"
+  apiServerUrl: "0.0.0.0:5000"
   remoteJobStatusRequestInterval: "5"
-  databaseName: "ump"
-  databaseHost: "api-db"
-  databasePort: 5432
-  databaseUser: "ump"
-  databasePassword: "ump"
-  geoserverUrl: "http://geoserver:8080/geoserver"
-  geoserverDbHost: "localhost"
-  geoserverDbPort: 5432
-  geoserverWorkspaceName: "UMP"
-  geoserverUser: "admin"
-  geoserverPassword: "geoserver"
   geoserverConnectionTimeout: "60"
   jobDeleteInterval: "240"
-  keycloakUrl: "http://keycloak:8080/auth"
-  keycloakRealm: "UrbanModelPlatform"
-  keycloakClientId: "ump-client"
-  keycloakUser: "ump"
-  keycloakPassword: "ump"
 
 postgresConnection: 
   existingSecret:
     name: postgres-credentials
 
 keycloakConnection:
+  existingSecret: 
+    name: ""
+
+geoserverConnection:
   existingSecret: 
     name: ""
 
