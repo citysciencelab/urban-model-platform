@@ -14,7 +14,7 @@ from ump.api.db_handler import engine
 from ump.api.models.job import Job, JobStatus
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.config import app_settings as config
-from ump.errors import CustomException, InvalidUsage
+from ump.errors import CustomException, InvalidUsage, ClientError, ServerError, UnexpectedError 
 
 #TODO: unify logging setup, because this takes not into
 # account that an admin wants to configure log level 
@@ -92,11 +92,20 @@ class Process:
                 # TODO: need to differentiate errors better and give more information(url!)
                 # widespread usage of InvalidUsage error is impractical, because it
                 # catches UMP user errors as well as programming errors
-                raise InvalidUsage(
-                    f"Model/process not found! {response.status}: {response.reason}. "
-                    + "Check /api/processes endpoint for available models/processes.",
+                error_message = (
+                    f"Error fetching process. "
+                    f"Status {response.status}: {response.reason}. "
+                    f"URL: {provider.server_url}processes/{self.process_id}. "
+                    "Check /api/processes endpoint for available processes."
                 )
-
+                if 400 <= response.status < 500:
+                    raise ClientError(error_message)
+                elif 500 <= response.status < 600:
+                    raise ServerError(error_message)
+                else:
+                    raise UnexpectedError(error_message)
+                
+           
             process_details = await response.json()
             for key in process_details:
                 setattr(self, key, process_details[key])
@@ -251,7 +260,7 @@ class Process:
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
         # extract job_name from request_body
-        name = request_body.pop("job_name",None)
+        name = request_body.pop("job_name", None)
 
         job_id = self.check_for_cache(request_body, user)
         if job_id:
@@ -261,9 +270,15 @@ class Process:
         # TODO: this try...except block is too big!
         # also it does not catch the exact error from the backend server in some cases
         # only telling the user that he has a Bad request 
+        
+        # Authenticate provider 
         try:
             auth = providers.authenticate_provider(provider)
+        except Exception as e:
+            raise CustomException(f"Authentication failed for provider {self.provider_prefix}: {e}") from e
 
+        # Fetch process details 
+        try: 
             async with aiohttp.ClientSession() as session:
                 process_response = await session.get(
                     f"{provider.server_url}processes/{self.process_id}",
@@ -273,6 +288,20 @@ class Process:
                         "Accept": "application/json",
                     },
                 )
+                process_response.raise_for_status()
+                
+                if process_response.ok:
+                    process_details = await process_response.json()
+                    self.process_title = process_details["title"]
+
+        except aiohttp.ClientResponseError as e:
+            raise ClientError(f"Failed to fetch process details: {e}") from e
+        except Exception as e:
+            raise UnexpectedError(f"Unexpected error while fetching process details: {e}") from e
+
+        # Start process execution
+        try:
+            async with aiohttp.ClientSession() as session:
                 response = await session.post(
                     f"{provider.server_url}processes/{self.process_id}/execution",
                     json=request_body,
@@ -286,12 +315,12 @@ class Process:
                 )
 
                 process_response.raise_for_status()
+                ## Delete?
+                # if process_response.ok:
+                #     process_details = await process_response.json()
+                #     self.process_title = process_details["title"]
 
-                if process_response.ok:
-                    process_details = await process_response.json()
-                    self.process_title = process_details["title"]
-
-                response.raise_for_status()
+                # response.raise_for_status()
 
                 if response.ok and response.headers:
                     # Retrieve the job id from the simulation model server from the
@@ -338,8 +367,13 @@ class Process:
 
                     return job
 
+
+        except aiohttp.ClientResponseError as e:
+            raise ClientError(f"Failed to start process execution: {e}") from e
         except Exception as e:
-            raise CustomException(f"Job could not be started remotely: {e}") from e
+            raise UnexpectedError(f"Unexpected error during process execution: {e}") from e
+
+
 
     def _wait_for_results_async(self, job: Job):
         asyncio.run(self._wait_for_results(job))

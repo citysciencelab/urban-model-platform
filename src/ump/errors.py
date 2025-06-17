@@ -28,3 +28,15 @@ class InvalidUsage(CustomException):
 
 class GeoserverException(CustomException):
     pass
+
+class ClientError(CustomException):
+    """Raised for client-side errors (4xx)."""
+    pass
+
+class ServerError(CustomException):
+    """Raised for server-side errors (5xx)."""
+    pass
+
+class UnexpectedError(CustomException):
+    """Raised for unexpected errors."""
+    pass
