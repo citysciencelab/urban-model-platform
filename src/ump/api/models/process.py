@@ -92,12 +92,19 @@ class Process:
                 # TODO: need to differentiate errors better and give more information(url!)
                 # widespread usage of InvalidUsage error is impractical, because it
                 # catches UMP user errors as well as programming errors
+                logging.error(
+                    "Error fetching process. Status %s: %s. URL: %s",
+                    response.status,
+                    response.reason,
+                    f"{provider.server_url}processes/{self.process_id}",
+                )
+                
                 error_message = (
                     f"Error fetching process. "
                     f"Status {response.status}: {response.reason}. "
-                    f"URL: {provider.server_url}processes/{self.process_id}. "
                     "Check /api/processes endpoint for available processes."
                 )
+                
                 if 400 <= response.status < 500:
                     raise ClientError(error_message)
                 elif 500 <= response.status < 600:
