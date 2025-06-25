@@ -5,6 +5,7 @@
 !setup.cfg
 !setup.py
 !environment.yaml
+!providers.yaml
 !poetry.lock
 !pyproject.toml
 !src

@@ -1,6 +1,8 @@
 .ONESHELL:
 SHELL=/bin/bash
-.PHONY: build
+
+.PHONY: build initiate-dev build-image upload-image start-dev \
+        start-dev-example restart-dev stop-dev build-docs clean-docs
 
 config ?= .env
 
@@ -18,39 +20,78 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD)
 
 initiate-dev:
 	@if [ ! -d ./.venv ]; then \
+		echo 'Creating conda environment in ./.venv'; \
 		conda env create -f environment.yaml -p ./.venv; \
+	else \
+		echo 'Conda environment (./.venv) already present'; \
     fi
 
-	[ -f providers.yaml ] || cp providers.yaml.example providers.yaml
-	[ -f .env ] || cp .env.example .env	
+	@if [ ! -f providers.yaml ]; then \
+		cp providers.yaml.example providers.yaml \
+		echo 'Creating providers.yaml from providers.yaml.example'; \
+	else \
+		echo 'providers.yaml already present'; \
+	fi
 
+	@if [ ! -f .env ]; then \
+		cp .env.example .env \
+		echo 'Creating .env from .env.example'; \
+	else \
+		echo '.env already present'; \
+	fi
+
+	@ echo 'Creating docker network for development'
+	docker network create ump_dev
+
+	@echo 'Installing app dependencies:'
+	poetry install
 
 build-image:
-	@echo 'Building release ${CONTAINER_REGISTRY}/analytics/$(IMAGE_NAME):$(IMAGE_TAG)'
+	@echo 'Building release ${CONTAINER_REGISTRY}/${CONTAINER_NAMESPACE}/$(IMAGE_NAME):$(IMAGE_TAG)'
 # build your image
-	docker compose -f docker-compose-build.yaml build --build-arg SOURCE_COMMIT=$(GIT_COMMIT) app
+	docker compose -f docker-compose-build.yaml build --build-arg SOURCE_COMMIT=$(GIT_COMMIT) api
 
 upload-image: build-image
-	docker compose -f docker-compose-build.yaml push app
+	docker compose -f docker-compose-build.yaml push api
 
-start-dev: stop-dev
-	docker compose -f docker-compose-local.yaml up
-	flask -A src/ump/main.py --debug run
+start-dev:
+	($(CONDA_ACTIVATE) ./.venv)
 
-start-dev-with-modelserver: stop-dev
-	docker compose -f docker-compose-local.yaml up geoserver postgis modelserver keycloak -d
-	flask -A src/ump/main.py --debug run
+	@ echo 'Starting development environment containers: ump database, geoserver, keycloak, keycloak database'
+	
+	docker compose -f docker-compose-dev.yaml up -d api-db keycloak kc-db
+	
+	@ echo 'Waiting for database to be ready'
+	sleep 7
 
-restart-dev: stop-dev start-dev
+	@ echo 'initialize the database'
+	FLASK_APP=src.ump.main flask db init   
+
+	@ echo 'running database migrations'
+	FLASK_APP=src.ump.main flask db upgrade
+
+	@ echo 'Current database state'
+	FLASK_APP=src.ump.main flask db current
+	
+	@ echo 'Now start a debug session with your preferred IDE, e.g. VSCode using launch.json'
+
+
+start-dev-example: start-dev
+	@echo 'Starting development environment containers: ump database, geoserver, keycloak, keycloak database and an example modelserver'
+	docker compose -f docker-compose-dev.yaml up -d modelserver
+
+restart-dev:
+	docker compose -f docker-compose-dev.yaml restart
 
 stop-dev:
-	docker compose -f docker-compose-local.yaml down
+	docker compose -f docker-compose-dev.yaml stop
+
+clean-dev:
+	@echo 'Removing dev containers AND volumes. All data is lost!'
+	docker compose -f docker-compose-dev.yaml down --volumes
 
 build-docs:
 	jupyter-book build docs
 
 clean-docs:
 	jupyter-book clean docs
-
-build-dev-network:
-	docker network create dev 

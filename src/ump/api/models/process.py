@@ -5,18 +5,22 @@ import re
 import time
 from datetime import datetime, timezone
 from multiprocessing import dummy
-from os import environ as env
+
 import aiohttp
 from flask import g
-from sqlalchemy import create_engine
 
 import ump.api.providers as providers
-import ump.config as config
-from ump.api.job import Job, JobStatus
+from ump.api.db_handler import engine
+from ump.api.models.job import Job, JobStatus
+from ump.api.models.providers_config import ProcessConfig, ProviderConfig
+from ump.config import app_settings as config
 from ump.errors import CustomException, InvalidUsage
 
+#TODO: unify logging setup, because this takes not into
+# account that an admin wants to configure log level 
 logging.basicConfig(level=logging.INFO)
-engine = create_engine(f"postgresql+psycopg2://{config.postgres_user}:{config.postgres_password}"+f"@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}")
+
+
 class Process:
     def __init__(self, process_id_with_prefix=None):
 
@@ -47,21 +51,20 @@ class Process:
                 self.process_id_with_prefix,
             )
 
-        auth = g.get("auth_token")
-        role = f"{self.provider_prefix}_{self.process_id}"
-        restricted_access = (
-            "authentication" in providers.PROVIDERS[self.provider_prefix]
-        )
+        process_config = providers.get_providers()[self.provider_prefix].processes[self.process_id] 
+        
+        # if anonymous access isn’t enabled, require a token
+        restricted_access = not getattr(process_config, "anonymous_access", False)
 
         if restricted_access:
-            if (
-                auth is None
-                or self.provider_prefix not in auth["realm_access"]["roles"]
-                and self.provider_prefix
-                not in auth["resource_access"]["ump-client"]["roles"]
-                and role not in auth["realm_access"]["roles"]
-                and role not in auth["resource_access"]["ump-client"]["roles"]
-            ):
+            auth = getattr(g, "auth_token", None)
+            role = f"{self.provider_prefix}_{self.process_id}"
+            realm_roles = auth.get("realm_access", {}).get("roles", [])      if auth else []
+            client_roles = (auth.get("resource_access", {})\
+                                 .get("ump-client", {})\
+                                 .get("roles", [])) if auth else []
+            allowed = any(r in realm_roles + client_roles for r in [self.provider_prefix, role])
+            if not auth or not allowed:
                 raise InvalidUsage(
                     "Process ID %s is not known! Please check endpoint api/processes "
                     + "for a list of available processes.",
@@ -71,14 +74,13 @@ class Process:
         asyncio.run(self.set_details())
 
     async def set_details(self):
-        p = providers.PROVIDERS[self.provider_prefix]
-
+        provider = providers.get_providers()[self.provider_prefix]
         # Check for Authentification
-        auth = providers.authenticate_provider(p)
+        auth = providers.authenticate_provider(provider)
 
         async with aiohttp.ClientSession() as session:
             response = await session.get(
-                f"{p['url']}/processes/{self.process_id}",
+                f"{provider.server_url}processes/{self.process_id}",
                 auth=auth,
                 headers={
                     "Content-type": "application/json",
@@ -87,6 +89,9 @@ class Process:
             )
 
             if response.status != 200:
+                # TODO: need to differentiate errors better and give more information(url!)
+                # widespread usage of InvalidUsage error is impractical, because it
+                # catches UMP user errors as well as programming errors
                 raise InvalidUsage(
                     f"Model/process not found! {response.status}: {response.reason}. "
                     + "Check /api/processes endpoint for available models/processes.",
@@ -99,12 +104,6 @@ class Process:
     def validate_params(self, parameters):
         if not self.inputs:
             return
-
-        if not "job_name" in parameters:
-            raise InvalidUsage(
-                "Parameter job_name is required",
-                payload={"parameter_description": self.inputs["job_name"]},
-            )
 
         for input in self.inputs:
             try:
@@ -198,9 +197,13 @@ class Process:
         """
         Checks if the job has already been executed. Returns the job id if it has, None otherwise.
         """
-        p = providers.PROVIDERS[self.provider_prefix]["processes"][self.process_id]
-        if "deterministic" not in p or not p["deterministic"]:
+        # p = providers.PROVIDERS[self.provider_prefix]["processes"][self.process_id]
+        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
+        process_config: ProcessConfig = provider.processes[self.process_id]
+        
+        if process_config.deterministic:
             return None
+
         sql = """
         select job_id from jobs where hash = encode(sha512((%(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea), 'base64')
         """
@@ -218,14 +221,14 @@ class Process:
         return None
 
     def execute(self, parameters, user):
-        p = providers.PROVIDERS[self.provider_prefix]
+        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
         self.validate_params(parameters)
 
         logging.info(
             " --> Executing %s on model server %s with params %s as process %s for user %s",
             self.process_id,
-            p["url"],
+            str(provider.server_url),
             parameters,
             self.process_id_with_prefix,
             user,
@@ -243,23 +246,27 @@ class Process:
         # execution mode:
         # to maintain backwards compatibility to models using
         # pre-1.0.0 versions of OGC api processes
+        #TODO: need to add prefer-header
         request_body["mode"] = "async"
-        p = providers.PROVIDERS[self.provider_prefix]
+        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
         # extract job_name from request_body
-        name = request_body.pop("job_name")
+        name = request_body.pop("job_name",None)
 
         job_id = self.check_for_cache(request_body, user)
         if job_id:
             logging.info("Job found, returning cached job.")
             return Job(job_id, user)
 
+        # TODO: this try...except block is too big!
+        # also it does not catch the exact error from the backend server in some cases
+        # only telling the user that he has a Bad request 
         try:
-            auth = providers.authenticate_provider(p)
+            auth = providers.authenticate_provider(provider)
 
             async with aiohttp.ClientSession() as session:
                 process_response = await session.get(
-                    f"{p['url']}/processes/{self.process_id}",
+                    f"{provider.server_url}processes/{self.process_id}",
                     auth=auth,
                     headers={
                         "Content-type": "application/json",
@@ -267,7 +274,7 @@ class Process:
                     },
                 )
                 response = await session.post(
-                    f"{p['url']}/processes/{self.process_id}/execution",
+                    f"{provider.server_url}processes/{self.process_id}/execution",
                     json=request_body,
                     auth=auth,
                     headers={
@@ -310,7 +317,7 @@ class Process:
                     )
 
                     status_response = await session.get(
-                        f"{p['url']}/jobs/{remote_job_id}?f=json",
+                        f"{provider.server_url}jobs/{remote_job_id}?f=json",
                         auth=auth,
                         headers={
                             "Content-type": "application/json",
@@ -342,8 +349,10 @@ class Process:
         logging.info(" --> Waiting for results in Thread")
 
         finished = False
-        p = providers.PROVIDERS[self.provider_prefix]
-        timeout = float(p["timeout"])
+        
+        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
+        
+        timeout = float(provider.timeout)
         start = time.time()
         job_details = {}
 
@@ -352,9 +361,9 @@ class Process:
 
                 async with aiohttp.ClientSession() as session:
 
-                    auth = providers.authenticate_provider(p)
+                    auth = providers.authenticate_provider(provider)
                     async with session.get(
-                        f"{p['url']}/jobs/{job.remote_job_id}?f=json",
+                        f"{provider.server_url}jobs/{job.remote_job_id}?f=json",
                         auth=auth,
                         headers={
                             "Content-type": "application/json",
@@ -382,7 +391,7 @@ class Process:
                         f"Job did not finish within {timeout/60} minutes. Giving up."
                     )
 
-                time.sleep(config.fetch_job_results_interval)
+                time.sleep(config.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL)
 
             logging.info(
                 " --> Remote execution job %s: success = %s. Took approx. %s minutes.",

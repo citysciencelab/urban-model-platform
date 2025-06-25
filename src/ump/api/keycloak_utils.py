@@ -1,13 +1,13 @@
 """Keycloak helper functions"""
 
-from os import environ as env
-
 from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 
+from ump.config import app_settings as config
+
 keycloak_connection = KeycloakOpenIDConnection(
-    server_url=f"{env['KEYCLOAK_PROTOCOL']}://{env['KEYCLOAK_HOST']}/auth/",
-    username=env["KEYCLOAK_USER"],
-    password=env["KEYCLOAK_PASSWORD"],
+    server_url=str(config.UMP_KEYCLOAK_URL),
+    username=f"{config.UMP_KEYCLOAK_USER}",
+    password=f"{config.UMP_KEYCLOAK_PASSWORD.get_secret_value()}",
     realm_name="master",
     user_realm_name="master",
     client_id="admin-cli",
@@ -15,7 +15,7 @@ keycloak_connection = KeycloakOpenIDConnection(
 )
 
 keycloak_admin = KeycloakAdmin(connection=keycloak_connection)
-keycloak_admin.change_current_realm("UrbanModelPlatform")
+keycloak_admin.change_current_realm(f"{config.UMP_KEYCLOAK_REALM}")
 
 
 def find_user_id_by_email(email):

@@ -1,2 +1,3 @@
+(contributing)=
 ```{include} ../../../CONTRIBUTING.md
 ```

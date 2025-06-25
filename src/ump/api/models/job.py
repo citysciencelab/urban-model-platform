@@ -8,9 +8,10 @@ import aiohttp
 import geopandas as gpd
 
 import ump.api.providers as providers
-import ump.config as config
+from ump.config import app_settings as config
 from ump.api.db_handler import DBHandler
-from ump.api.job_status import JobStatus
+from ump.api.models.job_status import JobStatus
+from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.errors import CustomException, InvalidUsage
 from ump.geoserver.geoserver import Geoserver
 
@@ -28,13 +29,7 @@ class Job:
         "updated",
         "progress",
         "links",
-        "parameters",
-        "results_metadata",
-        "name",
-        "process_title",
-        "process_version",
-        "user_id",
-    ]
+    ] 
 
     SORTABLE_COLUMNS = [
         "created",
@@ -145,7 +140,7 @@ class Job:
 
             self.provider_prefix = match.group(1)
             self.process_id = match.group(2)
-            self.provider_url = providers.PROVIDERS[self.provider_prefix]["url"]
+            self.provider_url = providers.get_providers()[self.provider_prefix].server_url
 
         if not self.job_id:
             self.job_id = str(uuid.uuid4())
@@ -194,7 +189,7 @@ class Job:
             "job_id": self.job_id,
             "remote_job_id": self.remote_job_id,
             "provider_prefix": self.provider_prefix,
-            "provider_url": self.provider_url,
+            "provider_url": str(self.provider_url),
             "status": self.status,
             "message": self.message,
             "created": self.created,
@@ -268,7 +263,7 @@ class Job:
 
         return self.results_metadata
 
-    def display(self):
+    def display(self,additional_metadata=False):
         job_dict = self._to_dict()
         job_dict["type"] = "process"
         job_dict["jobID"] = job_dict.pop("job_id")
@@ -276,6 +271,7 @@ class Job:
         job_dict["results_metadata"] = self.results_metadata
         job_dict["processID"] = self.process_id_with_prefix
         job_dict["links"] = []
+
 
         for attr in job_dict:
             if isinstance(job_dict[attr], datetime):
@@ -287,7 +283,7 @@ class Job:
             JobStatus.accepted.value,
         ):
 
-            job_result_url = f"{config.api_server_url}/api/jobs/{self.job_id}/results"
+            job_result_url = f"{config.UMP_API_SERVER_URL}/api/jobs/{self.job_id}/results"
 
             job_dict["links"] = [
                 {
@@ -299,8 +295,34 @@ class Job:
                         " - available when job is finished.",
                 }
             ]
+        if isinstance(additional_metadata, str):
+             additional_metadata = additional_metadata.lower() == "true"
 
-        return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES}
+        if additional_metadata:
+            metadata = {}
+            if self.name is not None:
+                metadata["name"] = self.name
+            if self.parameters is not None:
+                metadata["parameters"] = self.parameters
+            if self.results_metadata is not None:
+                metadata["results_metadata"] = self.results_metadata
+            if self.process_title is not None:
+                metadata["process_title"] = self.process_title
+            if self.process_version is not None:
+                metadata["process_version"] = self.process_version
+            if self.process_version is not None:
+                metadata["user_id"] = self.user_id
+            
+            job_dict["metadata"] = metadata
+
+            for key in ["name", "parameters", "results_metadata", "process_title", "process_version","user_id"]:
+             job_dict.pop(key, None)
+
+            return job_dict
+        
+        else:
+            return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES}
+
 
     async def results(self):
         if self.status != JobStatus.successful.value:
@@ -309,14 +331,14 @@ class Job:
                 "message": self.message,
             }
 
-        p = providers.PROVIDERS[self.provider_prefix]
-        self.provider_url = p["url"]
+        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
+        self.provider_url = provider.server_url
 
         async with aiohttp.ClientSession() as session:
-            auth = providers.authenticate_provider(p)
+            auth = providers.authenticate_provider(provider)
 
             response = await session.get(
-                f"{self.provider_url}/jobs/{self.remote_job_id}/results?f=json",
+                f"{self.provider_url}jobs/{self.remote_job_id}/results?f=json",
                 auth=auth,
                 headers={
                     "Content-type": "application/json",
@@ -334,13 +356,16 @@ class Job:
 
     async def results_to_geoserver(self):
         try:
-            p = providers.PROVIDERS[self.provider_prefix]['processes'][self.process_id]
+            provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
+
+            process_config: ProcessConfig = provider.processes[self.process_id] 
 
             results = await self.results()
-            if 'result-path' in p:
-                parts = p['result-path'].split('.')
+            if result_path:= process_config.result_path:
+                parts =result_path.split('.')
                 for part in parts:
                     results = results[part]
+
             geoserver = Geoserver()
 
             self.set_results_metadata(results)

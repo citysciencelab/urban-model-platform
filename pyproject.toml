@@ -38,7 +38,7 @@ exclude = [
 
 [tool.poetry]
 name = "ump"
-version = "1.1.0"
+version = "1.2.0"
 description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
 authors = [
     "Rico Herzog <rico.herzog@hcu-hamburg.de>",
@@ -76,6 +76,9 @@ watchdog = "^5.0.3"
 ema-workbench = "^2.5.2"
 ipyparallel = "^8.8.0"
 schedule = "^1.2.2"
+pydantic-settings = "^2.8.1"
+pydantic = "^2.11.1"
+rich = "^14.0.0"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests
