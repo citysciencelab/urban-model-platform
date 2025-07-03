@@ -24,7 +24,16 @@ async def load_processes():
         auth.get("resource_access", {}).get("ump-client", {}).get("roles", [])
     )
 
-    async with aiohttp.ClientSession(raise_for_status=True) as session:
+    client_timeout = ClientTimeout(
+        total=5,  # Set a reasonable timeout for the requests
+        connect=2,  # Connection timeout
+        sock_connect=2,  # Socket connection timeout
+        sock_read=5,  # Socket read timeout
+    ) # remote server needs to answer in time, because we make multiple requests!
+
+    async with aiohttp.ClientSession(
+        raise_for_status=True, timeout=client_timeout
+    ) as session:
         # Create a list of tasks for fetching processes concurrently
         tasks = [
             fetch_provider_processes(
