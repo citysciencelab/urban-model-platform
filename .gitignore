@@ -172,3 +172,4 @@ cython_debug/
 
 geoserver_data
 postgresql_data
+scratch/*
