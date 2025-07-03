@@ -34,6 +34,7 @@ class UmpSettings(BaseSettings):
     UMP_KEYCLOAK_CLIENT_ID: str = "ump-client"
     UMP_KEYCLOAK_USER: str = "admin"
     UMP_KEYCLOAK_PASSWORD: SecretStr = "admin"
+    UMP_URL_PREFIX: str = "/"
 
     @computed_field
     @property
