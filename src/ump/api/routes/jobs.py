@@ -7,13 +7,12 @@ from apiflask import APIBlueprint
 from flask import Response, g, request
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
-from ump import config
 from ump.api.models.ensemble import JobsUsers
 from ump.api.models.job import Job
 from ump.api.models.job_comments import JobComment
 from ump.api.jobs import append_ensemble_list, get_jobs
 from ump.api.keycloak_utils import find_user_id_by_email
-from ump.config import app_settings as config
+from ump.api.db_handler import engine
 
 jobs = APIBlueprint("jobs", __name__)
 
