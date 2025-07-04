@@ -29,7 +29,7 @@ from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
 from ump.api.routes.users import users
 from ump.config import app_settings as config
-from ump.errors import CustomException
+from ump.errors import CustomException, OGCProcessException
 
 dictConfig(
     {
@@ -145,6 +145,15 @@ keycloak_openid = KeycloakOpenID(
     client_id=config.UMP_KEYCLOAK_CLIENT_ID,
     realm_name=config.UMP_KEYCLOAK_REALM,
 )
+
+
+@app.errorhandler(OGCProcessException)
+def handle_ogc_exception(error):
+    response = jsonify(error.response.model_dump())
+    response.status_code = error.response.status
+    response.content_type = "application/problem+json"
+    return response
+
 
 @app.before_request
 def check_jwt():
