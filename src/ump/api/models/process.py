@@ -323,13 +323,15 @@ class Process:
                     session, str(provider.server_url), request_body, auth
                 )
 
+                remote_job_id = await self._extract_remote_job_id(response)
+
                 job = await self._create_local_job_instance(
-                    response, name, request_body, user
+                    remote_job_id, name, request_body, user
                 )
 
                 # this can probably be omitted here and deferred for _wait_for_status
                 remote_job_status_info = await self._fetch_remote_job_status(
-                    session, provider.server_url, response, auth
+                    session, provider.server_url, remote_job_id, auth
                 )
 
                 job.status = remote_job_status_info.get("status")
@@ -403,9 +405,8 @@ class Process:
         )
 
     async def _create_local_job_instance(
-        self, response: aiohttp.ClientResponse, name, request_body, user
+        self, remote_job_id: str, name, request_body, user
     ):
-        remote_job_id = await self._extract_remote_job_id(response)
 
         job = Job()
 
@@ -471,7 +472,7 @@ class Process:
         asyncio.run(self._wait_for_results(job))
 
     async def _wait_for_results(self, job: Job):
-        logger.info(" --> Waiting for results in Thread")
+        logger.info("Thread started to wait for results.")
 
         finished = False
 
