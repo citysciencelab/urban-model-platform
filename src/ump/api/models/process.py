@@ -9,18 +9,23 @@ from multiprocessing import dummy
 import aiohttp
 from flask import g
 
+from ump.api.models.ogc_exception import OGCExceptionResponse
 import ump.api.providers as providers
 from ump.api.db_handler import engine
 from ump.api.models.job import Job, JobStatus
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.config import app_settings as config
-from ump.errors import CustomException, InvalidUsage
+from ump.errors import CustomException, InvalidUsage, OGCProcessException
+from ump.utils import fetch_json
 
-#TODO: unify logging setup, because this takes not into
-# account that an admin wants to configure log level 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-
+client_timeout = aiohttp.ClientTimeout(
+    total=5,  # Set a reasonable timeout for the requests
+    connect=2,  # Connection timeout
+    sock_connect=2,  # Socket connection timeout
+    sock_read=5,  # Socket read timeout
+)
 class Process:
     def __init__(self, process_id_with_prefix=None):
 
@@ -33,71 +38,117 @@ class Process:
 
         match = re.search(r"([^:]+):(.*)", self.process_id_with_prefix)
         if not match:
-            raise InvalidUsage(
-                "Process ID %s is not known! Please check endpoint api/processes "
-                + "for a list of available processes.",
-                self.process_id_with_prefix,
+            logger.warning(
+                "Process ID '%s' does not match pattern 'provider:process_id'. "
+                "See /api/processes for a list of available processes.",
+                self.process_id_with_prefix
             )
-
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/no-such-process",
+                    title="Invalid Process ID",
+                    status=400,
+                    detail=(
+                        f"Process ID '{self.process_id_with_prefix}' "
+                        "does not match pattern: 'provider:process_id'}. "
+                        "See /api/processes for a list of available processes."
+                        ),
+                    instance=f"/processes/{self.process_id_with_prefix}"
+                )
+            )
         self.provider_prefix = match.group(1)
         self.process_id = match.group(2)
 
-        if not providers.check_process_availability(
+        # this checks if the process is known from providers and confiured as available
+        # for what purpose? -> security! -if a user selects a process which is not confiured to be available,
+        # but exists
+        available, process_config = providers.check_process_availability(
             self.provider_prefix, self.process_id
-        ):
-            raise InvalidUsage(
-                "Process ID %s is not known! Please check endpoint api/processes "
-                + "for a list of available processes.",
-                self.process_id_with_prefix,
+        )
+        if not available:
+            logger.warning(
+                "Process ID '%s' is not available. "
+                "Either the process is not configured or it is excluded from the API.",
+                self.process_id_with_prefix
+            )
+            # raise OGCProcessException to inform users, but with less detail
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/no-such-process",
+                    title="Not available.",
+                    status=400,
+                    detail=(
+                        f"Process ID '{self.process_id_with_prefix}' "
+                        "is not available."
+                        ),
+                    instance=f"/processes/{self.process_id_with_prefix}"
+                )
+            )
+        logger.debug(
+            "Process %s is available. Loading process details.",
+            self.process_id_with_prefix
+        )
+
+        # if anonymous access isn’t enabled, require a token
+        if not process_config.anonymous_access:
+
+            logger.debug(
+                "Process %s requires authentication. Checking user roles.",
+                self.process_id_with_prefix
             )
 
-        process_config = providers.get_providers()[self.provider_prefix].processes[self.process_id] 
-        
-        # if anonymous access isn’t enabled, require a token
-        restricted_access = not getattr(process_config, "anonymous_access", False)
-
-        if restricted_access:
             auth = getattr(g, "auth_token", None)
             role = f"{self.provider_prefix}_{self.process_id}"
             realm_roles = auth.get("realm_access", {}).get("roles", [])      if auth else []
-            client_roles = (auth.get("resource_access", {})\
-                                 .get("ump-client", {})\
-                                 .get("roles", [])) if auth else []
-            allowed = any(r in realm_roles + client_roles for r in [self.provider_prefix, role])
-            if not auth or not allowed:
-                raise InvalidUsage(
-                    "Process ID %s is not known! Please check endpoint api/processes "
-                    + "for a list of available processes.",
-                    self.process_id_with_prefix,
-                )
+            
+            # TODO: uses hard-coded client name 'ump-client' to get client roles
+            client_roles = (
+                auth.get("resource_access", {})
+                .get("ump-client", {})
+                .get("roles", [])
+            ) if auth else []
 
-        asyncio.run(self.set_details())
-
-    async def set_details(self):
-        provider = providers.get_providers()[self.provider_prefix]
-        # Check for Authentification
-        auth = providers.authenticate_provider(provider)
-
-        async with aiohttp.ClientSession() as session:
-            response = await session.get(
-                f"{provider.server_url}processes/{self.process_id}",
-                auth=auth,
-                headers={
-                    "Content-type": "application/json",
-                    "Accept": "application/json",
-                },
+            allowed = any(
+                r in realm_roles + client_roles
+                for r in [self.provider_prefix, role]
             )
-
-            if response.status != 200:
-                # TODO: need to differentiate errors better and give more information(url!)
-                # widespread usage of InvalidUsage error is impractical, because it
-                # catches UMP user errors as well as programming errors
-                raise InvalidUsage(
-                    f"Model/process not found! {response.status}: {response.reason}. "
-                    + "Check /api/processes endpoint for available models/processes.",
+            
+            if not auth or not allowed:
+                logger.warning(
+                    "User is not allowed to access process %s. "
+                    "Either the process is not configured for anonymous access or "
+                    "the user does not have the required roles.",
+                    self.process_id_with_prefix
+                )
+                raise OGCProcessException(
+                    OGCExceptionResponse(
+                        type="http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/no-such-process",
+                        title="Not available.",
+                        status=400,
+                        detail=(
+                            f"Process ID '{self.process_id_with_prefix}' "
+                            "is not available."
+                            ),
+                        instance=f"/processes/{self.process_id_with_prefix}"
+                    )
                 )
 
-            process_details = await response.json()
+        asyncio.run(self.load_process_details())
+
+    async def load_process_details(self):
+        provider_config = providers.get_providers()[self.provider_prefix]
+
+        # return auth (BasicAuth curently, only)
+        # TODO: add support for other auth methods: JWT, ...
+        auth = providers.authenticate_provider(provider_config)
+
+        async with aiohttp.ClientSession(timeout=client_timeout) as session:
+
+            process_details = await fetch_json(
+                session,
+                f"{provider_config.server_url}processes/{self.process_id}",
+                auth=auth
+            )
             for key in process_details:
                 setattr(self, key, process_details[key])
 
@@ -264,7 +315,7 @@ class Process:
         try:
             auth = providers.authenticate_provider(provider)
 
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=client_timeout) as session:
                 process_response = await session.get(
                     f"{provider.server_url}processes/{self.process_id}",
                     auth=auth,
@@ -359,7 +410,7 @@ class Process:
         try:
             while not finished:
 
-                async with aiohttp.ClientSession() as session:
+                async with aiohttp.ClientSession(timeout=client_timeout) as session:
 
                     auth = providers.authenticate_provider(provider)
                     async with session.get(
