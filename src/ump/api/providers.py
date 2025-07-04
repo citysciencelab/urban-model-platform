@@ -75,7 +75,9 @@ def authenticate_provider(provider: ProviderConfig):
     return auth
 
 
-def check_process_availability(provider: str, process_id: str):
+def check_process_availability(
+        provider: str, process_id: str
+) -> tuple[bool, ProcessConfig | None]:
     available = False
 
     with PROVIDERS_LOCK:  # Ensure thread-safe access
@@ -83,13 +85,14 @@ def check_process_availability(provider: str, process_id: str):
             provider in PROVIDERS and 
             process_id in PROVIDERS[provider].processes
         ):
-            process: ProcessConfig = PROVIDERS[provider].processes[process_id]
-            available = not process.exclude
+            # load process configuration
+            process_config: ProcessConfig = PROVIDERS[provider].processes[process_id]
+            available = not process_config.exclude
             
-            if process.exclude:
-                logging.debug("Excluding process %s based on configuration", process_id)
+            if process_config.exclude:
+                logger.debug("Excluding process %s based on configuration", process_id)
 
-    return available
+    return available, process_config
 
 
 def check_result_storage(provider, process_id):
