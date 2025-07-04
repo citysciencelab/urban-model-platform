@@ -34,8 +34,14 @@ class Process:
         self.outputs: dict
 
         self.process_id_with_prefix = process_id_with_prefix
-        self.process_title = None
+        self.id = None
+        self.title = None
         self.version = None
+        self.job_control_options = None
+        self.description = None
+        self.keywords = None
+        self.metadata = None
+        self.links = None
 
         match = re.search(r"([^:]+):(.*)", self.process_id_with_prefix)
         if not match:
@@ -149,7 +155,7 @@ class Process:
             for key in process_details:
                 setattr(self, key, process_details[key])
 
-    def validate_params(self, parameters):
+    def validate_exec_body(self, parameters):
         if not self.inputs:
             return
 
@@ -274,21 +280,22 @@ class Process:
                 return row.job_id
         return None
 
-    def execute(self, parameters, user):
+    def execute(self, exec_body, user):
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
-        self.validate_params(parameters)
+        # TODO: make this optional (remote servers should do this themselves)
+        self.validate_exec_body(exec_body)
 
         logger.info(
-            " --> Executing %s on model server %s with params %s as process %s for user %s",
+            "Executing %s on model server %s with params %s as process %s for user %s",
             self.process_id,
             str(provider.server_url),
-            parameters,
+            exec_body,
             self.process_id_with_prefix,
             user,
         )
 
-        job = asyncio.run(self.start_process_execution(parameters, user))
+        job = asyncio.run(self.start_process_execution(exec_body, user))
 
         _process = dummy.Process(target=self._wait_for_results_async, args=[job])
         _process.start()
@@ -305,6 +312,7 @@ class Process:
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
         # extract job_name from request_body
+        # TODO: this is undocumented, non-OGC standard
         name = request_body.pop("job_name", None)
 
         job_id = self.check_for_cache(request_body, user)
@@ -318,6 +326,7 @@ class Process:
         try:
             auth = providers.authenticate_provider(provider)
 
+            # short timeout and prefer-async: no sync execution supported
             async with aiohttp.ClientSession(timeout=client_timeout) as session:
                 process_response = await session.get(
                     f"{provider.server_url}processes/{self.process_id}",
@@ -343,7 +352,7 @@ class Process:
 
                 if process_response.ok:
                     process_details = await process_response.json()
-                    self.process_title = process_details["title"]
+                    self.title = process_details["title"]
 
                 response.raise_for_status()
 
@@ -360,7 +369,7 @@ class Process:
                     job.create(
                         remote_job_id=remote_job_id,
                         process_id_with_prefix=self.process_id_with_prefix,
-                        process_title=self.process_title,
+                        process_title=self.title,
                         name=name,
                         parameters=request_body,
                         user=user,
