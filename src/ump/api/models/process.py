@@ -27,7 +27,10 @@ client_timeout = aiohttp.ClientTimeout(
     sock_read=5,  # Socket read timeout
 )
 
-
+# TODO: this is not an OGC API Process in a strict sense,
+# instead it incorporates remote process execution logic
+# these two things should probably be separated with regard to
+# **Single Responsibility Principle (SRP)**
 class Process:
     def __init__(self, process_id_with_prefix):
         self.inputs: dict
@@ -67,7 +70,7 @@ class Process:
         self.process_id = match.group(2)
 
         # this checks if the process is known from providers and confiured as available
-        # for what purpose? -> security! -if a user selects a process which is not 
+        # for what purpose? -> security! -if a user selects a process which is not
         # confiured to be available, but exists
         available, process_config = providers.check_process_availability(
             self.provider_prefix, self.process_id
@@ -297,22 +300,14 @@ class Process:
 
         job = asyncio.run(self.start_process_execution(exec_body, user))
 
-        _process = dummy.Process(target=self._wait_for_results_async, args=[job])
-        _process.start()
+        results_thread = dummy.Process(target=self._wait_for_results_async, args=[job])
+        results_thread.start()
 
-        result = {"jobID": job.job_id, "status": job.status}
-        return result
+        return {"jobID": job.job_id, "status": job.status}
 
     async def start_process_execution(self, request_body, user):
-        # execution mode:
-        # to maintain backwards compatibility to models using
-        # pre-1.0.0 versions of OGC api processes
-        # TODO: need to add prefer-header
         request_body["mode"] = "async"
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
-
-        # extract job_name from request_body
-        # TODO: this is undocumented, non-OGC standard
         name = request_body.pop("job_name", None)
 
         job_id = self.check_for_cache(request_body, user)
@@ -320,89 +315,157 @@ class Process:
             logger.info("Job found, returning cached job.")
             return Job(job_id, user)
 
-        # TODO: this try...except block is too big!
-        # also it does not catch the exact error from the backend server in some cases
-        # only telling the user that he has a Bad request
+        auth = providers.authenticate_provider(provider)
+
+        async with aiohttp.ClientSession(timeout=client_timeout) as session:
+            try:
+                response = await self._submit_remote_job(
+                    session, str(provider.server_url), request_body, auth
+                )
+
+                job = await self._create_local_job_instance(
+                    response, name, request_body, user
+                )
+
+                # this can probably be omitted here and deferred for _wait_for_status
+                remote_job_status_info = await self._fetch_remote_job_status(
+                    session, provider.server_url, response, auth
+                )
+
+                job.status = remote_job_status_info.get("status")
+                job.message = remote_job_status_info.get("message", "")
+                
+                job.update()
+                
+                logger.info(
+                    "Job %s for model %s started.",
+                    job.job_id,
+                    self.process_id_with_prefix,
+                )
+                
+                return job
+
+            except aiohttp.ClientResponseError as e:
+                logger.error("HTTP error during job submission: %s", e)
+                raise OGCProcessException(
+                    OGCExceptionResponse(
+                        type="about:blank",
+                        title="Remote job submission failed",
+                        status=502,
+                        detail=f"Job could not be started remotely due to HTTP error: {e}",
+                        instance=f"/processes/{self.process_id_with_prefix}/jobs",
+                    )
+                ) from e
+
+            except Exception as e:
+                logger.exception("Unexpected error during job submission: \n%s", e)
+
+                raise OGCProcessException(
+                    OGCExceptionResponse(
+                        type="http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/server-error",
+                        title="Unexpected error during job submission",
+                        status=500,
+                        detail=f"Job could not be started remotely due to unexpected error. Please see logs for more details.",
+                        instance=f"/processes/{self.process_id_with_prefix}/execution",
+                    )
+                ) from e
+
+    async def _submit_remote_job(
+        self, session: aiohttp.ClientSession,
+        url: str, request_body: dict, auth: aiohttp.BasicAuth | None
+    ) -> aiohttp.ClientResponse:
+        response = await session.post(
+            f"{url}processes/{self.process_id}/execution",
+            json=request_body,
+            auth=auth,
+            headers={
+                "Content-type": "application/json",
+                "Accept": "application/json",
+                "Prefer": "respond-async",
+            },
+        )
+        response.raise_for_status()
+
+        if response.headers or response.content_type == "application/json":
+            return response
+
+        raise OGCProcessException(
+            OGCExceptionResponse(
+                type="about:blank",
+                title="No valid response from remote server.",
+                status=502,
+                detail=(
+                    "No application/json response and no headers from "
+                    "remote server received. Response is not valid."
+                ),
+                instance=f"/processes/{self.process_id_with_prefix}/jobs",
+            )
+        )
+
+    async def _create_local_job_instance(
+        self, response: aiohttp.ClientResponse, name, request_body, user
+    ):
+        remote_job_id = await self._extract_remote_job_id(response)
+
+        job = Job()
+
+        job.insert(
+            remote_job_id=remote_job_id,
+            process_id_with_prefix=self.process_id_with_prefix,
+            process_title=self.title,
+            name=name,
+            exec_body=request_body,
+            user=user,
+            process_version=self.version,
+        )
+
+        return job
+
+    async def _fetch_remote_job_status(
+            self, session: aiohttp.ClientSession, url, remote_job_id, auth
+    ):
+        status_response = await session.get(
+            f"{url}jobs/{remote_job_id}?f=json",
+            auth=auth,
+            headers={
+                "Content-type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+        status_response.raise_for_status()
+        
+        return await status_response.json()
+
+    async def _extract_remote_job_id(self, response: aiohttp.ClientResponse) -> str:
+        """
+        Extracts the remote job ID from the aiohttp response object.
+        Tries the Location header first, then the response body for jobID/jobId.
+        """
+        location_header = response.headers.get("location")
+        if location_header:
+            match = re.search(r"/jobs/([^/]+)", location_header)
+            if match:
+                return match.group(1)
+
+        # Try to extract jobID from response body
         try:
-            auth = providers.authenticate_provider(provider)
-
-            # short timeout and prefer-async: no sync execution supported
-            async with aiohttp.ClientSession(timeout=client_timeout) as session:
-                process_response = await session.get(
-                    f"{provider.server_url}processes/{self.process_id}",
-                    auth=auth,
-                    headers={
-                        "Content-type": "application/json",
-                        "Accept": "application/json",
-                    },
-                )
-                response = await session.post(
-                    f"{provider.server_url}processes/{self.process_id}/execution",
-                    json=request_body,
-                    auth=auth,
-                    headers={
-                        "Content-type": "application/json",
-                        "Accept": "application/json",
-                        # execution mode shall be async, if model supports it
-                        "Prefer": "respond-async",
-                    },
-                )
-
-                process_response.raise_for_status()
-
-                if process_response.ok:
-                    process_details = await process_response.json()
-                    self.title = process_details["title"]
-
-                response.raise_for_status()
-
-                if response.ok and response.headers:
-                    # Retrieve the job id from the simulation model server from the
-                    # location header:
-                    match = re.search(
-                        "http.*/jobs/(.*)$", response.headers["location"]
-                    ) or (re.search(".*/jobs/(.*)$", response.headers["location"]))
-                    if match:
-                        remote_job_id = match.group(1)
-
-                    job = Job()
-                    job.create(
-                        remote_job_id=remote_job_id,
-                        process_id_with_prefix=self.process_id_with_prefix,
-                        process_title=self.title,
-                        name=name,
-                        parameters=request_body,
-                        user=user,
-                        process_version=self.version,
-                    )
-                    job.started = datetime.now(timezone.utc).strftime(
-                        "%Y-%m-%dT%H:%M:%S.%fZ"
-                    )
-
-                    status_response = await session.get(
-                        f"{provider.server_url}jobs/{remote_job_id}?f=json",
-                        auth=auth,
-                        headers={
-                            "Content-type": "application/json",
-                            "Accept": "application/json",
-                        },
-                    )
-                    status_response.raise_for_status()
-                    status_json = await status_response.json()
-
-                    job.status = status_json.get("status")
-                    job.save()
-
-                    logger.info(
-                        " --> Job %s for model %s started running.",
-                        job.job_id,
-                        self.process_id_with_prefix,
-                    )
-
-                    return job
-
+            if response.content_type == "application/json":
+                body_json = await response.json()
+                job_id = body_json.get("jobID") or body_json.get("jobId")
+                if job_id:
+                    return job_id
         except Exception as e:
-            raise CustomException(f"Job could not be started remotely: {e}") from e
+            logger.warning("Failed to parse jobID from response body: %s", e)
+
+        raise OGCProcessException(
+            OGCExceptionResponse(
+                type="http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/no-such-process",
+                title="Invalid Location Header",
+                status=500,
+                detail="Could not extract remote job ID from Location header or response body.",
+                instance="/jobs",
+            )
+        )
 
     def _wait_for_results_async(self, job: Job):
         asyncio.run(self._wait_for_results(job))
@@ -443,7 +506,7 @@ class Process:
                 job.updated = datetime.now(timezone.utc).strftime(
                     "%Y-%m-%dT%H:%M:%S.%fZ"
                 )
-                job.save()
+                job.update()
 
                 if time.time() - start > timeout:
                     raise TimeoutError(
@@ -472,7 +535,7 @@ class Process:
             job.updated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             job.finished = job.updated
             job.progress = 100
-            job.save()
+            job.update()
             raise CustomException(
                 f"Could not retrieve results from simulation model server. {e}"
             ) from e
@@ -489,7 +552,7 @@ class Process:
                 job.message = (
                     f"Remote execution was not successful! {job_details['message']}"
                 )
-                job.save()
+                job.update()
                 raise CustomException(f"Remote job {job.remote_job_id}: {job.message}")
 
         except CustomException as e:
@@ -499,7 +562,7 @@ class Process:
         job.finished = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         job.updated = job.finished
         job.progress = 100
-        job.save()
+        job.update()
 
         # Check if results should be stored in the geoserver
         try:
@@ -517,7 +580,7 @@ class Process:
                 e,
             )
             job.message = str(e)
-            job.save()
+            job.update()
 
     def is_finished(self, job_details):
         finished = False
