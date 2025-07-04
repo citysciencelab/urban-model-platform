@@ -9,10 +9,10 @@ from multiprocessing import dummy
 import aiohttp
 from flask import g
 
-from ump.api.models.ogc_exception import OGCExceptionResponse
 import ump.api.providers as providers
 from ump.api.db_handler import engine
 from ump.api.models.job import Job, JobStatus
+from ump.api.models.ogc_exception import OGCExceptionResponse
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.config import app_settings as config
 from ump.errors import CustomException, InvalidUsage, OGCProcessException
@@ -26,9 +26,10 @@ client_timeout = aiohttp.ClientTimeout(
     sock_connect=2,  # Socket connection timeout
     sock_read=5,  # Socket read timeout
 )
-class Process:
-    def __init__(self, process_id_with_prefix=None):
 
+
+class Process:
+    def __init__(self, process_id_with_prefix):
         self.inputs: dict
         self.outputs: dict
 
@@ -41,7 +42,7 @@ class Process:
             logger.warning(
                 "Process ID '%s' does not match pattern 'provider:process_id'. "
                 "See /api/processes for a list of available processes.",
-                self.process_id_with_prefix
+                self.process_id_with_prefix,
             )
             raise OGCProcessException(
                 OGCExceptionResponse(
@@ -52,16 +53,16 @@ class Process:
                         f"Process ID '{self.process_id_with_prefix}' "
                         "does not match pattern: 'provider:process_id'}. "
                         "See /api/processes for a list of available processes."
-                        ),
-                    instance=f"/processes/{self.process_id_with_prefix}"
+                    ),
+                    instance=f"/processes/{self.process_id_with_prefix}",
                 )
             )
         self.provider_prefix = match.group(1)
         self.process_id = match.group(2)
 
         # this checks if the process is known from providers and confiured as available
-        # for what purpose? -> security! -if a user selects a process which is not confiured to be available,
-        # but exists
+        # for what purpose? -> security! -if a user selects a process which is not 
+        # confiured to be available, but exists
         available, process_config = providers.check_process_availability(
             self.provider_prefix, self.process_id
         )
@@ -69,7 +70,7 @@ class Process:
             logger.warning(
                 "Process ID '%s' is not available. "
                 "Either the process is not configured or it is excluded from the API.",
-                self.process_id_with_prefix
+                self.process_id_with_prefix,
             )
             # raise OGCProcessException to inform users, but with less detail
             raise OGCProcessException(
@@ -78,47 +79,44 @@ class Process:
                     title="Not available.",
                     status=400,
                     detail=(
-                        f"Process ID '{self.process_id_with_prefix}' "
-                        "is not available."
-                        ),
-                    instance=f"/processes/{self.process_id_with_prefix}"
+                        f"Process ID '{self.process_id_with_prefix}' is not available."
+                    ),
+                    instance=f"/processes/{self.process_id_with_prefix}",
                 )
             )
         logger.debug(
             "Process %s is available. Loading process details.",
-            self.process_id_with_prefix
+            self.process_id_with_prefix,
         )
 
         # if anonymous access isn’t enabled, require a token
-        if not process_config.anonymous_access:
-
+        if process_config and not process_config.anonymous_access:
             logger.debug(
                 "Process %s requires authentication. Checking user roles.",
-                self.process_id_with_prefix
+                self.process_id_with_prefix,
             )
 
             auth = getattr(g, "auth_token", None)
             role = f"{self.provider_prefix}_{self.process_id}"
-            realm_roles = auth.get("realm_access", {}).get("roles", [])      if auth else []
-            
+            realm_roles = auth.get("realm_access", {}).get("roles", []) if auth else []
+
             # TODO: uses hard-coded client name 'ump-client' to get client roles
             client_roles = (
-                auth.get("resource_access", {})
-                .get("ump-client", {})
-                .get("roles", [])
-            ) if auth else []
+                (auth.get("resource_access", {}).get("ump-client", {}).get("roles", []))
+                if auth
+                else []
+            )
 
             allowed = any(
-                r in realm_roles + client_roles
-                for r in [self.provider_prefix, role]
+                r in realm_roles + client_roles for r in [self.provider_prefix, role]
             )
-            
+
             if not auth or not allowed:
                 logger.warning(
                     "User is not allowed to access process %s. "
                     "Either the process is not configured for anonymous access or "
                     "the user does not have the required roles.",
-                    self.process_id_with_prefix
+                    self.process_id_with_prefix,
                 )
                 raise OGCProcessException(
                     OGCExceptionResponse(
@@ -128,8 +126,8 @@ class Process:
                         detail=(
                             f"Process ID '{self.process_id_with_prefix}' "
                             "is not available."
-                            ),
-                        instance=f"/processes/{self.process_id_with_prefix}"
+                        ),
+                        instance=f"/processes/{self.process_id_with_prefix}",
                     )
                 )
 
@@ -143,11 +141,10 @@ class Process:
         auth = providers.authenticate_provider(provider_config)
 
         async with aiohttp.ClientSession(timeout=client_timeout) as session:
-
             process_details = await fetch_json(
                 session,
                 f"{provider_config.server_url}processes/{self.process_id}",
-                auth=auth
+                auth=auth,
             )
             for key in process_details:
                 setattr(self, key, process_details[key])
@@ -171,7 +168,7 @@ class Process:
                             payload={"parameter_description": parameter_metadata},
                         )
                     else:
-                        logging.warning(
+                        logger.warning(
                             "Model execution %s started without parameter %s.",
                             self.process_id_with_prefix,
                             input,
@@ -251,12 +248,18 @@ class Process:
         # p = providers.PROVIDERS[self.provider_prefix]["processes"][self.process_id]
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
         process_config: ProcessConfig = provider.processes[self.process_id]
-        
+
         if process_config.deterministic:
             return None
 
         sql = """
-        select job_id from jobs where hash = encode(sha512((%(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea), 'base64')
+        select job_id from jobs where hash = encode(
+            sha512(
+                (
+                    %(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea
+                ),
+            'base64'
+        )
         """
         with engine.begin() as conn:
             result = conn.exec_driver_sql(
@@ -276,7 +279,7 @@ class Process:
 
         self.validate_params(parameters)
 
-        logging.info(
+        logger.info(
             " --> Executing %s on model server %s with params %s as process %s for user %s",
             self.process_id,
             str(provider.server_url),
@@ -297,21 +300,21 @@ class Process:
         # execution mode:
         # to maintain backwards compatibility to models using
         # pre-1.0.0 versions of OGC api processes
-        #TODO: need to add prefer-header
+        # TODO: need to add prefer-header
         request_body["mode"] = "async"
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
         # extract job_name from request_body
-        name = request_body.pop("job_name",None)
+        name = request_body.pop("job_name", None)
 
         job_id = self.check_for_cache(request_body, user)
         if job_id:
-            logging.info("Job found, returning cached job.")
+            logger.info("Job found, returning cached job.")
             return Job(job_id, user)
 
         # TODO: this try...except block is too big!
         # also it does not catch the exact error from the backend server in some cases
-        # only telling the user that he has a Bad request 
+        # only telling the user that he has a Bad request
         try:
             auth = providers.authenticate_provider(provider)
 
@@ -381,7 +384,7 @@ class Process:
                     job.status = status_json.get("status")
                     job.save()
 
-                    logging.info(
+                    logger.info(
                         " --> Job %s for model %s started running.",
                         job.job_id,
                         self.process_id_with_prefix,
@@ -396,22 +399,19 @@ class Process:
         asyncio.run(self._wait_for_results(job))
 
     async def _wait_for_results(self, job: Job):
-
-        logging.info(" --> Waiting for results in Thread")
+        logger.info(" --> Waiting for results in Thread")
 
         finished = False
-        
+
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
-        
+
         timeout = float(provider.timeout)
         start = time.time()
         job_details = {}
 
         try:
             while not finished:
-
                 async with aiohttp.ClientSession(timeout=client_timeout) as session:
-
                     auth = providers.authenticate_provider(provider)
                     async with session.get(
                         f"{provider.server_url}jobs/{job.remote_job_id}?f=json",
@@ -421,13 +421,12 @@ class Process:
                             "Accept": "application/json",
                         },
                     ) as response:
-
                         response.raise_for_status()
                         job_details: dict = await response.json()
 
                 finished = self.is_finished(job_details)
 
-                logging.info(" --> Current Job status: %s", str(job_details))
+                logger.info(" --> Current Job status: %s", str(job_details))
 
                 # either remote job has progress info or else we cannot provide it either
                 job.progress = job_details.get("progress")
@@ -439,12 +438,12 @@ class Process:
 
                 if time.time() - start > timeout:
                     raise TimeoutError(
-                        f"Job did not finish within {timeout/60} minutes. Giving up."
+                        f"Job did not finish within {timeout / 60} minutes. Giving up."
                     )
 
                 time.sleep(config.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL)
 
-            logging.info(
+            logger.info(
                 " --> Remote execution job %s: success = %s. Took approx. %s minutes.",
                 job.remote_job_id,
                 finished,
@@ -452,8 +451,8 @@ class Process:
             )
 
         except Exception as e:
-            logging.error(
-                " --> Could not retrieve results for job %s (=%s)/%s from simulation model server: %s",
+            logger.error(
+                "Could not retrieve results for job %s (=%s)/%s from remote server: %s",
                 self.process_id_with_prefix,
                 self.process_id,
                 job.job_id,
@@ -479,13 +478,13 @@ class Process:
                 job.updated = job.finished
                 job.progress = 100
                 job.message = (
-                    f'Remote execution was not successful! {job_details["message"]}'
+                    f"Remote execution was not successful! {job_details['message']}"
                 )
                 job.save()
                 raise CustomException(f"Remote job {job.remote_job_id}: {job.message}")
 
         except CustomException as e:
-            logging.error(" --> An error occurred: %s", e)
+            logger.error(" --> An error occurred: %s", e)
 
         job.status = JobStatus.successful.value
         job.finished = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -501,7 +500,7 @@ class Process:
             ):
                 await job.results_to_geoserver()
         except Exception as e:
-            logging.error(
+            logger.error(
                 " --> Could not store results for job %s (=%s)/%s to geoserver: %s",
                 self.process_id_with_prefix,
                 self.process_id,
