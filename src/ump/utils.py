@@ -1,8 +1,12 @@
 import asyncio
+import logging
+
 import aiohttp
 
 from ump.api.models.ogc_exception import OGCExceptionResponse
 from ump.errors import OGCProcessException
+
+logger = logging.getLogger(__name__)
 
 
 async def fetch_json(session, url, **kwargs):
@@ -12,44 +16,87 @@ async def fetch_json(session, url, **kwargs):
             try:
                 return await response.json()
             except aiohttp.ContentTypeError:
-                # Not JSON
                 text = await response.text()
+                logger.error(
+                    "Invalid JSON response from remote service. URL: %s, Content: %s",
+                    url, text[:500]
+                )
                 raise OGCProcessException(
                     OGCExceptionResponse(
                         type="about:blank",
                         title="Invalid Response Content",
                         status=502,
-                        detail=f"Response from {url} is not valid JSON. Content: {text[:200]}",
-                        instance=url
+                        detail="The response from the remote service was not valid JSON.",
+                        instance=None
                     )
                 )
     except asyncio.TimeoutError:
+        logger.error(
+            "Timeout when requesting remote service. URL: %s",
+            url
+        )
         raise OGCProcessException(
             OGCExceptionResponse(
                 type="about:blank",
                 title="Upstream Timeout",
                 status=504,
-                detail=f"Request to {url} timed out.",
-                instance=url
+                detail="The request to the remote service timed out.",
+                instance=None
+            )
+        )
+    except aiohttp.ClientResponseError as e:
+        if e.status == 401:
+            logger.warning(
+                "Authentication failed when requesting remote service. URL: %s, Error: %s",
+                url, str(e)
+            )
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="about:blank",
+                    title="Authentication Failed",
+                    status=401,
+                    detail="Authentication with the remote service failed.",
+                    instance=None
+                )
+            )
+        logger.error(
+            "HTTP error when requesting remote service. URL: %s, Status: %s, Error: %s",
+            url, e.status, str(e)
+        )
+        raise OGCProcessException(
+            OGCExceptionResponse(
+                type="about:blank",
+                title="Upstream HTTP Error",
+                status=e.status,
+                detail="The remote service returned an HTTP error.",
+                instance=None
             )
         )
     except aiohttp.ClientError as e:
+        logger.error(
+            "Connection error when requesting remote service. URL: %s, Error: %s",
+            url, str(e)
+        )
         raise OGCProcessException(
             OGCExceptionResponse(
                 type="about:blank",
                 title="Upstream Connection Error",
                 status=502,
-                detail=f"Error connecting to {url}: {str(e)}",
-                instance=url
+                detail="There was a connection error with the remote service.",
+                instance=None
             )
         )
     except Exception as e:
+        logger.error(
+            "Unexpected error for remote service. URL: %s, Error: %s",
+            url, str(e)
+        )
         raise OGCProcessException(
             OGCExceptionResponse(
                 type="about:blank",
                 title="Internal Server Error",
                 status=500,
-                detail=f"Unexpected error for {url}: {str(e)}",
-                instance=url
+                detail="An unexpected error occurred while processing your request.",
+                instance=None
             )
         )
