@@ -27,6 +27,7 @@ client_timeout = aiohttp.ClientTimeout(
     sock_read=5,  # Socket read timeout
 )
 
+
 # TODO: this is not an OGC API Process in a strict sense,
 # instead it incorporates remote process execution logic
 # these two things should probably be separated with regard to
@@ -47,6 +48,7 @@ class Process:
         self.links = None
 
         match = re.search(r"([^:]+):(.*)", self.process_id_with_prefix)
+        
         if not match:
             logger.warning(
                 "Process ID '%s' does not match pattern 'provider:process_id'. "
@@ -66,19 +68,35 @@ class Process:
                     instance=f"/processes/{self.process_id_with_prefix}",
                 )
             )
+
         self.provider_prefix = match.group(1)
         self.process_id = match.group(2)
 
-        # this checks if the process is known from providers and confiured as available
+        # this checks if the process is known from providers and configured as available
         # for what purpose? -> security! -if a user selects a process which is not
         # confiured to be available, but exists
-        available, process_config = providers.check_process_availability(
-            self.provider_prefix, self.process_id
-        )
-        if not available:
+        try:
+            process_config = providers.load_process_config(
+                self.provider_prefix, self.process_id
+            )
+        except ValueError as e:
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/no-such-process",
+                    title="Invalid Process ID",
+                    status=400,
+                    detail=(
+                        f"Process ID '{self.process_id_with_prefix}' "
+                        "does not match pattern: 'provider:process_id'}. "
+                        "See /api/processes for a list of available processes."
+                    ),
+                    instance=f"/processes/{self.process_id_with_prefix}",
+                )
+            )
+        if process_config.exclude:
             logger.warning(
                 "Process ID '%s' is not available. "
-                "Either the process is not configured or it is excluded from the API.",
+                "Either the process is not configured or it is excluded from this API.",
                 self.process_id_with_prefix,
             )
             # raise OGCProcessException to inform users, but with less detail
@@ -93,6 +111,7 @@ class Process:
                     instance=f"/processes/{self.process_id_with_prefix}",
                 )
             )
+
         logger.debug(
             "Process %s is available. Loading process details.",
             self.process_id_with_prefix,
@@ -336,15 +355,15 @@ class Process:
 
                 job.status = remote_job_status_info.get("status")
                 job.message = remote_job_status_info.get("message", "")
-                
+
                 job.update()
-                
+
                 logger.info(
                     "Job %s for model %s started.",
                     job.job_id,
                     self.process_id_with_prefix,
                 )
-                
+
                 return job
 
             except aiohttp.ClientResponseError as e:
@@ -373,8 +392,11 @@ class Process:
                 ) from e
 
     async def _submit_remote_job(
-        self, session: aiohttp.ClientSession,
-        url: str, request_body: dict, auth: aiohttp.BasicAuth | None
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        request_body: dict,
+        auth: aiohttp.BasicAuth | None,
     ) -> aiohttp.ClientResponse:
         response = await session.post(
             f"{url}processes/{self.process_id}/execution",
@@ -407,7 +429,6 @@ class Process:
     async def _create_local_job_instance(
         self, remote_job_id: str, name, request_body, user
     ):
-
         job = Job()
 
         job.insert(
@@ -423,7 +444,7 @@ class Process:
         return job
 
     async def _fetch_remote_job_status(
-            self, session: aiohttp.ClientSession, url, remote_job_id, auth
+        self, session: aiohttp.ClientSession, url, remote_job_id, auth
     ) -> dict:
         job_status = await fetch_json(
             session,
@@ -434,7 +455,7 @@ class Process:
                 "Accept": "application/json",
             },
         )
-        
+
         return job_status
 
     async def _extract_remote_job_id(self, response: aiohttp.ClientResponse) -> str:
@@ -473,21 +494,23 @@ class Process:
 
     async def _wait_for_results(self, job: Job):
         logger.info("Thread started to wait for results.")
-        provider_config: ProviderConfig = providers.get_providers()[self.provider_prefix]
+        provider_config: ProviderConfig = providers.get_providers()[
+            self.provider_prefix
+        ]
         timeout_seconds = provider_config.timeout
 
         try:
             await asyncio.wait_for(
                 self._poll_job_until_finished(job, provider_config),
-                timeout=timeout_seconds
+                timeout=timeout_seconds,
             )
         except asyncio.TimeoutError:
             self._set_job_failed(
                 job,
                 (
                     "While waiting for remote job to finish the"
-                   f" timeout ({provider_config.timeout} sec.) was reached."
-                )
+                    f" timeout ({provider_config.timeout} sec.) was reached."
+                ),
             )
         except Exception as e:
             logger.error("Error while waiting for job results: %s", e)
@@ -496,7 +519,7 @@ class Process:
                 (
                     "An unexpected error occurred while waiting for job results."
                     "See the logs for details"
-                )
+                ),
             )
         else:
             self._set_job_successful(job)
@@ -546,7 +569,10 @@ class Process:
 
     async def _store_results_if_needed(self, job: Job):
         try:
-            if providers.check_result_storage(self.provider_prefix, self.process_id) == "geoserver":
+            if (
+                providers.check_result_storage(self.provider_prefix, self.process_id)
+                == "geoserver"
+            ):
                 await job.results_to_geoserver()
         except Exception as e:
             logger.error("Could not store results for job %s: %s", job.job_id, e)
