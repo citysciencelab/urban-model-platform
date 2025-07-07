@@ -528,7 +528,6 @@ class Process:
                 ),
             )
         else:
-            self._set_job_successful(job)
             await self._store_results_if_needed(job)
 
     async def _poll_job_until_finished(self, job, provider_config):
@@ -543,6 +542,8 @@ class Process:
             if self.is_finished(status_info):
                 break
             await asyncio.sleep(config.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL)
+        
+        return status_info
 
     def _update_job_from_status(self, job: Job, status_info):
         job.started = status_info.get("started")
@@ -551,6 +552,7 @@ class Process:
         job.finished = status_info.get("finished")
         job.message = status_info.get("message", "")
         job.progress = status_info.get("progress")
+        job.status = status_info.get("status", "")
 
         # save to database
         job.update()
@@ -565,6 +567,8 @@ class Process:
         job.progress = 0
         job.update()
 
+    # left here if we want to set a job as successful, manually
+    # this is not used in the current implementation, but could be useful
     def _set_job_successful(self, job: Job):
         job.status = JobStatus.successful.value
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
