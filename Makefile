@@ -49,7 +49,10 @@ initiate-dev:
 build-image:
 	@echo 'Building release ${CONTAINER_REGISTRY}/${CONTAINER_NAMESPACE}/$(IMAGE_NAME):$(IMAGE_TAG)'
 # build your image
-	docker compose -f docker-compose-build.yaml build --build-arg SOURCE_COMMIT=$(GIT_COMMIT) api
+	docker compose -f docker-compose-build.yaml build \
+	--build-arg SOURCE_COMMIT=$(GIT_COMMIT) \
+	--build-arg TAG=$(IMAGE_TAG) \
+	api
 
 upload-image: build-image
 	docker compose -f docker-compose-build.yaml push api
