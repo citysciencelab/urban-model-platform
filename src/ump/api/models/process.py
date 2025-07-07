@@ -15,7 +15,7 @@ from ump.api.models.job import Job, JobStatus
 from ump.api.models.ogc_exception import OGCExceptionResponse
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.config import app_settings as config
-from ump.errors import CustomException, InvalidUsage, OGCProcessException
+from ump.errors import InvalidUsage, OGCProcessException
 from ump.utils import fetch_json
 
 logger = logging.getLogger(__name__)
@@ -472,121 +472,84 @@ class Process:
         asyncio.run(self._wait_for_results(job))
 
     async def _wait_for_results(self, job: Job):
-        # TODO overhaul the whole thing! exceptions job status gaining, results retrieval, etc.
         logger.info("Thread started to wait for results.")
-
-        job_finished = False
-
         provider_config: ProviderConfig = providers.get_providers()[self.provider_prefix]
-
         timeout_seconds = provider_config.timeout
-        start = time.time()
-        job_details = {}
 
         try:
-            while not job_finished:
-                remote_job_status_info = await self._fetch_remote_job_status(
-                    aiohttp.ClientSession(timeout=client_timeout),
-                    provider_config.server_url,
-                    job.remote_job_id,
-                    providers.authenticate_provider(provider_config),
-                )
-                
-                job.started = remote_job_status_info.get("started")
-                job.created = remote_job_status_info.get("created")
-                job.updated = remote_job_status_info.get("updated")
-                job.finished = remote_job_status_info.get("finished")
-                job.message = remote_job_status_info.get("message", "")
-                job.progress = remote_job_status_info.get("progress")
-
-                job_finished = self.is_finished(remote_job_status_info)
-
-                logger.debug(
-                    "Current Job status: %s", str(job_details)
-                )
-
-                job.update()
-
-                if time.time() - start > timeout_seconds:
-                    # TODO: dont raise an error, set results with details when reached!
-                    job.status = JobStatus.failed.value
-                    job.finished = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                    job.updated = job.finished
-                    job.progress = 100
-                    job.message = (
-                        f"Remote execution was not successful! {job_details['message']}"
-                    )
-                    job.update()
-                    raise CustomException(f"Remote job {job.remote_job_id}: {job.message}")
-
-                time.sleep(config.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL)
-
-            logger.info(
-                "Remote execution job %s: success = %s. Took approx. %s minutes.",
-                job.remote_job_id,
-                job_finished,
-                int((time.time() - start) / 60),
+            await asyncio.wait_for(
+                self._poll_job_until_finished(job, provider_config),
+                timeout=timeout_seconds
             )
-
+        except asyncio.TimeoutError:
+            self._set_job_failed(
+                job,
+                (
+                    "While waiting for remote job to finish the"
+                   f" timeout ({provider_config.timeout} sec.) was reached."
+                )
+            )
         except Exception as e:
-            logger.error(
-                "Could not retrieve results for job %s (=%s)/%s from remote server: %s",
-                self.process_id_with_prefix,
-                self.process_id,
-                job.job_id,
-                e,
+            logger.error("Error while waiting for job results: %s", e)
+            self._set_job_failed(
+                job,
+                (
+                    "An unexpected error occurred while waiting for job results."
+                    "See the logs for details"
+                )
             )
-            job.status = JobStatus.failed.value
-            job.message = str(e)
-            job.updated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-            job.finished = job.updated
-            job.progress = 100
-            job.update()
-            raise CustomException(
-                f"Could not retrieve results from simulation model server. {e}"
-            ) from e
+        else:
+            self._set_job_successful(job)
+            await self._store_results_if_needed(job)
 
-        # Check if job was successful
-        try:
-            if job_details["status"] != JobStatus.successful.value:
-                job.status = JobStatus.failed.value
-                job.finished = datetime.now(timezone.utc).strftime(
-                    "%Y-%m-%dT%H:%M:%S.%fZ"
-                )
-                job.updated = job.finished
-                job.progress = 100
-                job.message = (
-                    f"Remote execution was not successful! {job_details['message']}"
-                )
-                job.update()
-                raise CustomException(f"Remote job {job.remote_job_id}: {job.message}")
+    async def _poll_job_until_finished(self, job, provider_config):
+        while True:
+            status_info = await self._fetch_remote_job_status(
+                aiohttp.ClientSession(timeout=client_timeout),
+                provider_config.server_url,
+                job.remote_job_id,
+                providers.authenticate_provider(provider_config),
+            )
+            self._update_job_from_status(job, status_info)
+            if self.is_finished(status_info):
+                break
+            await asyncio.sleep(config.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL)
 
-        except CustomException as e:
-            logger.error(" --> An error occurred: %s", e)
+    def _update_job_from_status(self, job: Job, status_info):
+        job.started = status_info.get("started")
+        job.created = status_info.get("created")
+        job.updated = status_info.get("updated")
+        job.finished = status_info.get("finished")
+        job.message = status_info.get("message", "")
+        job.progress = status_info.get("progress")
 
+        # save to database
+        job.update()
+
+    def _set_job_failed(self, job: Job, message: str):
+        job.status = JobStatus.failed.value
+        job.message = message
+
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        job.finished = now
+        job.updated = now
+        job.progress = 0
+        job.update()
+
+    def _set_job_successful(self, job: Job):
         job.status = JobStatus.successful.value
-        job.finished = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        job.updated = job.finished
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        job.finished = now
+        job.updated = now
         job.progress = 100
         job.update()
 
-        # Check if results should be stored in the geoserver
+    async def _store_results_if_needed(self, job: Job):
         try:
-            if (
-                providers.check_result_storage(self.provider_prefix, self.process_id)
-                == "geoserver"
-            ):
+            if providers.check_result_storage(self.provider_prefix, self.process_id) == "geoserver":
                 await job.results_to_geoserver()
         except Exception as e:
-            logger.error(
-                " --> Could not store results for job %s (=%s)/%s to geoserver: %s",
-                self.process_id_with_prefix,
-                self.process_id,
-                job.job_id,
-                e,
-            )
-            job.message = str(e)
-            job.update()
+            logger.error("Could not store results for job %s: %s", job.job_id, e)
 
     def is_finished(self, job_details):
         finished = False
