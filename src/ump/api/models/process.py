@@ -169,8 +169,8 @@ class Process:
 
         async with aiohttp.ClientSession(timeout=client_timeout) as session:
             process_details = await fetch_json(
-                session,
-                f"{provider_config.server_url}processes/{self.process_id}",
+                session=session,
+                url=f"{provider_config.server_url}processes/{self.process_id}",
                 auth=auth,
             )
             for key in process_details:
@@ -405,6 +405,7 @@ class Process:
         request_body: dict,
         auth: aiohttp.BasicAuth | None,
     ) -> aiohttp.ClientResponse:
+
         response = await session.post(
             f"{url}processes/{self.process_id}/execution",
             json=request_body,
@@ -453,8 +454,8 @@ class Process:
         self, session: aiohttp.ClientSession, url, remote_job_id, auth
     ) -> dict:
         job_status = await fetch_json(
-            session,
-            f"{url}jobs/{remote_job_id}?f=json",
+            session=session,
+            url=f"{url}jobs/{remote_job_id}?f=json",
             auth=auth,
             headers={
                 "Content-type": "application/json",
