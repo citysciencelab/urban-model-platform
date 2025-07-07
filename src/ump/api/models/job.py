@@ -7,12 +7,13 @@ from datetime import datetime, timezone
 import aiohttp
 import geopandas as gpd
 
+from ump.api.models.ogc_exception import OGCExceptionResponse
 import ump.api.providers as providers
 from ump.api.db_handler import DBHandler
 from ump.api.models.job_status import JobStatus
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.config import app_settings as config
-from ump.errors import CustomException, InvalidUsage
+from ump.errors import CustomException, InvalidUsage, OGCProcessException
 from ump.geoserver.geoserver import Geoserver
 
 # TODO class violates Single Responsibility Principle (SRP), it mixes
@@ -65,7 +66,17 @@ class Job:
         self.provider_url = None
 
         if job_id and not self._init_from_db(job_id, user):
-            raise CustomException("Job could not be found!")
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/no-such-job",
+                    title="Job not found",
+                    detail="The job with the given ID does not exist.",
+                    status=404,
+                    instance="/".join(
+                        [config.UMP_API_SERVER_URL, "api", "jobs", job_id]
+                    )
+                )
+            )
 
     def insert(
         self,
@@ -169,8 +180,8 @@ class Job:
     def _init_from_dict(self, data):
         self.job_id = data["job_id"]
         self.remote_job_id = data["remote_job_id"]
-        self.process_id = data["process_id"]
-        self.provider_prefix = data["provider_prefix"]
+        self.process_id: str = data["process_id"]
+        self.provider_prefix: str = data["provider_prefix"]
         self.provider_url = data["provider_url"]
         self.process_id_with_prefix = f"{data['provider_prefix']}:{data['process_id']}"
         self.status = data["status"]
