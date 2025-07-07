@@ -356,8 +356,9 @@ class Process:
                     session, provider.server_url, remote_job_id, auth
                 )
 
-                job.status = remote_job_status_info.get("status")
-                job.message = remote_job_status_info.get("message", "")
+                self._update_job_from_status(
+                    job, remote_job_status_info
+                )
 
                 job.update()
 
