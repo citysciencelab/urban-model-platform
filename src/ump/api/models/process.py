@@ -424,8 +424,9 @@ class Process:
 
     async def _fetch_remote_job_status(
             self, session: aiohttp.ClientSession, url, remote_job_id, auth
-    ):
-        status_response = await session.get(
+    ) -> dict:
+        job_status = await fetch_json(
+            session,
             f"{url}jobs/{remote_job_id}?f=json",
             auth=auth,
             headers={
@@ -433,9 +434,8 @@ class Process:
                 "Accept": "application/json",
             },
         )
-        status_response.raise_for_status()
         
-        return await status_response.json()
+        return job_status
 
     async def _extract_remote_job_id(self, response: aiohttp.ClientResponse) -> str:
         """
@@ -472,54 +472,59 @@ class Process:
         asyncio.run(self._wait_for_results(job))
 
     async def _wait_for_results(self, job: Job):
+        # TODO overhaul the whole thing! exceptions job status gaining, results retrieval, etc.
         logger.info("Thread started to wait for results.")
 
-        finished = False
+        job_finished = False
 
-        provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
+        provider_config: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
-        timeout = float(provider.timeout)
+        timeout_seconds = provider_config.timeout
         start = time.time()
         job_details = {}
 
         try:
-            while not finished:
-                async with aiohttp.ClientSession(timeout=client_timeout) as session:
-                    auth = providers.authenticate_provider(provider)
-                    async with session.get(
-                        f"{provider.server_url}jobs/{job.remote_job_id}?f=json",
-                        auth=auth,
-                        headers={
-                            "Content-type": "application/json",
-                            "Accept": "application/json",
-                        },
-                    ) as response:
-                        response.raise_for_status()
-                        job_details: dict = await response.json()
-
-                finished = self.is_finished(job_details)
-
-                logger.info(" --> Current Job status: %s", str(job_details))
-
-                # either remote job has progress info or else we cannot provide it either
-                job.progress = job_details.get("progress")
-
-                job.updated = datetime.now(timezone.utc).strftime(
-                    "%Y-%m-%dT%H:%M:%S.%fZ"
+            while not job_finished:
+                remote_job_status_info = await self._fetch_remote_job_status(
+                    aiohttp.ClientSession(timeout=client_timeout),
+                    provider_config.server_url,
+                    job.remote_job_id,
+                    providers.authenticate_provider(provider_config),
                 )
+                
+                job.started = remote_job_status_info.get("started")
+                job.created = remote_job_status_info.get("created")
+                job.updated = remote_job_status_info.get("updated")
+                job.finished = remote_job_status_info.get("finished")
+                job.message = remote_job_status_info.get("message", "")
+                job.progress = remote_job_status_info.get("progress")
+
+                job_finished = self.is_finished(remote_job_status_info)
+
+                logger.debug(
+                    "Current Job status: %s", str(job_details)
+                )
+
                 job.update()
 
-                if time.time() - start > timeout:
-                    raise TimeoutError(
-                        f"Job did not finish within {timeout / 60} minutes. Giving up."
+                if time.time() - start > timeout_seconds:
+                    # TODO: dont raise an error, set results with details when reached!
+                    job.status = JobStatus.failed.value
+                    job.finished = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    job.updated = job.finished
+                    job.progress = 100
+                    job.message = (
+                        f"Remote execution was not successful! {job_details['message']}"
                     )
+                    job.update()
+                    raise CustomException(f"Remote job {job.remote_job_id}: {job.message}")
 
                 time.sleep(config.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL)
 
             logger.info(
-                " --> Remote execution job %s: success = %s. Took approx. %s minutes.",
+                "Remote execution job %s: success = %s. Took approx. %s minutes.",
                 job.remote_job_id,
-                finished,
+                job_finished,
                 int((time.time() - start) / 60),
             )
 
