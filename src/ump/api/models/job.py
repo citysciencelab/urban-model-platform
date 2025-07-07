@@ -15,6 +15,15 @@ from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.config import app_settings as config
 from ump.errors import CustomException, InvalidUsage, OGCProcessException
 from ump.geoserver.geoserver import Geoserver
+from ump.utils import fetch_json
+
+
+results_client_timeout = aiohttp.ClientTimeout(
+    total=5,  # Set a reasonable timeout for the requests
+    connect=2,  # Connection timeout
+    sock_connect=2,  # Socket connection timeout
+    sock_read=5,  # Socket read timeout
+)
 
 # TODO class violates Single Responsibility Principle (SRP), it mixes
 # business logic with data access logic and metadata handling
@@ -351,33 +360,34 @@ class Job:
 
     async def results(self):
         if self.status != JobStatus.successful.value:
-            return {
-                "error": f"No results available. Job status = {self.status}.",
-                "message": self.message,
-            }
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="InvalidParameterValue",
+                    title="No results available",
+                    detail=self.message,
+                    status=404,
+                    instance=f"{config.UMP_API_SERVER_URL}/api/jobs/{self.job_id}/results",
+                )
+            )
 
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
         self.provider_url = provider.server_url
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=results_client_timeout) as session:
             auth = providers.authenticate_provider(provider)
 
-            response = await session.get(
-                f"{self.provider_url}jobs/{self.remote_job_id}/results?f=json",
-                auth=auth,
+            results = await fetch_json(
+                session,
+                url=f"{self.provider_url}jobs/{self.remote_job_id}/results?f=json",
+                json=self.parameters,
                 headers={
                     "Content-type": "application/json",
                     "Accept": "application/json",
                 },
+                auth=auth
             )
 
-            if response.status == 200:
-                return await response.json()
-            else:
-                raise CustomException(
-                    "Could not retrieve results from model server "
-                    + f"{self.provider_url} - {response.status}: {response.reason}"
-                )
+            return results
 
     async def results_to_geoserver(self):
         try:
