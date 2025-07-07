@@ -8,7 +8,7 @@ from ump.errors import OGCProcessException
 
 logger = logging.getLogger(__name__)
 
-
+# TODO: retry on timeouts, connection errors, etc.
 async def fetch_json(
         session: aiohttp.ClientSession, url, **kwargs
 ) -> dict:
