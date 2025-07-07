@@ -9,7 +9,9 @@ from ump.errors import OGCProcessException
 logger = logging.getLogger(__name__)
 
 
-async def fetch_json(session, url, **kwargs):
+async def fetch_json(
+        session: aiohttp.ClientSession, url, **kwargs
+) -> dict:
     try:
         async with session.get(url, **kwargs) as response:
             response.raise_for_status()
