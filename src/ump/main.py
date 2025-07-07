@@ -1,9 +1,9 @@
-#TODO: this file has become a hodgepodge of very different things,
+# TODO: this file has become a hodgepodge of very different things,
 # it should be split into dedicated files:
 # - an app factory for migrations
 # - logging setup
 # - a geoserver cleanup runner
-# - the flask app 
+# - the flask app
 import atexit
 import json
 import os
@@ -17,7 +17,7 @@ from flask import g, jsonify, request
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-from keycloak import KeycloakOpenID, KeycloakGetError, KeycloakConnectionError
+from keycloak import KeycloakConnectionError, KeycloakGetError, KeycloakOpenID
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -46,10 +46,7 @@ dictConfig(
                 "formatter": "default",
             }
         },
-        "root": {
-            "level": config.UMP_LOG_LEVEL,
-            "handlers": ["wsgi"]
-        },
+        "root": {"level": config.UMP_LOG_LEVEL, "handlers": ["wsgi"]},
         "loggers": {
             "ump.api.providers": {  # Configure the logger for providers.py
                 "level": config.UMP_LOG_LEVEL,
@@ -69,10 +66,10 @@ dictConfig(
 def cleanup():
     """Cleans up jobs and Geoserver layers of anonymous users"""
     sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id, provider_prefix, process_id"
-    finished = datetime.now() - timedelta(minutes = config.UMP_JOB_DELETE_INTERVAL)
-    
+    finished = datetime.now() - timedelta(minutes=config.UMP_JOB_DELETE_INTERVAL)
+
     with DBHandler() as conn:
-        result = conn.run_query(sql, query_params={'finished': finished})
+        result = conn.run_query(sql, query_params={"finished": finished})
         for row in result:
             # get additional job metadata
             job_id, provider_prefix, process_id = row
@@ -90,20 +87,26 @@ def cleanup():
                     + f"/layers/{job_id}.xml",
                     auth=(
                         config.UMP_GEOSERVER_USER,
-                        config.UMP_GEOSERVER_PASSWORD.get_secret_value
+                        config.UMP_GEOSERVER_PASSWORD.get_secret_value,
                     ),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
                     f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}/featuretypes/{job_id}.xml",
-                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
+                    auth=(
+                        config.UMP_GEOSERVER_USER,
+                        config.UMP_GEOSERVER_PASSWORD.get_secret_value(),
+                    ),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
                     f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}.xml",
-                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
+                    auth=(
+                        config.UMP_GEOSERVER_USER,
+                        config.UMP_GEOSERVER_PASSWORD.get_secret_value(),
+                    ),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
 
@@ -148,7 +151,7 @@ keycloak_openid = KeycloakOpenID(
 
 
 @app.errorhandler(OGCProcessException)
-def handle_ogc_exception(error):
+def handle_ogc_exception(error: OGCProcessException):
     response = jsonify(error.response.model_dump())
     response.status_code = error.response.status
     response.content_type = "application/problem+json"
@@ -191,6 +194,7 @@ def check_jwt():
         g.auth_token = None
     pass
 
+
 @app.after_request
 def set_headers(response):
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -225,6 +229,7 @@ def handle_http_exception(error):
 def shutdown_pool_on_exit():
     """Close the connection pool when the application shuts down."""
     close_pool()
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0")
