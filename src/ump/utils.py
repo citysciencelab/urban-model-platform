@@ -33,12 +33,19 @@ async def fetch_response_content(
 
 # TODO: retry on timeouts, connection errors, etc.
 async def fetch_json(
-        session: aiohttp.ClientSession, url, **kwargs
+        session: aiohttp.ClientSession, url,
+        raise_for_status=False, **kwargs
 ) -> dict:
     try:
         async with session.get(url, **kwargs) as response:
             try:
-                return await response.json()
+                response_data = await response.json()
+                
+                if raise_for_status:
+                    response.raise_for_status()
+
+                return response_data
+
             except aiohttp.ContentTypeError:
                 text = await response.text()
                 logger.error(
@@ -95,7 +102,7 @@ async def fetch_json(
                 type="about:blank",
                 title="Upstream HTTP Error",
                 status=e.status,
-                detail="The remote service returned an HTTP error.",
+                detail=f"The remote service returned an HTTP error: {response_data}",
                 instance=None
             )
         )
