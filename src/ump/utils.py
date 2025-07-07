@@ -8,13 +8,35 @@ from ump.errors import OGCProcessException
 
 logger = logging.getLogger(__name__)
 
+async def fetch_response_content(
+        response: aiohttp.ClientResponse
+) -> tuple[str | dict, str, int]:
+    """
+    Reads the content of an aiohttp response, handling both JSON and text,
+    regardless of HTTP status code.
+    Returns a tuple: (content, content_type, status_code)
+    """
+    content_type = response.headers.get("Content-Type", "")
+    status = response.status
+
+    try:
+        if "application/json" in content_type:
+            content = await response.json()
+        else:
+            content = await response.text()
+    except Exception:
+        # If JSON parsing fails, fallback to text
+        content = await response.text()
+        content_type = "text/plain"
+
+    return content, content_type, status
+
 # TODO: retry on timeouts, connection errors, etc.
 async def fetch_json(
         session: aiohttp.ClientSession, url, **kwargs
 ) -> dict:
     try:
         async with session.get(url, **kwargs) as response:
-            response.raise_for_status()
             try:
                 return await response.json()
             except aiohttp.ContentTypeError:
@@ -28,7 +50,10 @@ async def fetch_json(
                         type="about:blank",
                         title="Invalid Response Content",
                         status=502,
-                        detail="The response from the remote service was not valid JSON.",
+                        detail=(
+                            "The response from the remote service was not "
+                           f"valid JSON: '{text[:100]}'"
+                        ),
                         instance=None
                     )
                 )
