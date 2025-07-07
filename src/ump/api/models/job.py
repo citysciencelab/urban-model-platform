@@ -84,7 +84,12 @@ class Job:
                     detail="The job with the given ID does not exist.",
                     status=404,
                     instance="/".join(
-                        [config.UMP_API_SERVER_URL, "api", "jobs", job_id]
+                        [
+                            config.UMP_API_SERVER_URL,
+                            f"{config.UMP_API_SERVER_URL_PREFIX}",
+                            "jobs",
+                            job_id
+                        ]
                     )
                 )
             )
@@ -310,7 +315,7 @@ class Job:
             JobStatus.accepted.value,
         ):
             job_result_url = (
-                f"{config.UMP_API_SERVER_URL}/api/jobs/{self.job_id}/results"
+                f"{config.UMP_API_SERVER_URL}/{config.UMP_API_SERVER_URL_PREFIX}/jobs/{self.job_id}/results"
             )
 
             job_dict["links"] = [
@@ -366,7 +371,7 @@ class Job:
                     title="No results available",
                     detail=self.message,
                     status=404,
-                    instance=f"{config.UMP_API_SERVER_URL}/api/jobs/{self.job_id}/results",
+                    instance=f"{config.UMP_API_SERVER_URL}/{config.UMP_API_SERVER_URL_PREFIX}/jobs/{self.job_id}/results",
                 )
             )
 
