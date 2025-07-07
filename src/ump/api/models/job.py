@@ -19,6 +19,8 @@ from ump.geoserver.geoserver import Geoserver
 # TODO class violates Single Responsibility Principle (SRP), it mixes
 # business logic with data access logic and metadata handling
 # TODO methods like insert use redundant fields instead of job instance fields
+# TODO queries use raw SQL, which is not recommended for different reasons: no migrations, reduced maintainability
+# TODO: table schema is missing normalization
 class Job:
     DISPLAYED_ATTRIBUTES = [
         "processID",
