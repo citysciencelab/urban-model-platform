@@ -19,7 +19,7 @@ from ump.config import app_settings as config
 
 logger = getLogger(__name__)
 
-PROVIDERS: ModelServers = ModelServers()
+PROVIDERS: ModelServers = {}
 PROVIDERS_LOCK = Lock()  # Thread-safe lock for updating PROVIDERS
 
 
@@ -55,7 +55,7 @@ provider_loader.load_providers()  # Trigger initial loading
 observer = PollingObserver()
 observer.schedule(
     provider_loader,
-    config.UMP_PROVIDERS_FILE.absolute(),  # Simplified path handling
+    config.UMP_PROVIDERS_FILE.absolute().as_posix(),  # Simplified path handling
     recursive=False
 )
 observer.start()
@@ -70,7 +70,8 @@ def authenticate_provider(provider: ProviderConfig):
     auth = None
     if provider.authentication:
         auth = aiohttp.BasicAuth(
-            provider.authentication.user, provider.authentication.password
+            provider.authentication.user,
+            provider.authentication.password.get_secret_value()
         )
     return auth
 
