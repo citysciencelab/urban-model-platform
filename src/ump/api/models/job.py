@@ -321,11 +321,10 @@ class Job:
             job_dict["links"] = [
                 {
                     "href": job_result_url,
-                    "rel": "service",
+                    "rel": "http://www.opengis.net/def/rel/ogc/1.0/results",
                     "type": "application/json",
                     "hreflang": "en",
-                    "title": f"Results of job {self.job_id} as geojson"
-                    + " - available when job is finished.",
+                    "title": "Job result",
                 }
             ]
         if isinstance(additional_metadata, str):
