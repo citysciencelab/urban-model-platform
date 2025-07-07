@@ -13,9 +13,9 @@ from ump.api.db_handler import DBHandler
 from ump.api.models.job_status import JobStatus
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.config import app_settings as config
-from ump.errors import CustomException, InvalidUsage, OGCProcessException
+from ump.errors import InvalidUsage, OGCProcessException
 from ump.geoserver.geoserver import Geoserver
-from ump.utils import fetch_json
+from ump.utils import fetch_json, join_url_parts
 
 
 results_client_timeout = aiohttp.ClientTimeout(
@@ -314,8 +314,11 @@ class Job:
             JobStatus.running.value,
             JobStatus.accepted.value,
         ):
-            job_result_url = (
-                f"{config.UMP_API_SERVER_URL}/{config.UMP_API_SERVER_URL_PREFIX}/jobs/{self.job_id}/results"
+            job_result_url = join_url_parts(
+                config.UMP_API_SERVER_URL,
+                config.UMP_API_SERVER_URL_PREFIX,
+                "jobs",
+                f"{self.job_id}/results"
             )
 
             job_dict["links"] = [
