@@ -6,7 +6,11 @@ import aiohttp
 from ump.api.models.ogc_exception import OGCExceptionResponse
 from ump.errors import OGCProcessException
 
+
 logger = logging.getLogger(__name__)
+
+def join_url_parts(*parts):
+    return '/'.join(str(part).strip('/') for part in parts if part != '')
 
 async def fetch_response_content(
         response: aiohttp.ClientResponse
