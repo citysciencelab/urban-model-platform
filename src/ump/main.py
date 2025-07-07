@@ -132,7 +132,7 @@ migrate = Migrate(app, db)
 
 CORS(app)
 
-api = APIBlueprint("api", __name__, url_prefix=config.UMP_URL_PREFIX)
+api = APIBlueprint("api", __name__, url_prefix=config.UMP_API_SERVER_URL_PREFIX)
 api.register_blueprint(processes, url_prefix="/processes")
 api.register_blueprint(jobs, url_prefix="/jobs")
 api.register_blueprint(ensembles, url_prefix="/ensembles")
