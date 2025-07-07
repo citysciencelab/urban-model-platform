@@ -16,7 +16,7 @@ from ump.api.models.ogc_exception import OGCExceptionResponse
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.config import app_settings as config
 from ump.errors import InvalidUsage, OGCProcessException
-from ump.utils import fetch_json
+from ump.utils import fetch_json, fetch_response_content
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +342,10 @@ class Process:
                     session, str(provider.server_url), request_body, auth
                 )
 
+                response_content = await fetch_response_content(response)
+
+                response.raise_for_status()  # Raise an error for bad responses
+
                 remote_job_id = await self._extract_remote_job_id(response)
 
                 job = await self._create_local_job_instance(
@@ -368,12 +372,16 @@ class Process:
 
             except aiohttp.ClientResponseError as e:
                 logger.error("HTTP error during job submission: %s", e)
+                # response_body = await response.text()
                 raise OGCProcessException(
                     OGCExceptionResponse(
                         type="about:blank",
                         title="Remote job submission failed",
-                        status=502,
-                        detail=f"Job could not be started remotely due to HTTP error: {e}",
+                        status=e.status,
+                        detail=(
+                            "Job could not be started remotely "
+                            f"due to {response_content[0]}"
+                        ),
                         instance=f"/processes/{self.process_id_with_prefix}/jobs",
                     )
                 ) from e
@@ -408,7 +416,6 @@ class Process:
                 "Prefer": "respond-async",
             },
         )
-        response.raise_for_status()
 
         if response.headers or response.content_type == "application/json":
             return response
