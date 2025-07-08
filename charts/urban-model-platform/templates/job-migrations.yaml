@@ -33,31 +33,31 @@ spec:
           - secretRef:
               name: {{ include "ump.fullname" . }}-job-keycloak-connection
         env:
-          - name: POSTGRES_DB
+          - name: UMP_POSTGRES_DB
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.postgresConnection.existingSecret.name }}
                 key: dbname
           {{- if not .Values.config.postgresHost }}
-          - name: POSTGRES_HOST
+          - name: UMP_POSTGRES_HOST
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.postgresConnection.existingSecret.name }}
                 key: host
           {{- end }}
           {{- if not .Values.config.postgresPort }}
-          - name: POSTGRES_PORT
+          - name: UMP_POSTGRES_PORT
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.postgresConnection.existingSecret.name }}
                 key: port
           {{- end }}
-          - name: POSTGRES_USER
+          - name: UMP_POSTGRES_USER
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.postgresConnection.existingSecret.name }}
                 key: user
-          - name: POSTGRES_PASSWORD
+          - name: UMP_POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
                 name: {{ .Values.postgresConnection.existingSecret.name }}
