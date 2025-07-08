@@ -51,22 +51,20 @@ class Process:
                 self.process_id_with_prefix,
             )
 
-        auth = g.get("auth_token")
-        role = f"{self.provider_prefix}_{self.process_id}"
-
-        restricted_access = (
-            "authentication" in providers.get_providers()[self.provider_prefix]
-        )
+        process_config = providers.get_providers()[self.provider_prefix].processes[self.process_id] 
+        
+        # if anonymous access isn’t enabled, require a token
+        restricted_access = not getattr(process_config, "anonymous_access", False)
 
         if restricted_access:
-            if (
-                auth is None
-                or self.provider_prefix not in auth["realm_access"]["roles"]
-                and self.provider_prefix
-                not in auth["resource_access"]["ump-client"]["roles"]
-                and role not in auth["realm_access"]["roles"]
-                and role not in auth["resource_access"]["ump-client"]["roles"]
-            ):
+            auth = getattr(g, "auth_token", None)
+            role = f"{self.provider_prefix}_{self.process_id}"
+            realm_roles = auth.get("realm_access", {}).get("roles", [])      if auth else []
+            client_roles = (auth.get("resource_access", {})\
+                                 .get("ump-client", {})\
+                                 .get("roles", [])) if auth else []
+            allowed = any(r in realm_roles + client_roles for r in [self.provider_prefix, role])
+            if not auth or not allowed:
                 raise InvalidUsage(
                     "Process ID %s is not known! Please check endpoint api/processes "
                     + "for a list of available processes.",
