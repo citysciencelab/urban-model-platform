@@ -98,3 +98,27 @@ build-docs:
 
 clean-docs:
 	jupyter-book clean docs
+
+# Update app version: bump major, minor, or patch
+bump-app-version:
+    @if [ -z "$(part)" ]; then \
+        echo "Usage: make bump-app part={major|minor|patch}"; \
+        exit 1; \
+    fi; \
+    bump-my-version bump $(part)
+
+# Update app version: set to a specific version
+set-app-version:
+    @if [ -z "$(version)" ]; then \
+        echo "Usage: make set-app-version version={version}"; \
+        exit 1; \
+    fi; \
+    bump-my-version set $(version)
+
+# Update chart version: bump major, minor, or patch
+bump-chart-version:
+    @if [ -z "$(part)" ]; then \
+        echo "Usage: make bump-chart part={major|minor|patch}"; \
+        exit 1; \
+    fi; \
+    bump-my-version --config .bumpmyversion.chart.toml bump $(part)
