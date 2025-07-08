@@ -118,6 +118,7 @@ set-app-version:
 # Update chart version: bump major, minor, or patch
 bump-chart-version:
 	cd charts
+
 	@if [ -z "$(part)" ]; then \
 		echo "Usage: make bump-chart part={major|minor|patch}"; \
 		exit 1; \
