@@ -1,0 +1,25 @@
+[bumpversion]
+current_version = "2.1.0rc1+fix-error-handling"
+commit = true
+tag = true
+tag_name = "v{new_version}"
+
+[[bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[[bumpversion.files]]
+filename = "charts/urban-model-platform/values.yaml"
+search = 'tag: "{current_version}"'
+replace = 'tag: "{new_version}"'
+
+[[bumpversion.files]]
+filename = ".env"
+search = 'IMAGE_TAG={current_version}'
+replace = 'IMAGE_TAG={new_version}'
+
+[[bumpversion.files]]
+filename = "Dockerfile"
+search = 'ARG IMAGE_TAG={current_version}'
+replace = 'ARG IMAGE_TAG={new_version}'
