@@ -5,7 +5,7 @@ fullnameOverride: ""
 image:
   repository: lgvanalytics.azurecr.io/urban-model-platform
   pullPolicy: IfNotPresent
-  tag: "1.2.0"
+  tag: "2.0.0"
   pullSecrets:
     - name: secret
 
@@ -42,7 +42,9 @@ service:
 config:
   logLevel: "DEBUG"
   providersFile: "./providers.yaml"
-  apiServerUrl: "0.0.0.0:5000"
+  apiServerUrl: "http://localhost:5000"
+  apiServerUrlPrefix: "/api"
+  apiServerWorkers: "4"
   remoteJobStatusRequestInterval: "5"
   geoserverConnectionTimeout: "60"
   jobDeleteInterval: "240"
