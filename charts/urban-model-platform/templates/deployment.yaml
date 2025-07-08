@@ -53,6 +53,7 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "ump.fullname" . }}-settings
+            # if keycloak/geoserver secrets are not referenced, they will be created
             {{- if not .Values.keycloakConnection.existingSecret.name }}
             - secretRef:
                 name: {{ include "ump.fullname" . }}-keycloak-connection
@@ -64,27 +65,27 @@ spec:
           env:
             # postgres connection
             {{- if .Values.postgresConnection.existingSecret.name }}
-            - name: DATABASE_NAME
+            - name: UMP_DATABASE_NAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: dbname
-            - name: DATABASE_HOST
+            - name: UMP_DATABASE_HOST
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: host
-            - name: DATABASE_PORT
+            - name: UMP_DATABASE_PORT
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: port
-            - name: DATABASE_USER
+            - name: UMP_DATABASE_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: user
-            - name: DATABASE_PASSWORD
+            - name: UMP_DATABASE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
@@ -92,59 +93,59 @@ spec:
             # keycloak connection
             {{- end }}
             {{- if .Values.keycloakConnection.existingSecret.name }}
-            - name: KEYCLOAK_USER
+            - name: UMP_KEYCLOAK_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
                   key: user
-            - name: KEYCLOAK_PASSWORD
+            - name: UMP_KEYCLOAK_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
                   key: password
-            - name: KEYCLOAK_REALM
+            - name: UMP_KEYCLOAK_REALM
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
                   key: realm
-            - name: KEYCLOAK_URL
+            - name: UMP_KEYCLOAK_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
                   key: url
-            - name: KEYCLOAK_CLIENT_ID
+            - name: UMP_KEYCLOAK_CLIENT_ID
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
                   key: clientId
             {{- end }}
             {{- if .Values.geoserverConnection.existingSecret.name }}
-            - name: GEOSERVER_URL
+            - name: UMP_GEOSERVER_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.geoserverConnection.existingSecret.name }}
                   key: url
-            - name: GEOSERVER_DB_HOST
+            - name: UMP_GEOSERVER_DB_HOST
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.geoserverConnection.existingSecret.name }}
                   key: dbHost
-            - name: GEOSERVER_DB_PORT
+            - name: UMP_GEOSERVER_DB_PORT
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.geoserverConnection.existingSecret.name }}
                   key: dbPort
-            - name: GEOSERVER_WORKSPACE_NAME
+            - name: UMP_GEOSERVER_WORKSPACE_NAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.geoserverConnection.existingSecret.name }}
                   key: workspaceName
-            - name: GEOSERVER_USER
+            - name: UMP_GEOSERVER_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.geoserverConnection.existingSecret.name }}
                   key: user
-            - name: GEOSERVER_PASSWORD
+            - name: UMP_GEOSERVER_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.geoserverConnection.existingSecret.name }}
