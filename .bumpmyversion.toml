@@ -10,16 +10,6 @@ search = 'version = "{current_version}"'
 replace = 'version = "{new_version}"'
 
 [[bumpversion.files]]
-filename = "charts/urban-model-platform/values.yaml"
-search = 'tag: "{current_version}"'
-replace = 'tag: "{new_version}"'
-
-[[bumpversion.files]]
 filename = ".env"
 search = 'IMAGE_TAG={current_version}'
 replace = 'IMAGE_TAG={new_version}'
-
-[[bumpversion.files]]
-filename = "Dockerfile"
-search = 'ARG IMAGE_TAG={current_version}'
-replace = 'ARG IMAGE_TAG={new_version}'
