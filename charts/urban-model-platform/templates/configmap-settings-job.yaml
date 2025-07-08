@@ -10,7 +10,7 @@ metadata:
     {{- include "ump.labels" . | nindent 4 }}
 data:
   UMP_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
-  UMP_PROVIDERS_FILE: {{ .Values.config.providersFile | quote }}
+  UMP_PROVIDERS_FILE: {{ .Values.config.providersFilePath | quote }}
   UMP_API_SERVER_URL: {{ .Values.config.apiServerUrl | quote }}
   UMP_API_SERVER_URL_PREFIX: {{ .Values.config.apiServerUrlPrefix | quote }}
   UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL: {{ .Values.config.remoteJobStatusRequestInterval | quote }}

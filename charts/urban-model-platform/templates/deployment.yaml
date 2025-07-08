@@ -48,7 +48,7 @@ spec:
             - name: tmp-volume
               mountPath: /tmp
             - name: providers-volume
-              mountPath: {{ .Values.config.providersFileMountPath | quote }}
+              mountPath: {{ .Values.config.providersFilePath | quote }}
               readOnly: true
           envFrom:
             - configMapRef:

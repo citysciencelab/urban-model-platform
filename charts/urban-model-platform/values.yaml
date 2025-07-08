@@ -41,7 +41,7 @@ service:
 
 config:
   logLevel: "DEBUG"
-  providersFile: "./providers.yaml"
+  providersFilePath: "./providers.yaml"
   apiServerUrl: "http://localhost:5000"
   apiServerUrlPrefix: "/api"
   apiServerWorkers: "4"
