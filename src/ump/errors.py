@@ -1,6 +1,8 @@
 import logging
 import traceback
 
+from ump.api.models.ogc_exception import OGCExceptionResponse
+
 
 class CustomException(Exception):
     status_code = 400
@@ -28,3 +30,7 @@ class InvalidUsage(CustomException):
 
 class GeoserverException(CustomException):
     pass
+
+class OGCProcessException(Exception):
+    def __init__(self, response: OGCExceptionResponse):
+        self.response = response

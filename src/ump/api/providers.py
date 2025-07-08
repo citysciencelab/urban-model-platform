@@ -19,7 +19,7 @@ from ump.config import app_settings as config
 
 logger = getLogger(__name__)
 
-PROVIDERS: ModelServers = ModelServers()
+PROVIDERS: ModelServers = {}
 PROVIDERS_LOCK = Lock()  # Thread-safe lock for updating PROVIDERS
 
 
@@ -55,48 +55,57 @@ provider_loader.load_providers()  # Trigger initial loading
 observer = PollingObserver()
 observer.schedule(
     provider_loader,
-    config.UMP_PROVIDERS_FILE.absolute(),  # Simplified path handling
-    recursive=False
+    config.UMP_PROVIDERS_FILE.absolute().as_posix(),  # Simplified path handling
+    recursive=False,
 )
 observer.start()
 
 # Graceful shutdown for observer
 atexit.register(observer.stop)
 
+
 def get_providers() -> ModelServers:
     return PROVIDERS
+
 
 def authenticate_provider(provider: ProviderConfig):
     auth = None
     if provider.authentication:
         auth = aiohttp.BasicAuth(
-            provider.authentication.user, provider.authentication.password
+            provider.authentication.user,
+            provider.authentication.password.get_secret_value(),
         )
     return auth
 
 
-def check_process_availability(provider: str, process_id: str):
-    available = False
+def load_process_config(
+    provider: str, process_id: str
+) -> ProcessConfig:
 
     with PROVIDERS_LOCK:  # Ensure thread-safe access
-        if (
-            provider in PROVIDERS and 
-            process_id in PROVIDERS[provider].processes
-        ):
-            process: ProcessConfig = PROVIDERS[provider].processes[process_id]
-            available = not process.exclude
+        try:
+            processes = PROVIDERS[provider].processes
             
-            if process.exclude:
-                logging.debug("Excluding process %s based on configuration", process_id)
+            # load process configuration
+            process_config: ProcessConfig = processes[process_id]
 
-    return available
+            if process_config.exclude:
+                logger.debug("Excluding process %s based on configuration", process_id)
+        except KeyError:
+            logger.error(
+                "Provider '%s' or process '%s' not found in PROVIDERS",
+                provider,
+                process_id,
+            )
+            raise ValueError(
+                f"Provider '{provider}' or process '{process_id}' not found"
+            )
+
+        return process_config
 
 
 def check_result_storage(provider, process_id):
     with PROVIDERS_LOCK:  # Ensure thread-safe access
-        if (
-            provider in PROVIDERS
-            and process_id in PROVIDERS[provider].processes
-        ):
+        if provider in PROVIDERS and process_id in PROVIDERS[provider].processes:
             return PROVIDERS[provider].processes[process_id].result_storage
     return None

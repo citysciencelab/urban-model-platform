@@ -133,7 +133,7 @@ ModelServers: TypeAlias = Annotated[
 
 # a TypeAdapter allows us to use pydantics model_validate method
 # on arbitrary python types
-model_servers_adapter = TypeAdapter(ModelServers)
+model_servers_adapter: TypeAdapter[ModelServers] = TypeAdapter(ModelServers)
 
 if __name__ == "__main__":
 

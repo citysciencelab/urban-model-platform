@@ -7,15 +7,29 @@ from datetime import datetime, timezone
 import aiohttp
 import geopandas as gpd
 
+from ump.api.models.ogc_exception import OGCExceptionResponse
 import ump.api.providers as providers
-from ump.config import app_settings as config
 from ump.api.db_handler import DBHandler
 from ump.api.models.job_status import JobStatus
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
-from ump.errors import CustomException, InvalidUsage
+from ump.config import app_settings as config
+from ump.errors import InvalidUsage, OGCProcessException
 from ump.geoserver.geoserver import Geoserver
+from ump.utils import fetch_json, join_url_parts
 
 
+results_client_timeout = aiohttp.ClientTimeout(
+    total=5,  # Set a reasonable timeout for the requests
+    connect=2,  # Connection timeout
+    sock_connect=2,  # Socket connection timeout
+    sock_read=5,  # Socket read timeout
+)
+
+# TODO class violates Single Responsibility Principle (SRP), it mixes
+# business logic with data access logic and metadata handling
+# TODO methods like insert use redundant fields instead of job instance fields
+# TODO queries use raw SQL, which is not recommended for different reasons: no migrations, reduced maintainability
+# TODO: table schema is missing normalization
 class Job:
     DISPLAYED_ATTRIBUTES = [
         "processID",
@@ -29,7 +43,7 @@ class Job:
         "updated",
         "progress",
         "links",
-    ] 
+    ]
 
     SORTABLE_COLUMNS = [
         "created",
@@ -63,16 +77,31 @@ class Job:
         self.provider_url = None
 
         if job_id and not self._init_from_db(job_id, user):
-            raise CustomException("Job could not be found!")
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/no-such-job",
+                    title="Job not found",
+                    detail="The job with the given ID does not exist.",
+                    status=404,
+                    instance="/".join(
+                        [
+                            config.UMP_API_SERVER_URL,
+                            f"{config.UMP_API_SERVER_URL_PREFIX}",
+                            "jobs",
+                            job_id
+                        ]
+                    )
+                )
+            )
 
-    def create(
+    def insert(
         self,
         job_id=None,
         remote_job_id=None,
         process_id_with_prefix=None,
         process_title=None,
         name=None,
-        parameters=None,
+        exec_body=None,
         user=None,
         process_version=None,
     ):
@@ -82,7 +111,7 @@ class Job:
             process_id_with_prefix,
             process_title,
             name,
-            parameters,
+            exec_body,
             user_id=user,
             process_version=process_version,
         )
@@ -134,13 +163,15 @@ class Job:
             match = re.search(r"(.*):(.*)", self.process_id_with_prefix)
             if not match:
                 raise InvalidUsage(
-                    f"Process ID {self.process_id_with_prefix} is not known! " +
-                    "Please check endpoint api/processes for a list of available processes."
+                    f"Process ID {self.process_id_with_prefix} is not known! "
+                    + "Please check endpoint api/processes for a list of available processes."
                 )
 
             self.provider_prefix = match.group(1)
             self.process_id = match.group(2)
-            self.provider_url = providers.get_providers()[self.provider_prefix].server_url
+            self.provider_url = providers.get_providers()[
+                self.provider_prefix
+            ].server_url
 
         if not self.job_id:
             self.job_id = str(uuid.uuid4())
@@ -165,8 +196,8 @@ class Job:
     def _init_from_dict(self, data):
         self.job_id = data["job_id"]
         self.remote_job_id = data["remote_job_id"]
-        self.process_id = data["process_id"]
-        self.provider_prefix = data["provider_prefix"]
+        self.process_id: str = data["process_id"]
+        self.provider_prefix: str = data["provider_prefix"]
         self.provider_url = data["provider_url"]
         self.process_id_with_prefix = f"{data['provider_prefix']}:{data['process_id']}"
         self.status = data["status"]
@@ -205,7 +236,7 @@ class Job:
             "process_version": self.process_version,
         }
 
-    def save(self):
+    def update(self):
         self.updated = datetime.now(timezone.utc)
 
         query = """
@@ -231,9 +262,11 @@ class Job:
 
         values = []
         for column in maximal_values_dict:
-
             data_type = str(types[column])
-            if data_type == "float64" and results_df[column].apply(float.is_integer).all():
+            if (
+                data_type == "float64"
+                and results_df[column].apply(float.is_integer).all()
+            ):
                 data_type = "int"
 
             values.append(
@@ -263,7 +296,7 @@ class Job:
 
         return self.results_metadata
 
-    def display(self,additional_metadata=False):
+    def display(self, additional_metadata=False):
         job_dict = self._to_dict()
         job_dict["type"] = "process"
         job_dict["jobID"] = job_dict.pop("job_id")
@@ -271,7 +304,6 @@ class Job:
         job_dict["results_metadata"] = self.results_metadata
         job_dict["processID"] = self.process_id_with_prefix
         job_dict["links"] = []
-
 
         for attr in job_dict:
             if isinstance(job_dict[attr], datetime):
@@ -282,21 +314,24 @@ class Job:
             JobStatus.running.value,
             JobStatus.accepted.value,
         ):
-
-            job_result_url = f"{config.UMP_API_SERVER_URL}/api/jobs/{self.job_id}/results"
+            job_result_url = join_url_parts(
+                config.UMP_API_SERVER_URL,
+                config.UMP_API_SERVER_URL_PREFIX,
+                "jobs",
+                f"{self.job_id}/results"
+            )
 
             job_dict["links"] = [
                 {
                     "href": job_result_url,
-                    "rel": "service",
+                    "rel": "http://www.opengis.net/def/rel/ogc/1.0/results",
                     "type": "application/json",
                     "hreflang": "en",
-                    "title": f"Results of job {self.job_id} as geojson" +
-                        " - available when job is finished.",
+                    "title": "Job result",
                 }
             ]
         if isinstance(additional_metadata, str):
-             additional_metadata = additional_metadata.lower() == "true"
+            additional_metadata = additional_metadata.lower() == "true"
 
         if additional_metadata:
             metadata = {}
@@ -312,57 +347,64 @@ class Job:
                 metadata["process_version"] = self.process_version
             if self.process_version is not None:
                 metadata["user_id"] = self.user_id
-            
+
             job_dict["metadata"] = metadata
 
-            for key in ["name", "parameters", "results_metadata", "process_title", "process_version","user_id"]:
-             job_dict.pop(key, None)
+            for key in [
+                "name",
+                "parameters",
+                "results_metadata",
+                "process_title",
+                "process_version",
+                "user_id",
+            ]:
+                job_dict.pop(key, None)
 
             return job_dict
-        
+
         else:
             return {k: job_dict[k] for k in self.DISPLAYED_ATTRIBUTES}
 
-
     async def results(self):
         if self.status != JobStatus.successful.value:
-            return {
-                "error": f"No results available. Job status = {self.status}.",
-                "message": self.message,
-            }
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="InvalidParameterValue",
+                    title="No results available",
+                    detail=self.message,
+                    status=404,
+                    instance=f"{config.UMP_API_SERVER_URL}/{config.UMP_API_SERVER_URL_PREFIX}/jobs/{self.job_id}/results",
+                )
+            )
 
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
         self.provider_url = provider.server_url
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=results_client_timeout) as session:
             auth = providers.authenticate_provider(provider)
 
-            response = await session.get(
-                f"{self.provider_url}jobs/{self.remote_job_id}/results?f=json",
-                auth=auth,
+            results = await fetch_json(
+                session,
+                url=f"{self.provider_url}jobs/{self.remote_job_id}/results?f=json",
+                json=self.parameters,
                 headers={
                     "Content-type": "application/json",
                     "Accept": "application/json",
                 },
+                auth=auth
             )
 
-            if response.status == 200:
-                return await response.json()
-            else:
-                raise CustomException(
-                    "Could not retrieve results from model server " +
-                    f"{self.provider_url} - {response.status}: {response.reason}"
-                )
+            return results
 
     async def results_to_geoserver(self):
         try:
             provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
-            process_config: ProcessConfig = provider.processes[self.process_id] 
+            process_config: ProcessConfig = provider.processes[self.process_id]
 
             results = await self.results()
-            if result_path:= process_config.result_path:
-                parts =result_path.split('.')
+            if result_path := process_config.result_path:
+                parts = result_path.split(".")
                 for part in parts:
                     results = results[part]
 
@@ -374,7 +416,9 @@ class Job:
 
             logging.info(
                 " --> Successfully stored results for job %s (=%s)/%s to geoserver.",
-                self.process_id_with_prefix, self.process_id, self.job_id
+                self.process_id_with_prefix,
+                self.process_id,
+                self.job_id,
             )
 
         except Exception as e:

@@ -3,11 +3,13 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ump import utils
 from ump.api.db_handler import DBHandler
 from ump.api.db_handler import db_engine as engine
 from ump.api.models.ensemble import Ensemble, JobsEnsembles
 from ump.api.models.job import Job
 from ump.api.models.job_status import JobStatus
+from ump.config import app_settings
 
 def append_ensemble_list(job):
     with Session(engine) as session:
@@ -91,7 +93,11 @@ def next_links(page, limit, count_jobs):
     links = []
     if count_jobs > (page - 1) * limit:
         links.append({
-            "href": f"/api/jobs?page={page+1}&limit={limit}",
+            "href": utils.join_url_parts(
+                app_settings.UMP_API_SERVER_URL,
+                app_settings.UMP_API_SERVER_URL_PREFIX,
+                f"jobs?page={page+1}&limit={limit}"
+            ),
             "rel": "service",
             "type": "application/json",
             "hreflang": "en",
@@ -100,7 +106,11 @@ def next_links(page, limit, count_jobs):
 
     if page > 1:
         links.append({
-            "href": f"/api/jobs?page={page-1}&limit={limit}",
+            "href": utils.join_url_parts(
+                app_settings.UMP_API_SERVER_URL,
+                app_settings.UMP_API_SERVER_URL_PREFIX,
+                f"jobs?page={page-1}&limit={limit}"
+            ),
             "rel": "service",
             "type": "application/json",
             "hreflang": "en",
