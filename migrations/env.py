@@ -3,15 +3,33 @@ from logging.config import fileConfig
 
 from alembic import context
 from flask import current_app
+from geoalchemy2 import Geometry 
+
+from ump.app_factory import create_migration_app
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
+# Create the minimal Flask app for migrations
+app = create_migration_app()
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-fileConfig(config.config_file_name)
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
 logger = logging.getLogger('alembic.env')
+
+def include_object(object, name, type_, reflected, compare_to):
+    # Skip PostGIS extension tables
+    if name in (
+        'spatial_ref_sys', 'geography_columns', 'geometry_columns',
+        'raster_columns', 'raster_overviews', 'pagc_rules',
+        'tabblock', 'loader_lookuptables', 'county_lookup'
+    ):
+        return False
+    return True
 
 def get_engine():
     try:
@@ -30,18 +48,11 @@ def get_engine_url():
         return str(get_engine().url).replace('%', '%%')
 
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
+# Set the database URL for alembic
 config.set_main_option('sqlalchemy.url', get_engine_url())
+
+# Get the database instance from the Flask app
 target_db = current_app.extensions['migrate'].db
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
-
 
 def get_metadata():
     if hasattr(target_db, 'metadatas'):
@@ -63,7 +74,11 @@ def run_migrations_offline():
     """
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url, target_metadata=get_metadata(), literal_binds=True
+        url=url, 
+        target_metadata=get_metadata(), 
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
