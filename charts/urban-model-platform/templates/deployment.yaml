@@ -63,6 +63,8 @@ spec:
                 name: {{ include "ump.fullname" . }}-geoserver-connection
             {{- end }}
           env:
+            - name: FLASK_APP
+              value: ump.main
             # postgres connection
             {{- if .Values.postgresConnection.existingSecret.name }}
             - name: UMP_DATABASE_NAME
