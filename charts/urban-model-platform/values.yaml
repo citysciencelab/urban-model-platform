@@ -42,6 +42,7 @@ service:
 config:
   logLevel: "DEBUG"
   providersFilePath: "./providers.yaml"
+  providersFileMountPath: /app
   apiServerUrl: "http://localhost:5000"
   apiServerUrlPrefix: "/api"
   apiServerWorkers: "4"
@@ -49,7 +50,7 @@ config:
   geoserverConnectionTimeout: "60"
   jobDeleteInterval: "240"
 
-postgresConnection: 
+postgresConnection:
   existingSecret:
     name: postgres-credentials
 
@@ -91,7 +92,7 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 
-tolerations: 
+tolerations:
   - key: ump/reservedFor
     operator: "Equal" 
     value: app
