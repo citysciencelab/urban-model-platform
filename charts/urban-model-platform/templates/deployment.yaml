@@ -49,7 +49,6 @@ spec:
               mountPath: /tmp
             - name: providers-volume
               mountPath: {{ .Values.config.providersFileMountPath | quote }}
-              readOnly: true
           envFrom:
             - configMapRef:
                 name: {{ include "ump.fullname" . }}-settings
