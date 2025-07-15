@@ -59,19 +59,19 @@ start-dev:
 
 	@ echo 'Starting development environment containers: ump database, geoserver, keycloak, keycloak database'
 	
-	docker compose -f docker-compose-dev.yaml up -d api-db keycloak kc-db
+	docker compose -f docker-compose-dev.yaml up -d api api-db geoserver keycloak kc-db
 	
 	@ echo 'Waiting for database to be ready'
 	sleep 7
 
 	@ echo 'initialize the database'
-	FLASK_APP=src.ump.main flask db init   
+	$(CONDA_ACTIVATE) ./.venv; FLASK_APP=src.ump.main flask db init   
 
 	@ echo 'running database migrations'
-	FLASK_APP=src.ump.main flask db upgrade
+	$(CONDA_ACTIVATE) ./.venv; FLASK_APP=src.ump.main flask db upgrade
 
 	@ echo 'Current database state'
-	FLASK_APP=src.ump.main flask db current
+	$(CONDA_ACTIVATE) ./.venv; FLASK_APP=src.ump.main flask db current
 	
 	@ echo 'Now start a debug session with your preferred IDE, e.g. VSCode using launch.json'
 

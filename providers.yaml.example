@@ -20,4 +20,5 @@ modelserver:
         anonymous-access: false
       hello-geo-world:
         result-storage: "geoserver"
+        result-path: "/"
         anonymous-access: true

@@ -35,7 +35,7 @@ Then, you can start the model server by running:
 ## Accessing the Application
 Once the application is running, you can access it at the following URLs:
 - Urban Model Platform: [http://localhost:5003](http://localhost:5003)
-- Keycloak: [http://localhost:8081](http://localhost:8081)
+- Keycloak: [http://localhost:8282](http://localhost:8282)
 - GeoServer: [http://localhost:8080](http://localhost:8080)
 - PostgreSQL: [http://localhost:5432](http://localhost:5432)
 - Example Model Server (only if set up): [http://localhost:5005](http://localhost:5005)
@@ -51,7 +51,7 @@ The `providers.yaml` file is essential for the Urban Model Platform to interact 
 
 ## Configuring Keycloak
 Keycloak is used for authentication and authorization in the Urban Model Platform. To configure Keycloak, follow these steps:
-1. Open Keycloak on [http://localhost:8081/auth](http://localhost:8081/auth)
+1. Open Keycloak on [http://localhost:8282/auth](http://localhost:8282/auth)
 2. Log in with the admin credentials (admin/admin).
 3. Create a new realm named `UrbanModelPlatform`.
 4. Create a new client in that realm called `ump-client` (activate OAuth 2.0 Device Authorization Grant and Direct access grants).
