@@ -5,7 +5,7 @@ fullnameOverride: ""
 image:
   repository: lgvanalytics.azurecr.io/urban-model-platform
   pullPolicy: IfNotPresent
-  tag: "dev_improvements"
+  tag: "2.0.0"
   pullSecrets:
     - name: secret
 
@@ -37,22 +37,28 @@ resources:
 service:
   type: ClusterIP
   port: 5000 # port under which the svc answers
-  targetPort: 5000 port the container itsel uses
+  targetPort: 5000 # port the container itself uses
 
 config:
-  corsUrlRegex: "*"
-  serverUrl: "0.0.0.0:5000"
+  logLevel: "DEBUG"
+  providersFilePath: "./providers.yaml"
   providersFileMountPath: /app
-  providersFilePath: /app/providers.yaml
-  numberOfWorkers: "1"
-  postgresHost: ""
-  postgresPort: 5432
+  apiServerUrl: "http://localhost:5000"
+  apiServerUrlPrefix: "/api"
+  apiServerWorkers: "4"
+  remoteJobStatusRequestInterval: "5"
+  geoserverConnectionTimeout: "60"
+  jobDeleteInterval: "240"
 
-postgresConnection: 
+postgresConnection:
   existingSecret:
     name: postgres-credentials
 
 keycloakConnection:
+  existingSecret: 
+    name: ""
+
+geoserverConnection:
   existingSecret: 
     name: ""
 
@@ -86,7 +92,7 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 
-tolerations: 
+tolerations:
   - key: ump/reservedFor
     operator: "Equal" 
     value: app
