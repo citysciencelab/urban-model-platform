@@ -200,7 +200,10 @@ def get_process_config(provider: str, process_id: str) -> Optional[ProcessConfig
             and process_id in PROVIDERS[provider].processes
         ):
             return PROVIDERS[provider].processes[process_id]
-    return None
+    
+    raise ValueError(
+        f"Process '{process_id}' not found for provider '{provider}'"
+    )
 
 
 def list_providers() -> list[str]:
