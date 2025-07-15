@@ -367,15 +367,7 @@ class Job:
 
     async def results(self):
         if self.status != JobStatus.successful.value:
-            raise OGCProcessException(
-                OGCExceptionResponse(
-                    type="InvalidParameterValue",
-                    title="No results available",
-                    detail=self.message,
-                    status=404,
-                    instance=f"{config.UMP_API_SERVER_URL}/{config.UMP_API_SERVER_URL_PREFIX}/jobs/{self.job_id}/results",
-                )
-            )
+            self.results_not_available()
 
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
         self.provider_url = provider.server_url
@@ -429,6 +421,53 @@ class Job:
                 self.job_id,
                 e,
             )
+
+    def results_not_available(self):
+        """
+        Raises an OGCProcessException with a meaningful type and detail
+        according to the current job status.
+        """
+        status_map = {
+            JobStatus.failed.value: {
+                "type": "http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/failed",
+                "title": "Job failed",
+                "detail": self.message or "The job failed and no results are available.",
+            },
+            JobStatus.dismissed.value: {
+                "type": "http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/dismissed",
+                "title": "Job dismissed",
+                "detail": self.message or "The job was dismissed and no results are available.",
+            },
+            JobStatus.running.value: {
+                "type": "http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/result-not-ready",
+                "title": "Job still running",
+                "detail": "The job is still running. Results are not yet available.",
+            },
+            JobStatus.accepted.value: {
+                "type": "http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/result-not-ready",
+                "title": "Job accepted",
+                "detail": "The job has been accepted but has not started yet. Results are not available.",
+            },
+        }
+
+        info = status_map.get(
+            self.status if self.status is not None else "",
+            {
+                "type": "http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/no-such-job",
+                "title": "No results available",
+                "detail": "No results are available for this job.",
+            },
+        )
+
+        raise OGCProcessException(
+            OGCExceptionResponse(
+                type=info["type"],
+                title=info["title"],
+                detail=info["detail"],
+                status=404,
+                instance=f"{config.UMP_API_SERVER_URL}/{config.UMP_API_SERVER_URL_PREFIX}/jobs/{self.job_id}/results",
+            )
+        )
 
     def __str__(self):
         return f"""
