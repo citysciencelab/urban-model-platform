@@ -58,7 +58,7 @@ class Geoserver:
 
         try:
             self.create_workspace()
-            logging.info(" --> Workspace should be created now")
+            logging.info(f"Workspace {self.workspace} created now")
 
             self.geojson_to_postgis(data=data, table_name=job_id)
 
@@ -76,9 +76,15 @@ class Geoserver:
     def publish_layer(self, store_name: str, layer_name: str):
         try:
             response = requests.post(
-                f"{config.UMP_GEOSERVER_PATH_WORKSPACE}/{self.workspace}"
-                + f"/datastores/{store_name}/featuretypes",
-                auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
+                (
+                    f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{self.workspace}"
+                    f"/datastores/{store_name}/featuretypes"),
+                
+                auth=(
+                    config.UMP_GEOSERVER_USER,
+                    config.UMP_GEOSERVER_PASSWORD.get_secret_value()
+                ),
+                
                 data=f"<featureType><name>{layer_name}</name></featureType>",
                 headers={"Content-type": "text/xml"},
                 timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
