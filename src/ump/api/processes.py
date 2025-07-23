@@ -172,7 +172,8 @@ def is_process_visible(
     # Log the specific condition(s) that grant access
     if process_config.anonymous_access:
         logger.info(
-            "Granting access for process %s: Anonymous access is allowed.",
+            "Granting access for process %s:%s: Anonymous access is allowed.",
+            provider_name,
             process_id
         )
 
