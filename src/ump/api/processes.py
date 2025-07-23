@@ -70,8 +70,12 @@ async def fetch_provider_processes(
     try:
         provider_auth = authenticate_provider(provider_config)
         
-        results = await fetch_processes_from_provider(
-            session, provider_config, provider_auth
+        results = await fetch_json(
+            session=session,
+            url=f"{provider_config.server_url}",
+            raise_for_status=True,
+            headers={"Content-type": "application/json", "Accept": "application/json"},
+            auth=provider_auth
         )
 
         if "processes" in results:
