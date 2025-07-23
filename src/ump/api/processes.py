@@ -3,24 +3,29 @@ import traceback
 from logging import getLogger
 
 import aiohttp
-from aiohttp import ClientTimeout
+from aiohttp import ClientSession, ClientTimeout
 from flask import g
 
-from ump.api.models.providers_config import ProcessConfig
+from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.api.providers import (
     authenticate_provider,
     get_providers,
 )
+from ump.errors import OGCProcessException
+from ump.utils import fetch_json
 
 logger = getLogger(__name__)
 
 #TODO: add validation of loaded processes through pydantic model or existing Process class
 async def load_processes():
     processes = []
+    
     auth = g.get("auth_token", {}) or {}
-    realm_roles = auth.get("realm_access", {}).get("roles", [])
+    
+    realm_roles: list = auth.get("realm_access", {}).get("roles", [])
+    
     # TODO: another hard-coded one: "ump-client"
-    client_roles = (
+    client_roles: list = (
         auth.get("resource_access", {}).get("ump-client", {}).get("roles", [])
     )
 
@@ -56,8 +61,9 @@ async def load_processes():
 
 
 async def fetch_provider_processes(
-        session, provider_name, provider_config,
-        realm_roles, client_roles
+        session: ClientSession,
+        provider_name: str, provider_config: ProviderConfig,
+        realm_roles: list, client_roles: list
 ):
     """Fetch processes for a specific provider and filter them."""
     provider_processes = []
