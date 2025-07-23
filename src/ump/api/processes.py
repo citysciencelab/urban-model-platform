@@ -42,7 +42,8 @@ async def load_processes():
         # Create a list of tasks for fetching processes concurrently
         tasks = [
             fetch_provider_processes(
-                session, provider_name, provider_config, realm_roles, client_roles
+                session, provider_name,
+                provider_config, realm_roles, client_roles
             )
             for provider_name, provider_config in get_providers().items()
         ]
@@ -78,6 +79,8 @@ async def fetch_provider_processes(
             auth=provider_auth
         )
 
+        # TODO: instead of manually checking for a key, we should validate the response
+        # using a pydantic model or json schema!
         if "processes" in results:
             for process in results["processes"]:
                 process_id = process["id"]
