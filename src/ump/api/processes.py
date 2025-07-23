@@ -93,7 +93,7 @@ async def fetch_provider_processes(
                     continue
 
                 process_config = provider_config.processes[process_id]
-                if is_process_visible(
+                if has_user_access_rights(
                     process_id, provider_name, process_config,
                     realm_roles, client_roles
                 ):
@@ -138,7 +138,7 @@ async def fetch_processes_from_provider(session, provider_config, provider_auth)
         )
         raise
 
-def is_process_visible(
+def has_user_access_rights(
     process_id: str,
     provider_name: str,
     process_config: ProcessConfig,
