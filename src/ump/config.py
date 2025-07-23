@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings
 from rich import print
 
 logger = logging.getLogger(__name__)
+
+
 # using pydantic_settings to manage environment variables
 # and do automatic type casting in a central place
 class UmpSettings(BaseSettings):
@@ -28,14 +30,17 @@ class UmpSettings(BaseSettings):
     UMP_GEOSERVER_WORKSPACE_NAME: str = "UMP"
     UMP_GEOSERVER_USER: str = "geoserver"
     UMP_GEOSERVER_PASSWORD: SecretStr = SecretStr("geoserver")
-    UMP_GEOSERVER_CONNECTION_TIMEOUT: int = 60 # seconds
-    UMP_JOB_DELETE_INTERVAL: int = 240 # minutes
+    UMP_GEOSERVER_CONNECTION_TIMEOUT: int = 60  # seconds
+    UMP_JOB_DELETE_INTERVAL: int = 240  # minutes
     UMP_KEYCLOAK_URL: HttpUrl = HttpUrl("http://keycloak:8080/auth")
     UMP_KEYCLOAK_REALM: str = "UrbanModelPlatform"
     UMP_KEYCLOAK_CLIENT_ID: str = "ump-client"
     UMP_KEYCLOAK_USER: str = "admin"
     UMP_KEYCLOAK_PASSWORD: SecretStr = SecretStr("admin")
     UMP_API_SERVER_URL_PREFIX: str = "/"
+
+    # Gunicorn default timeout is 30 seconds
+    UMP_SERVER_TIMEOUT: int = 30
 
     @computed_field
     @property
@@ -60,6 +65,7 @@ class UmpSettings(BaseSettings):
         if not value.endswith("/"):
             value += "/"
         return value
+
 
 app_settings = UmpSettings()
 app_settings.print_settings()
