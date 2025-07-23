@@ -73,7 +73,7 @@ async def fetch_provider_processes(
         
         results = await fetch_json(
             session=session,
-            url=f"{provider_config.server_url}",
+            url=f"{provider_config.server_url}processes",
             raise_for_status=True,
             headers={"Content-type": "application/json", "Accept": "application/json"},
             auth=provider_auth
