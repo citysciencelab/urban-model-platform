@@ -86,9 +86,18 @@ async def fetch_provider_processes(
                 ):
                     process["id"] = f"{provider_name}:{process_id}"
                     provider_processes.append(process)
+        
+        logger.error(
+            "The response from the remote service was not valid. "
+            "URL: %s, Content: %s",
+            provider_config.server_url,
+            results
+        )
 
-    except aiohttp.ClientError as e:
+    # Note: fetch_json raises OGCProcessException on errors
+    except OGCProcessException as e:
         logger.error("HTTP error while accessing provider %s: %s", provider_name, e)
+
     except Exception as e:
         logger.error("Unexpected error while processing provider %s: %s", provider_name, e)
         traceback.print_exc()
