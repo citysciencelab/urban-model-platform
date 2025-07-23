@@ -47,7 +47,7 @@ async def load_processes():
 
         # Process results
         for result in results:
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.error("Error fetching processes: %s", result)
             else:
                 processes.extend(result)
