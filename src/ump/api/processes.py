@@ -37,7 +37,7 @@ async def load_processes():
     ) # remote server needs to answer in time, because we make multiple requests!
 
     async with aiohttp.ClientSession(
-        raise_for_status=True, timeout=client_timeout
+        raise_for_status=False, timeout=client_timeout
     ) as session:
         # Create a list of tasks for fetching processes concurrently
         tasks = [
