@@ -306,9 +306,10 @@ class Process:
         select job_id from jobs where hash = encode(
             sha512(
                 convert_to(
-                    %(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea,
+                    %(parameters)s :: json :: text || %(process_version)s || %(user_id)s,
                     'UTF8'
                 ),
+            ),
             'base64'
         )
         """
