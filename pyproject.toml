@@ -38,7 +38,7 @@ exclude = [
 
 [tool.poetry]
 name = "ump"
-version = "2.1.0rc7+fix-unauthorized-response"
+version = "2.1.0rc8+fix-insert-when-logged-in"
 description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
 authors = [
     "Rico Herzog <rico.herzog@hcu-hamburg.de>",
