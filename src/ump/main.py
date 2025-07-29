@@ -59,6 +59,11 @@ dictConfig(
                 "handlers": ["wsgi"],
                 "propagate": False,
             },
+            "ump.api.models.process": {  # Configure the logger for processes.py
+                "level": config.UMP_LOG_LEVEL,
+                "handlers": ["wsgi"],
+                "propagate": False,
+            },
         },
     }
 )
