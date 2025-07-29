@@ -72,8 +72,8 @@ class Process:
         self.process_id = match.group(2)
 
         # this checks if the process is known from providers and configured as available
-        # for what purpose? -> security! -if a user selects a process which is not
-        # confiured to be available, but exists
+        # for what purpose? -> security! -if a user selects a remote process which is
+        # not (!) explicitly configured to be available, but exists on the remote server
         try:
             process_config = providers.get_process_config(
                 self.provider_prefix, self.process_id
@@ -96,8 +96,7 @@ class Process:
             )
         if process_config.exclude:
             logger.warning(
-                "Process ID '%s' is not available. "
-                "Either the process is not configured or it is excluded from this API.",
+                "Process ID '%s' is explicitly excluded. ",
                 self.process_id_with_prefix,
             )
             # raise OGCProcessException to inform users, but with less detail
@@ -119,14 +118,35 @@ class Process:
         )
 
         # if anonymous access isn’t enabled, require a token
-        if process_config and not process_config.anonymous_access:
+        if not process_config.anonymous_access:
             logger.debug(
                 "Process %s requires authentication. Checking user roles.",
                 self.process_id_with_prefix,
             )
 
+            # check if token was provided by the user
             auth = getattr(g, "auth_token", None)
-            role = f"{self.provider_prefix}_{self.process_id}"
+            
+            if not auth:
+                logger.warning(
+                    "User is not allowed to access process %s. "
+                    "The request lacks necessary authentication details!",
+                    self.process_id_with_prefix,
+                )
+                raise OGCProcessException(
+                    OGCExceptionResponse(
+                        type="about:blank",
+                        title="Unauthorized.",
+                        status=401,
+                        detail=(
+                            "The request lacks necessary authentication details."
+                        ),
+                        instance=f"/processes/{self.process_id_with_prefix}",
+                    )
+                )
+            
+            role_name = f"{self.provider_prefix}_{self.process_id}"
+
             realm_roles = auth.get("realm_access", {}).get("roles", []) if auth else []
 
             # TODO: uses hard-coded client name 'ump-client' to get client roles
@@ -137,24 +157,25 @@ class Process:
             )
 
             allowed = any(
-                r in realm_roles + client_roles for r in [self.provider_prefix, role]
+                r in realm_roles + client_roles for r in [self.provider_prefix, role_name]
             )
 
-            if not auth or not allowed:
+            if not allowed:
                 logger.warning(
                     "User is not allowed to access process %s. "
-                    "Either the process is not configured for anonymous access or "
-                    "the user does not have the required roles.",
+                    "User roles: %s, required roles: %s",
                     self.process_id_with_prefix,
+                    realm_roles + client_roles,
+                    [self.provider_prefix, role_name],
                 )
                 raise OGCProcessException(
                     OGCExceptionResponse(
-                        type="http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/no-such-process",
-                        title="Not available.",
-                        status=400,
+                        type="about:blank",
+                        title="Forbidden.",
+                        status=403,
                         detail=(
-                            f"Process ID '{self.process_id_with_prefix}' "
-                            "is not available."
+                            f"User is not allowed to access process "
+                            f"'{self.process_id_with_prefix}'"
                         ),
                         instance=f"/processes/{self.process_id_with_prefix}",
                     )
