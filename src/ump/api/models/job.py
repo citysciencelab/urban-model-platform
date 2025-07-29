@@ -116,15 +116,52 @@ class Job:
             process_version=process_version,
         )
 
+        # TODO: these metadata should come from remote job
+        # instead of being set here
+        # because the remote server ultimately decides if a job was accepted!
         self.status = JobStatus.accepted.value
         self.created = datetime.now(timezone.utc)
         self.updated = datetime.now(timezone.utc)
 
+        # TODO: we need proper normalization here
+        # TODO: we need a SQL model for this, raw queries are error prone
         query = """
             INSERT INTO jobs
-            (job_id, remote_job_id, process_id, provider_prefix, provider_url, status, progress, parameters, message, created, started, finished, updated, user_id, process_title, name, process_version, hash)
+            (
+                job_id, remote_job_id, process_id,
+                provider_prefix, provider_url, status,
+                progress, parameters, message, created,
+                started, finished, updated, user_id,
+                process_title, name, process_version, hash
+            )
             VALUES
-            (%(job_id)s, %(remote_job_id)s, %(process_id)s, %(provider_prefix)s, %(provider_url)s, %(status)s, %(progress)s, %(parameters)s, %(message)s, %(created)s, %(started)s, %(finished)s, %(updated)s, %(user_id)s, %(process_title)s, %(name)s, %(process_version)s, encode(sha512((%(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea), 'base64'))
+            (
+                %(job_id)s,
+                %(remote_job_id)s,
+                %(process_id)s,
+                %(provider_prefix)s,
+                %(provider_url)s,
+                %(status)s,
+                %(progress)s,
+                %(parameters)s,
+                %(message)s,
+                %(created)s,
+                %(started)s,
+                %(finished)s,
+                %(updated)s,
+                %(user_id)s,
+                %(process_title)s,
+                %(name)s,
+                %(process_version)s,
+                encode(
+                    sha512(
+                        convert_to(
+                            %(parameters)s :: json :: text || %(process_version)s || %(user_id)s,
+                            'UTF8'
+                        ) :: bytea
+                    ), 'base64'
+                )
+            )
         """
         with DBHandler() as db:
             db.run_query(query, query_params=self._to_dict())
