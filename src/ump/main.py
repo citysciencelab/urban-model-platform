@@ -169,6 +169,8 @@ def check_jwt():
     schedule.run_pending()
     auth = request.authorization
 
+    # TODO: this needs to be improved, it should not fail the app
+    # and error messages must adopt OGCProcessException
     if auth is not None:
         # need exception handling here to avoid app failure!
         try:
