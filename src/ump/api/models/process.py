@@ -75,7 +75,7 @@ class Process:
         # for what purpose? -> security! -if a user selects a process which is not
         # confiured to be available, but exists
         try:
-            process_config = providers.load_process_config(
+            process_config = providers.get_process_config(
                 self.provider_prefix, self.process_id
             )
         except ValueError as e:
