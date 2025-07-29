@@ -4,6 +4,7 @@
 # - logging setup
 # - a geoserver cleanup runner
 # - the flask app
+# - the token verification
 import atexit
 import json
 import os
@@ -87,7 +88,7 @@ def cleanup():
                     + f"/layers/{job_id}.xml",
                     auth=(
                         config.UMP_GEOSERVER_USER,
-                        config.UMP_GEOSERVER_PASSWORD.get_secret_value,
+                        config.UMP_GEOSERVER_PASSWORD.get_secret_value(),
                     ),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
@@ -152,9 +153,12 @@ keycloak_openid = KeycloakOpenID(
 
 @app.errorhandler(OGCProcessException)
 def handle_ogc_exception(error: OGCProcessException):
-    response = jsonify(error.response.model_dump())
+    response = jsonify(error.response.model_dump(exclude_unset=True))
     response.status_code = error.response.status
     response.content_type = "application/problem+json"
+
+    if response.status_code in (401, 403):
+        response.headers["WWW-Authenticate"] = 'Bearer'
     return response
 
 
