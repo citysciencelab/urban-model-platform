@@ -301,7 +301,7 @@ class Process:
 
         if process_config.deterministic:
             return None
-        # BUG: this fails because of implicit conversion of json to text
+
         sql = """
         select job_id from jobs where hash = encode(
             sha512(
