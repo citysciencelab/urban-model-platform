@@ -38,7 +38,7 @@ exclude = [
 
 [tool.poetry]
 name = "ump"
-version = "2.1.0rc5+fix-remote-process-timeout"
+version = "2.1.0rc6+fix-unauthorized-response"
 description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
 authors = [
     "Rico Herzog <rico.herzog@hcu-hamburg.de>",
