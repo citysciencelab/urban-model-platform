@@ -101,13 +101,13 @@ async def fetch_provider_processes(
                 ):
                     process["id"] = f"{provider_name}:{process_id}"
                     provider_processes.append(process)
-        
-        logger.error(
-            "The response from the remote service was not valid. "
-            "URL: %s, Content: %s",
-            provider_config.server_url,
-            results
-        )
+        else:
+            logger.error(
+                "The response from the remote service was not valid. "
+                "URL: %s, Content: %s",
+                provider_config.server_url,
+                results
+            )
 
     # Note: fetch_json raises OGCProcessException on errors
     except OGCProcessException as e:
