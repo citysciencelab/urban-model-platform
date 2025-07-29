@@ -40,6 +40,8 @@ async def load_processes():
         raise_for_status=False, timeout=client_timeout
     ) as session:
         # Create a list of tasks for fetching processes concurrently
+        #TODO: it would make more sense if, not all processes are fetched,
+        # but only those that are configured and are accessible by the user
         tasks = [
             fetch_provider_processes(
                 session, provider_name,
