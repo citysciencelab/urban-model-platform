@@ -1,6 +1,9 @@
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, Field, HttpUrl, SecretStr, TypeAdapter, model_validator
+from pydantic import (
+    BaseModel, Field, HttpUrl, SecretStr, TypeAdapter,
+    field_validator, model_validator
+)
 
 # a type alias to give context to an otherwise generic str
 ProviderName: TypeAlias = Annotated[str, Field(
@@ -119,6 +122,14 @@ class ProviderConfig(BaseModel):
             "and process properties as value."
         )
     )
+
+    @field_validator("server_url", mode="before")
+    def ensure_trailing_slash(cls, value: str) -> HttpUrl:
+        """Ensure server_url has a trailing slash."""
+        
+        if not str(value).endswith("/"):
+            value += "/"
+        return HttpUrl(value)
 
 # a TypeAlias to give context to an otherwise generic dict
 ModelServers: TypeAlias = Annotated[

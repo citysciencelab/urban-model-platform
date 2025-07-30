@@ -3,24 +3,29 @@ import traceback
 from logging import getLogger
 
 import aiohttp
-from aiohttp import ClientTimeout
+from aiohttp import ClientSession, ClientTimeout
 from flask import g
 
-from ump.api.models.providers_config import ProcessConfig
+from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.api.providers import (
     authenticate_provider,
     get_providers,
 )
+from ump.errors import OGCProcessException
+from ump.utils import fetch_json
 
 logger = getLogger(__name__)
 
 #TODO: add validation of loaded processes through pydantic model or existing Process class
 async def load_processes():
     processes = []
+    
     auth = g.get("auth_token", {}) or {}
-    realm_roles = auth.get("realm_access", {}).get("roles", [])
+    
+    realm_roles: list = auth.get("realm_access", {}).get("roles", [])
+    
     # TODO: another hard-coded one: "ump-client"
-    client_roles = (
+    client_roles: list = (
         auth.get("resource_access", {}).get("ump-client", {}).get("roles", [])
     )
 
@@ -32,12 +37,13 @@ async def load_processes():
     ) # remote server needs to answer in time, because we make multiple requests!
 
     async with aiohttp.ClientSession(
-        raise_for_status=True, timeout=client_timeout
+        raise_for_status=False, timeout=client_timeout
     ) as session:
         # Create a list of tasks for fetching processes concurrently
         tasks = [
             fetch_provider_processes(
-                session, provider_name, provider_config, realm_roles, client_roles
+                session, provider_name,
+                provider_config, realm_roles, client_roles
             )
             for provider_name, provider_config in get_providers().items()
         ]
@@ -47,7 +53,7 @@ async def load_processes():
 
         # Process results
         for result in results:
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.error("Error fetching processes: %s", result)
             else:
                 processes.extend(result)
@@ -56,18 +62,25 @@ async def load_processes():
 
 
 async def fetch_provider_processes(
-        session, provider_name, provider_config,
-        realm_roles, client_roles
+        session: ClientSession,
+        provider_name: str, provider_config: ProviderConfig,
+        realm_roles: list, client_roles: list
 ):
     """Fetch processes for a specific provider and filter them."""
     provider_processes = []
     try:
         provider_auth = authenticate_provider(provider_config)
         
-        results = await fetch_processes_from_provider(
-            session, provider_config, provider_auth
+        results = await fetch_json(
+            session=session,
+            url=f"{provider_config.server_url}processes",
+            raise_for_status=True,
+            headers={"Content-type": "application/json", "Accept": "application/json"},
+            auth=provider_auth
         )
 
+        # TODO: instead of manually checking for a key, we should validate the response
+        # using a pydantic model or json schema!
         if "processes" in results:
             for process in results["processes"]:
                 process_id = process["id"]
@@ -80,15 +93,24 @@ async def fetch_provider_processes(
                     continue
 
                 process_config = provider_config.processes[process_id]
-                if is_process_visible(
+                if has_user_access_rights(
                     process_id, provider_name, process_config,
                     realm_roles, client_roles
                 ):
                     process["id"] = f"{provider_name}:{process_id}"
                     provider_processes.append(process)
+        
+        logger.error(
+            "The response from the remote service was not valid. "
+            "URL: %s, Content: %s",
+            provider_config.server_url,
+            results
+        )
 
-    except aiohttp.ClientError as e:
+    # Note: fetch_json raises OGCProcessException on errors
+    except OGCProcessException as e:
         logger.error("HTTP error while accessing provider %s: %s", provider_name, e)
+
     except Exception as e:
         logger.error("Unexpected error while processing provider %s: %s", provider_name, e)
         traceback.print_exc()
@@ -116,7 +138,7 @@ async def fetch_processes_from_provider(session, provider_config, provider_auth)
         )
         raise
 
-def is_process_visible(
+def has_user_access_rights(
     process_id: str,
     provider_name: str,
     process_config: ProcessConfig,
@@ -150,7 +172,8 @@ def is_process_visible(
     # Log the specific condition(s) that grant access
     if process_config.anonymous_access:
         logger.info(
-            "Granting access for process %s: Anonymous access is allowed.",
+            "Granting access for process %s:%s: Anonymous access is allowed.",
+            provider_name,
             process_id
         )
 

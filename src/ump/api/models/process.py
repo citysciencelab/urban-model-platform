@@ -79,6 +79,8 @@ class Process:
                 self.provider_prefix, self.process_id
             )
         except ValueError as e:
+            logger.error(e)
+
             raise OGCProcessException(
                 OGCExceptionResponse(
                     type="http://www.opengis.net/def/exceptions/ogcapi-processes-1/1.0/no-such-process",

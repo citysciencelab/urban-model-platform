@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+
+export UMP_SERVER_TIMEOUT="${UMP_SERVER_TIMEOUT:-30}"
+
 flask db upgrade
 
 echo "Running API Server in production mode."

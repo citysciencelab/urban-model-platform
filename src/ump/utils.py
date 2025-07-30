@@ -43,12 +43,8 @@ async def fetch_json(
     try:
         async with session.get(url, **kwargs) as response:
             try:
+                # is the response JSON?
                 response_data = await response.json()
-                
-                if raise_for_status:
-                    response.raise_for_status()
-
-                return response_data
 
             except aiohttp.ContentTypeError:
                 text = await response.text()
@@ -68,6 +64,14 @@ async def fetch_json(
                         instance=None
                     )
                 )
+            
+            # is the response ok?
+            if raise_for_status:
+                response.raise_for_status()
+
+            # if all went good, go!
+            return response_data
+
     except asyncio.TimeoutError:
         logger.error(
             "Timeout when requesting remote service. URL: %s",
