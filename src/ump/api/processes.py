@@ -23,6 +23,7 @@ async def load_processes():
     
     auth = g.get("auth_token", {}) or {}
     
+    # TODO manually parsing jwt is not recommended, use a library like PyJWT or better Authlib 
     realm_roles: list = auth.get("realm_access", {}).get("roles", [])
     
     client_roles: list = (
