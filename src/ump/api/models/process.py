@@ -301,13 +301,15 @@ class Process:
 
         if process_config.deterministic:
             return None
-        # BUG: this fails because of implicit conversion of json to text
+
         sql = """
         select job_id from jobs where hash = encode(
             sha512(
-                (
-                    %(parameters)s :: json :: text || %(process_version)s || %(user_id)s) :: bytea
+                convert_to(
+                    %(parameters)s :: json :: text || %(process_version)s || %(user_id)s,
+                    'UTF8'
                 ),
+            ),
             'base64'
         )
         """
