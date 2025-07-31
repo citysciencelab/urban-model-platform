@@ -12,3 +12,4 @@ data:
   UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL: {{ .Values.config.remoteJobStatusRequestInterval | quote }}
   UMP_JOB_DELETE_INTERVAL: {{ .Values.config.jobDeleteInterval | quote }}
   UMP_API_SERVER_WORKERS: {{ .Values.config.apiServerWorkers | quote }}
+  UMP_SERVER_TIMEOUT: {{ .Values.config.serverWorkerTimeout | quote }}
