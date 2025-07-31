@@ -21,6 +21,7 @@ services:
     environment:
       UMP_API_SERVER_URL: localhost:${WEBAPP_PORT_EXTERNAL}
       UMP_API_SERVER_WORKERS: 1
+      UMP_SERVER_TIMEOUT: 30 # seconds
       UMP_LOG_LEVEL: DEBUG
       UMP_PROVIDERS_FILE: /home/pythonuser/providers.yaml
       UMP_KEYCLOAK_USER: admin
