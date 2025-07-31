@@ -192,7 +192,7 @@ def check_result_storage(provider: str, process_id: str) -> Optional[str]:
     return None
 
 
-def get_process_config(provider: str, process_id: str) -> Optional[ProcessConfig]:
+def get_process_config(provider: str, process_id: str) -> ProcessConfig:
     """Get complete process configuration"""
     with PROVIDERS_LOCK:
         if (
