@@ -6,6 +6,7 @@ import aiohttp
 from aiohttp import ClientSession, ClientTimeout
 from flask import g
 
+from ump.config import app_settings
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.api.providers import (
     authenticate_provider,
@@ -22,11 +23,17 @@ async def load_processes():
     
     auth = g.get("auth_token", {}) or {}
     
+    # TODO manually parsing jwt is not recommended, use a library like PyJWT or better Authlib 
     realm_roles: list = auth.get("realm_access", {}).get("roles", [])
     
-    # TODO: another hard-coded one: "ump-client"
     client_roles: list = (
-        auth.get("resource_access", {}).get("ump-client", {}).get("roles", [])
+        auth.get(
+            "resource_access", {}
+        ).get(
+            app_settings.UMP_KEYCLOAK_CLIENT_ID, {}
+        ).get(
+            "roles", []
+        )
     )
 
     client_timeout = ClientTimeout(

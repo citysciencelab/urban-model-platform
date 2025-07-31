@@ -181,6 +181,7 @@ def check_jwt():
         try:
             # TODO: generally token verification is done offline,
             # but decode_token connects to keycloak on every request (for retrieving keys)
+            # use a library like PyJWT or better Authlib
             decoded = keycloak_openid.decode_token(auth.token)
         except KeycloakGetError as e:
             app.logger.error(e)

@@ -9,6 +9,8 @@ import aiohttp
 from flask import g
 
 import ump.api.providers as providers
+
+from ump.config import app_settings
 from ump.api.db_handler import engine
 from ump.api.models.job import Job, JobStatus
 from ump.api.models.ogc_exception import OGCExceptionResponse
@@ -149,9 +151,15 @@ class Process:
 
             realm_roles = auth.get("realm_access", {}).get("roles", []) if auth else []
 
-            # TODO: uses hard-coded client name 'ump-client' to get client roles
             client_roles = (
-                (auth.get("resource_access", {}).get("ump-client", {}).get("roles", []))
+                (
+                    auth.get(
+                        "resource_access", {}
+                        ).get(
+                            app_settings.UMP_KEYCLOAK_CLIENT_ID, {}
+                        ).get(
+                            "roles", [])
+                        )
                 if auth
                 else []
             )
