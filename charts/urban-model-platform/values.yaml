@@ -47,6 +47,7 @@ config:
   apiServerUrlPrefix: "/api"
   apiServerWorkers: "4"
   remoteJobStatusRequestInterval: "5"
+  serverWorkerTimeout: "30" # Timeout for server workers, should be higher than all request to remote servers, to avoid server 500 errors
   geoserverConnectionTimeout: "60"
   jobDeleteInterval: "240"
 
