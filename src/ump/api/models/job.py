@@ -76,6 +76,9 @@ class Job:
         self.process_id = None
         self.provider_url = None
 
+        # TODO: this produces 404 if a job is beeing queried for which was 
+        # stored with a user id, consider to distinguish between
+        # 404, 401 and 403 here
         if job_id and not self._init_from_db(job_id, user):
             raise OGCProcessException(
                 OGCExceptionResponse(
