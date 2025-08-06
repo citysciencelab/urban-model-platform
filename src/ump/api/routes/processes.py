@@ -27,6 +27,8 @@ def show(process_id_with_prefix=None):
 def execute(process_id_with_prefix=None):
     auth = g.get('auth_token')
     process = Process(process_id_with_prefix)
+
+    # extract unique user ID ('sub') from auth token if available
     result = process.execute(request.json, None if auth is None else auth['sub'])
     return Response(json.dumps(result), status=201, mimetype="application/json")
 

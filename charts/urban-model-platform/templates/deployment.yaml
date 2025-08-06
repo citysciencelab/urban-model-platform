@@ -49,70 +49,112 @@ spec:
               mountPath: /tmp
             - name: providers-volume
               mountPath: {{ .Values.config.providersFileMountPath | quote }}
-              readOnly: true
           envFrom:
-            - configMapRef: 
+            - configMapRef:
                 name: {{ include "ump.fullname" . }}-settings
+            # if keycloak/geoserver secrets are not referenced, they will be created
             {{- if not .Values.keycloakConnection.existingSecret.name }}
             - secretRef:
                 name: {{ include "ump.fullname" . }}-keycloak-connection
             {{- end }}
+            {{- if not .Values.geoserverConnection.existingSecret.name }}
+            - secretRef:
+                name: {{ include "ump.fullname" . }}-geoserver-connection
+            {{- end }}
           env:
-            - name: POSTGRES_DB
+            - name: FLASK_APP
+              value: ump.main
+            # postgres connection
+            {{- if .Values.postgresConnection.existingSecret.name }}
+            - name: UMP_DATABASE_NAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: dbname
-            {{- if not .Values.config.postgresHost }}
-            - name: POSTGRES_HOST
+            - name: UMP_DATABASE_HOST
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: host
-            {{- end }}
-            {{- if not .Values.config.postgresPort }}
-            - name: POSTGRES_PORT
+            - name: UMP_DATABASE_PORT
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: port
-            {{- end }}
-            - name: POSTGRES_USER
+            - name: UMP_DATABASE_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: user
-            - name: POSTGRES_PASSWORD
+            - name: UMP_DATABASE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgresConnection.existingSecret.name }}
                   key: password
             # keycloak connection
+            {{- end }}
             {{- if .Values.keycloakConnection.existingSecret.name }}
-            - name: KEYCLOAK_USER
+            - name: UMP_KEYCLOAK_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
                   key: user
-            - name: KEYCLOAK_PASSWORD
+            - name: UMP_KEYCLOAK_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
                   key: password
-            - name: KEYCLOAK_HOST
+            - name: UMP_KEYCLOAK_REALM
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
-                  key: host
-            - name: KEYCLOAK_PROTOCOL
+                  key: realm
+            - name: UMP_KEYCLOAK_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.keycloakConnection.existingSecret.name }}
-                  key: protocol
+                  key: url
+            - name: UMP_KEYCLOAK_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakConnection.existingSecret.name }}
+                  key: clientId
             {{- end }}
+            {{- if .Values.geoserverConnection.existingSecret.name }}
+            - name: UMP_GEOSERVER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.geoserverConnection.existingSecret.name }}
+                  key: url
+            - name: UMP_GEOSERVER_DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.geoserverConnection.existingSecret.name }}
+                  key: dbHost
+            - name: UMP_GEOSERVER_DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.geoserverConnection.existingSecret.name }}
+                  key: dbPort
+            - name: UMP_GEOSERVER_WORKSPACE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.geoserverConnection.existingSecret.name }}
+                  key: workspaceName
+            - name: UMP_GEOSERVER_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.geoserverConnection.existingSecret.name }}
+                  key: user
+            - name: UMP_GEOSERVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.geoserverConnection.existingSecret.name }}
+                  key: password
+          {{- end }}
           readinessProbe:
             httpGet:
-              path: /api/health/ready
+              path: {{ .Values.config.apiServerUrlPrefix }}/health/ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10

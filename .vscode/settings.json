@@ -6,7 +6,7 @@
         "--preview"
     ],
     "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.defaultFormatter": "charliermarsh.ruff",
         "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
             "source.organizeImports": "explicit"
@@ -20,4 +20,5 @@
     ],
     "ruff.importStrategy": "fromEnvironment",
     "black-formatter.importStrategy": "fromEnvironment",
+    "python.analysis.typeCheckingMode": "basic",
 }

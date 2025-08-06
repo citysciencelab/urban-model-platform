@@ -29,6 +29,7 @@ This document describes the configuration options for the Urban Model Platform (
 | `UMP_KEYCLOAK_CLIENT_ID`              | Keycloak client ID.                                                                            | `ump-client`          |
 | `UMP_KEYCLOAK_USER`                   | Keycloak admin username.                                                                       | `admin`               |
 | `UMP_KEYCLOAK_PASSWORD`               | Keycloak admin password.                                                                       | `admin`               |
+| `UMP_API_SERVER_URL_PREFIX`           | subpath prefix, e.g.: "/api"                                                                   | `/`                   |
 
 ### Example Modelserver Settings
 | Variable                              | Description                                                                                     | Default Value          |

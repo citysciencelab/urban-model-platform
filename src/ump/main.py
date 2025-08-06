@@ -1,9 +1,10 @@
-#TODO: this file has become a hodgepodge of very different things,
+# TODO: this file has become a hodgepodge of very different things,
 # it should be split into dedicated files:
 # - an app factory for migrations
 # - logging setup
 # - a geoserver cleanup runner
-# - the flask app 
+# - the flask app
+# - the token verification
 import atexit
 import json
 import os
@@ -17,7 +18,7 @@ from flask import g, jsonify, request
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-from keycloak import KeycloakOpenID, KeycloakGetError, KeycloakConnectionError
+from keycloak import KeycloakConnectionError, KeycloakGetError, KeycloakOpenID
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -29,7 +30,7 @@ from ump.api.routes.jobs import jobs
 from ump.api.routes.processes import processes
 from ump.api.routes.users import users
 from ump.config import app_settings as config
-from ump.errors import CustomException
+from ump.errors import CustomException, OGCProcessException
 
 dictConfig(
     {
@@ -46,10 +47,7 @@ dictConfig(
                 "formatter": "default",
             }
         },
-        "root": {
-            "level": config.UMP_LOG_LEVEL,
-            "handlers": ["wsgi"]
-        },
+        "root": {"level": config.UMP_LOG_LEVEL, "handlers": ["wsgi"]},
         "loggers": {
             "ump.api.providers": {  # Configure the logger for providers.py
                 "level": config.UMP_LOG_LEVEL,
@@ -57,6 +55,11 @@ dictConfig(
                 "propagate": False,  # Prevent duplicate logging
             },
             "ump.api.processes": {  # Configure the logger for processes.py
+                "level": config.UMP_LOG_LEVEL,
+                "handlers": ["wsgi"],
+                "propagate": False,
+            },
+            "ump.api.models.process": {  # Configure the logger for processes.py
                 "level": config.UMP_LOG_LEVEL,
                 "handlers": ["wsgi"],
                 "propagate": False,
@@ -69,10 +72,10 @@ dictConfig(
 def cleanup():
     """Cleans up jobs and Geoserver layers of anonymous users"""
     sql = "delete from jobs where user_id is null and finished < %(finished)s returning job_id, provider_prefix, process_id"
-    finished = datetime.now() - timedelta(minutes = config.UMP_JOB_DELETE_INTERVAL)
-    
+    finished = datetime.now() - timedelta(minutes=config.UMP_JOB_DELETE_INTERVAL)
+
     with DBHandler() as conn:
-        result = conn.run_query(sql, query_params={'finished': finished})
+        result = conn.run_query(sql, query_params={"finished": finished})
         for row in result:
             # get additional job metadata
             job_id, provider_prefix, process_id = row
@@ -90,20 +93,26 @@ def cleanup():
                     + f"/layers/{job_id}.xml",
                     auth=(
                         config.UMP_GEOSERVER_USER,
-                        config.UMP_GEOSERVER_PASSWORD.get_secret_value
+                        config.UMP_GEOSERVER_PASSWORD.get_secret_value(),
                     ),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
                     f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}/featuretypes/{job_id}.xml",
-                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
+                    auth=(
+                        config.UMP_GEOSERVER_USER,
+                        config.UMP_GEOSERVER_PASSWORD.get_secret_value(),
+                    ),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
                 requests.delete(
                     f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
                     + f"/datastores/{job_id}.xml",
-                    auth=(config.UMP_GEOSERVER_USER, config.UMP_GEOSERVER_PASSWORD.get_secret_value()),
+                    auth=(
+                        config.UMP_GEOSERVER_USER,
+                        config.UMP_GEOSERVER_PASSWORD.get_secret_value(),
+                    ),
                     timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
                 )
 
@@ -129,7 +138,7 @@ migrate = Migrate(app, db)
 
 CORS(app)
 
-api = APIBlueprint("api", __name__, url_prefix="/api")
+api = APIBlueprint("api", __name__, url_prefix=config.UMP_API_SERVER_URL_PREFIX)
 api.register_blueprint(processes, url_prefix="/processes")
 api.register_blueprint(jobs, url_prefix="/jobs")
 api.register_blueprint(ensembles, url_prefix="/ensembles")
@@ -146,6 +155,18 @@ keycloak_openid = KeycloakOpenID(
     realm_name=config.UMP_KEYCLOAK_REALM,
 )
 
+
+@app.errorhandler(OGCProcessException)
+def handle_ogc_exception(error: OGCProcessException):
+    response = jsonify(error.response.model_dump(exclude_unset=True))
+    response.status_code = error.response.status
+    response.content_type = "application/problem+json"
+
+    if response.status_code in (401, 403):
+        response.headers["WWW-Authenticate"] = 'Bearer'
+    return response
+
+
 @app.before_request
 def check_jwt():
     """Decodes the JWT token and runs pending scheduled jobs"""
@@ -153,11 +174,14 @@ def check_jwt():
     schedule.run_pending()
     auth = request.authorization
 
+    # TODO: this needs to be improved, it should not fail the app
+    # and error messages must adopt OGCProcessException
     if auth is not None:
         # need exception handling here to avoid app failure!
         try:
             # TODO: generally token verification is done offline,
             # but decode_token connects to keycloak on every request (for retrieving keys)
+            # use a library like PyJWT or better Authlib
             decoded = keycloak_openid.decode_token(auth.token)
         except KeycloakGetError as e:
             app.logger.error(e)
@@ -181,6 +205,7 @@ def check_jwt():
     else:
         g.auth_token = None
     pass
+
 
 @app.after_request
 def set_headers(response):
@@ -216,6 +241,7 @@ def handle_http_exception(error):
 def shutdown_pool_on_exit():
     """Close the connection pool when the application shuts down."""
     close_pool()
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0")

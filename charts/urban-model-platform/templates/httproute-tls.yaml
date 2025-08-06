@@ -23,4 +23,6 @@ spec:
         - name: {{ include "ump.fullname" . }}
           port: {{ .Values.service.port }}
           kind: Service
+          group: ''
+          weight: 1
 {{- end -}}

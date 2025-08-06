@@ -38,7 +38,7 @@ exclude = [
 
 [tool.poetry]
 name = "ump"
-version = "1.2.0"
+version = "2.1.0"
 description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
 authors = [
     "Rico Herzog <rico.herzog@hcu-hamburg.de>",
@@ -96,6 +96,7 @@ pre-commit = ">=3.4.0,<4"
 debugpy = "^1.8.5"
 flake8 = "^7.1.1"
 pylint = "^3.3.1"
+bump-my-version = "^1.2.0"
 
 [tool.poetry.group.docs]
 optional = true

@@ -49,7 +49,10 @@ initiate-dev:
 build-image:
 	@echo 'Building release ${CONTAINER_REGISTRY}/${CONTAINER_NAMESPACE}/$(IMAGE_NAME):$(IMAGE_TAG)'
 # build your image
-	docker compose -f docker-compose-build.yaml build --build-arg SOURCE_COMMIT=$(GIT_COMMIT) api
+	docker compose -f docker-compose-build.yaml build \
+	--build-arg SOURCE_COMMIT=$(GIT_COMMIT) \
+	--build-arg TAG=$(IMAGE_TAG) \
+	api
 
 upload-image: build-image
 	docker compose -f docker-compose-build.yaml push api
@@ -95,3 +98,27 @@ build-docs:
 
 clean-docs:
 	jupyter-book clean docs
+
+# Update app version: bump major, minor, or patch
+bump-app-version:
+	@if [ -z "$(part)" ]; then \
+		echo "Usage: make bump-app part={major|minor|patch}"; \
+		exit 1; \
+	fi; \
+	bump-my-version bump $(part)
+
+# Update app version: set to a specific version
+set-app-version:
+	@if [ -z "$(version)" ]; then \
+		echo "Usage: make set-app-version version={version}"; \
+		exit 1; \
+	fi; \
+	bump-my-version set $(version)
+
+# Update chart version: bump major, minor, or patch
+bump-chart-version:
+	@if [ -z "$(part)" ]; then \
+		echo "Usage: make bump-chart part={major|minor|patch}"; \
+		exit 1; \
+	fi; \
+	(cd charts && bump-my-version bump $(part))
