@@ -272,6 +272,21 @@ class Geoserver:
         elif response.status_code == 409:  # Conflict - already exists
             logging.info(f" --> Central datastore {store_name} already exists")
             return True
+        elif response.status_code == 500:
+            # Check if the error message indicates the store already exists
+            error_text = response.text.lower() if response.text else ""
+            if "already exists" in error_text or "already_exists" in error_text:
+                logging.info(f" --> Central datastore {store_name} already exists (detected from 500 error)")
+                return True
+            else:
+                raise GeoserverException(
+                    f"Could not create central datastore {store_name}",
+                    payload={
+                        "status_code": response.status_code,
+                        "message": response.reason,
+                        "response_text": response.text[:200] if response.text else None
+                    }
+                )
         else:
             raise GeoserverException(
                 f"Could not create central datastore {store_name}",
