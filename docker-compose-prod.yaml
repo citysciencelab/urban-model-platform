@@ -28,7 +28,7 @@ services:
       UMP_PROVIDERS_FILE: /home/pythonuser/providers.yaml
       UMP_KEYCLOAK_USER: ${UMP_KEYCLOAK_USER:-admin}
       UMP_KEYCLOAK_PASSWORD: ${UMP_KEYCLOAK_PASSWORD:-admin}
-      UMP_KEYCLOAK_URL: http://keycloak:8080/auth
+      UMP_KEYCLOAK_URL: ${UMP_KEYCLOAK_URL:-http://keycloak:8080/auth}
       UMP_KEYCLOAK_CLIENT_ID: ${UMP_KEYCLOAK_CLIENT_ID:-ump-client}
       UMP_KEYCLOAK_REALM: ${UMP_KEYCLOAK_REALM:-UrbanModelPlatform}
       UMP_DATABASE_NAME: ${UMP_DATABASE_NAME:-ump}
