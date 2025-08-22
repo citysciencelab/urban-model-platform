@@ -162,7 +162,7 @@ start-prod:
 	docker compose -f docker-compose-prod.yaml --env-file .env.prod up -d --build
 	
 	@echo 'Waiting for databases to be ready...'
-	sleep 15set
+	sleep 15
 	
 	@echo 'Running database migrations...'
 	docker compose -f docker-compose-prod.yaml --env-file .env.prod exec api flask db upgrade
