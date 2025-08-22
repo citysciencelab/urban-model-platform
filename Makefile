@@ -71,7 +71,7 @@ start-dev:
 	
 	@ echo 'Starting Flask development server...'
 	$(CONDA_ACTIVATE) ./.venv && \
-	FLASK_APP=src/ump/main.py FLASK_ENV=development flask run --host=0.0.0.0 --port=5000
+	FLASK_APP=src/ump/main.py FLASK_ENV=development flask run --host=0.0.0.0 --port=5000 --debug
 
 
 start-dev-example: start-dev
