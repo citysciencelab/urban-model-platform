@@ -35,6 +35,20 @@ db_engine = engine = create_engine(
     pool_recycle=3600,  # Recycle connections after 1 hour
 )
 
+# Separate engine for Geoserver PostGIS database
+geoserver_engine = create_engine(
+    (
+        "postgresql+psycopg2://"
+        f"{config.UMP_GEOSERVER_DB_USER}:{config.UMP_GEOSERVER_DB_PASSWORD.get_secret_value()}"
+        f"@{config.UMP_GEOSERVER_DB_HOST}:{config.UMP_GEOSERVER_DB_PORT}"
+        f"/{config.UMP_GEOSERVER_DB_NAME}"
+    ),
+    pool_size=10,  # Smaller pool for geoserver data
+    max_overflow=1,  # Additional connections allowed beyond pool_size
+    pool_timeout=30,  # Timeout for getting a connection from the pool
+    pool_recycle=3600,  # Recycle connections after 1 hour
+)
+
 def close_pool():
     """Close the connection pool."""
     global connection_pool

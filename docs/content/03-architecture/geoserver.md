@@ -6,7 +6,7 @@
 Currently, the GeoServer is not integrated with Keycloak. This means that if you configure a process with `result-storage: geoserver`, the results will be publicly accessible without authentication. 
 ```
 
-All processes that are configured with `result-storage: geoserver` will be stored in a GeoServer instance. The results can be visualized on a map using the respective WFS and WMS layers. The GeoServer is configured to use the same database as the Urban Model Platform, so the results will be stored in the same database as the other data.
+All processes that are configured with `result-storage: geoserver` will be stored in a dedicated GeoServer PostGIS database instance. The results can be visualized on a map using the respective WFS and WMS layers. The GeoServer uses a separate database from the Urban Model Platform to ensure clean separation between operational data and visualization data.
 
 ```{seealso}
 See the [Docker Configuration User Guide](dockerconfiguration) for more information on the environment variables used to configure the GeoServer.

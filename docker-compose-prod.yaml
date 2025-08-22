@@ -7,6 +7,7 @@ networks:
 
 volumes:
   postgres_data:
+  geoserver_postgres_data:
   kc-db_data:
   geoserver_data:
 
@@ -39,12 +40,12 @@ services:
       UMP_GEOSERVER_USER: ${UMP_GEOSERVER_USER:-admin}
       UMP_GEOSERVER_PASSWORD: ${UMP_GEOSERVER_PASSWORD:-geoserver}
       UMP_GEOSERVER_URL: http://geoserver:8080/geoserver
-      # For production, consider using separate databases for API and Geoserver
+      # Using dedicated database for geoserver results in production
       UMP_GEOSERVER_DB_PORT: 5432
-      UMP_GEOSERVER_DB_NAME: ${UMP_DATABASE_NAME:-ump}
-      UMP_GEOSERVER_DB_USER: ${UMP_DATABASE_USER:-ump}
-      UMP_GEOSERVER_DB_PASSWORD: ${UMP_DATABASE_PASSWORD:-ump}
-      UMP_GEOSERVER_DB_HOST: api-db
+      UMP_GEOSERVER_DB_NAME: ${UMP_GEOSERVER_DB_NAME:-geoserver_results}
+      UMP_GEOSERVER_DB_USER: ${UMP_GEOSERVER_DB_USER:-geoserver}
+      UMP_GEOSERVER_DB_PASSWORD: ${UMP_GEOSERVER_DB_PASSWORD:-geoserver}
+      UMP_GEOSERVER_DB_HOST: geoserver-db
       UMP_GEOSERVER_CONNECTION_TIMEOUT: ${UMP_GEOSERVER_CONNECTION_TIMEOUT:-60}
       UMP_JOB_DELETE_INTERVAL: ${UMP_JOB_DELETE_INTERVAL:-240}
     volumes:
@@ -69,6 +70,21 @@ services:
     networks:
       - prod
 
+  # Separate PostGIS database for Geoserver results in production
+  geoserver-db:
+    image: postgis/postgis:14-3.3
+    restart: "unless-stopped"
+    volumes:
+      - geoserver_postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_DB: ${UMP_GEOSERVER_DB_NAME:-geoserver_results}
+      POSTGRES_USER: ${UMP_GEOSERVER_DB_USER:-geoserver}
+      POSTGRES_PASSWORD: ${UMP_GEOSERVER_DB_PASSWORD:-geoserver}
+    expose:
+      - 5432
+    networks:
+      - prod
+
   geoserver:
     image: kartoza/geoserver:2.22.0
     restart: "unless-stopped"
@@ -79,13 +95,13 @@ services:
     environment:
       GEOSERVER_ADMIN_USER: ${UMP_GEOSERVER_USER}
       GEOSERVER_ADMIN_PASSWORD: ${UMP_GEOSERVER_PASSWORD}
-      # Production: Consider using separate database for Geoserver
-      HOST: api-db
-      POSTGRES_DB: ${UMP_DATABASE_NAME}
-      POSTGRES_USER: ${UMP_DATABASE_USER}
-      POSTGRES_PASS: ${UMP_DATABASE_PASSWORD}
+      # Production: Using dedicated database for Geoserver
+      HOST: geoserver-db
+      POSTGRES_DB: ${UMP_GEOSERVER_DB_NAME:-geoserver_results}
+      POSTGRES_USER: ${UMP_GEOSERVER_DB_USER:-geoserver}
+      POSTGRES_PASS: ${UMP_GEOSERVER_DB_PASSWORD:-geoserver}
     depends_on:
-      - api-db
+      - geoserver-db
     networks:
       - prod
 

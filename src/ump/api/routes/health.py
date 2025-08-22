@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from ump.api.db_handler import DBHandler, db_engine
 from ump.config import app_settings as config
+from ump.geoserver.geoserver import Geoserver
 
 logger = logging.getLogger(__name__)
 health_bp = Blueprint('health', __name__)
@@ -36,32 +37,15 @@ def check_database():
         }
 
 def check_geoserver_database():
-    """Check GeoServer database connectivity."""
+    """Check GeoServer database connectivity through datastore."""
     try:
-        start_time = time.time()
-        connection = psycopg2.connect(
-            host=config.UMP_GEOSERVER_DB_HOST,
-            port=config.UMP_GEOSERVER_DB_PORT,
-            database=config.UMP_GEOSERVER_DB_NAME,
-            user=config.UMP_GEOSERVER_DB_USER,
-            password=config.UMP_GEOSERVER_DB_PASSWORD.get_secret_value()
-        )
-        cursor = connection.cursor()
-        cursor.execute("SELECT 1")
-        cursor.fetchone()
-        response_time = round((time.time() - start_time) * 1000, 2)
-        
-        cursor.close()
-        connection.close()
-        
-        return {
-            "status": "healthy",
-            "response_time_ms": response_time
-        }
+        geoserver = Geoserver()
+        return geoserver.check_datastore_connection()
     except Exception as e:
+        logger.exception("Failed to check geoserver datastore connection")
         return {
             "status": "unhealthy",
-            "error": str(e),
+            "error": f"Unable to initialize geoserver datastore check: {str(e)}",
             "response_time_ms": None
         }
 

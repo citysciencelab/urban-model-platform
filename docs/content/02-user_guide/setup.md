@@ -17,8 +17,11 @@ This document describes the configuration options for the Urban Model Platform (
 | `UMP_DATABASE_USER`                   | Username for the PostgreSQL database.                                                          | `ump`                 |
 | `UMP_DATABASE_PASSWORD`               | Password for the PostgreSQL database.                                                          | `ump`                 |
 | `UMP_GEOSERVER_URL`                   | URL of the GeoServer instance.                                                                 | `http://geoserver:8080/geoserver` |
-| `UMP_GEOSERVER_DB_HOST`               | Hostname of the GeoServer database.                                                            | `localhost`           |
+| `UMP_GEOSERVER_DB_HOST`               | Hostname of the GeoServer database.                                                            | `geoserver-db`        |
 | `UMP_GEOSERVER_DB_PORT`               | Port of the GeoServer database.                                                                | `5432`                |
+| `UMP_GEOSERVER_DB_NAME`               | Name of the GeoServer database.                                                                | `geoserver_results`   |
+| `UMP_GEOSERVER_DB_USER`               | Username for the GeoServer database.                                                           | `geoserver`           |
+| `UMP_GEOSERVER_DB_PASSWORD`           | Password for the GeoServer database.                                                           | `geoserver`           |
 | `UMP_GEOSERVER_WORKSPACE_NAME`        | Name of the GeoServer workspace.                                                               | `UMP`                 |
 | `UMP_GEOSERVER_USER`                  | Username for GeoServer.                                                                        | `admin`               |
 | `UMP_GEOSERVER_PASSWORD`              | Password for GeoServer.                                                                        | `geoserver`           |
