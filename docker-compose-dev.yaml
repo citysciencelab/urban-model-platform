@@ -130,6 +130,8 @@ services:
     image: quay.io/keycloak/keycloak:25.0
     ports: 
       - ${KEYCLOAK_PORT_EXTERNAL}:8080
+    volumes:
+      - ./keycloak-example-conf.json:/opt/keycloak/data/import/realm-export.json
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
@@ -142,7 +144,9 @@ services:
       KC_HOSTNAME: localhost
       KC_HOSTNAME_PATH: /auth
       KC_HTTP_RELATIVE_PATH: /auth
-    command: ['start', '--proxy-headers', 'xforwarded', '--http-enabled', 'true']
+    command: ['start', '--proxy-headers', 'xforwarded', '--http-enabled', 'true', '--import-realm']
+    depends_on:
+      - kc-db
     networks:
       - dev
 
