@@ -1,8 +1,13 @@
 from typing import Annotated, Literal, TypeAlias
 
 from pydantic import (
-    BaseModel, Field, HttpUrl, SecretStr, TypeAdapter,
-    field_validator, model_validator
+    BaseModel,
+    Field,
+    HttpUrl,
+    SecretStr,
+    TypeAdapter,
+    field_validator,
+    model_validator,
 )
 
 # a type alias to give context to an otherwise generic str
@@ -87,12 +92,6 @@ class ProcessConfig(BaseModel):
         )
     )
 
-    @model_validator(mode="after")
-    def validate_result_path_for_geoserver(self):
-        """Ensure result-path is set if result-storage is 'geoserver'."""
-        if self.result_storage == "geoserver" and not self.result_path:
-            raise ValueError("result-path must be set when result-storage is 'geoserver'.")
-        return self
 
 class Authentication(BaseModel):
     type: Literal["BasicAuth"]
