@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 # using pydantic_settings to manage environment variables
 # and do automatic type casting in a central place
 class UmpSettings(BaseSettings):
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": True,
+        "extra": "ignore"  # Ignoriere unbekannte Umgebungsvariablen
+    }
     UMP_LOG_LEVEL: str = "INFO"
     UMP_PROVIDERS_FILE: FilePath = Path("providers.yaml")
     UMP_API_SERVER_URL: str = "http://localhost:3000"
