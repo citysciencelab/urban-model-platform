@@ -3,7 +3,8 @@ SHELL=/bin/bash
 
 .PHONY: build initiate-dev build-image upload-image start-dev \
         start-dev-example restart-dev stop-dev build-docs clean-docs \
-        start-geoserver-db stop-geoserver-db
+        start-geoserver-db stop-geoserver-db initiate-prod start-prod \
+        stop-prod restart-prod clean-prod
 
 config ?= .env
 
@@ -118,3 +119,83 @@ bump-chart-version:
 		exit 1; \
 	fi; \
 	(cd charts && bump-my-version bump $(part))
+
+# Production environment setup and management
+initiate-prod:
+	@echo 'Setting up production environment files...'
+	
+	@if [ ! -f .env.prod ]; then \
+		cp .env.example .env.prod; \
+		echo 'Created .env.prod from .env.example - Please configure production values!'; \
+		echo 'Important: Update database passwords, API URLs, and registry settings'; \
+	else \
+		echo '.env.prod already exists'; \
+	fi
+
+	@if [ ! -f providers.yaml ]; then \
+		cp providers.yaml.example providers.yaml; \
+		echo 'Created providers.yaml from providers.yaml.example'; \
+	else \
+		echo 'providers.yaml already exists'; \
+	fi
+
+	@echo 'Creating docker network for production'
+	docker network create ump_prod 2>/dev/null || echo 'Network ump_prod already exists'
+
+	@echo ''
+	@echo '=== PRODUCTION SETUP COMPLETE ==='
+	@echo 'Next steps:'
+	@echo '1. Edit .env.prod with your production configuration'
+	@echo '2. Update providers.yaml with your model providers'
+	@echo '3. Run "make start-prod" to start the production environment'
+	@echo '=================================='
+
+start-prod:
+	@echo 'Starting production environment...'
+	@if [ ! -f .env.prod ]; then \
+		echo 'Error: .env.prod not found. Run "make initiate-prod" first.'; \
+		exit 1; \
+	fi
+	
+	@echo 'Building and starting production containers'
+	docker compose -f docker-compose-prod.yaml --env-file .env.prod up -d --build
+	
+	@echo 'Waiting for databases to be ready...'
+	sleep 15set
+	
+	@echo 'Running database migrations...'
+	docker compose -f docker-compose-prod.yaml --env-file .env.prod exec api flask db upgrade
+	
+	@echo ''
+	@echo '=== PRODUCTION ENVIRONMENT STARTED ==='
+	@echo 'Check status with: docker compose -f docker-compose-prod.yaml --env-file .env.prod ps'
+	@echo 'View logs with: docker compose -f docker-compose-prod.yaml --env-file .env.prod logs -f'
+	@echo '======================================='
+
+stop-prod:
+	@echo 'Stopping production environment...'
+	docker compose -f docker-compose-prod.yaml --env-file .env.prod stop
+
+restart-prod:
+	@echo 'Restarting production environment...'
+	docker compose -f docker-compose-prod.yaml --env-file .env.prod restart
+
+clean-prod:
+	@echo 'WARNING: This will remove all production containers AND volumes!'
+	@echo 'All production data will be lost!'
+	@read -p "Are you sure? Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ] || exit 1
+	docker compose -f docker-compose-prod.yaml --env-file .env.prod down --volumes
+	@echo 'Production environment cleaned'
+
+# Production utilities
+prod-logs:
+	@echo 'Showing production logs (Ctrl+C to exit)...'
+	docker compose -f docker-compose-prod.yaml --env-file .env.prod logs -f
+
+prod-status:
+	@echo 'Production environment status:'
+	docker compose -f docker-compose-prod.yaml --env-file .env.prod ps
+
+prod-shell:
+	@echo 'Opening shell in production API container...'
+	docker compose -f docker-compose-prod.yaml --env-file .env.prod exec api /bin/bash
