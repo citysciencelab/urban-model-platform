@@ -1,121 +1,128 @@
+# Production ready docker-compose file for the Urban Model Platform
 networks:
-  dev:
+  prod:
+    driver: bridge
+    name: ${DOCKER_NETWORK:-ump_prod}
     external: true
-    name: ${DOCKER_NETWORK}
 
 volumes:
   postgres_data:
+  kc-db_data:
+  geoserver_data:
 
 services:
   api:
-    image: ${CONTAINER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${CONTAINER_REGISTRY:-local}/${IMAGE_NAME:-urban-model-platform}:${IMAGE_TAG:-latest}
     restart: "unless-stopped"
     ports:
-      - ${WEBAPP_PORT_EXTERNAL}:5000
+      - ${WEBAPP_PORT_EXTERNAL:-5003}:5000
     environment:
-      API_SERVER_URL: ${API_SERVER_URL}
-      NUMBER_OF_WORKERS: ${NUMBER_OF_WORKERS}
-      LOGLEVEL: ${LOGLEVEL}
-      FLASK_DEBUG: ${FLASK_DEBUG}
-      PROVIDERS_FILE: /home/pythonuser/providers.yaml
-      CORS_URL_REGEX: ${CORS_URL_REGEX}
-      KEYCLOAK_USER: ${KEYCLOAK_USER}
-      KEYCLOAK_PASSWORD: ${KEYCLOAK_PASSWORD}
-      KEYCLOAK_HOST: ${KEYCLOAK_HOST}
-      KEYCLOAK_PROTOCOL: ${KEYCLOAK_PROTOCOL}
-      KEYCLOAK_PORT_EXTERNAL: ${KEYCLOAK_PORT_EXTERNAL}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      PGDATA: ${PGDATA}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: 5432
-      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
-      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
-      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
-      GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
-      GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
-      GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
-      CLEANUP_AGE: ${CLEANUP_AGE}
-
+      UMP_API_SERVER_URL: ${UMP_API_SERVER_URL:-localhost:5000}
+      UMP_API_SERVER_WORKERS: ${UMP_API_SERVER_WORKERS:-1}
+      UMP_SERVER_TIMEOUT: ${UMP_SERVER_TIMEOUT:-30}
+      UMP_LOG_LEVEL: ${UMP_LOG_LEVEL:-INFO}
+      UMP_PROVIDERS_FILE: /home/pythonuser/providers.yaml
+      UMP_KEYCLOAK_USER: ${UMP_KEYCLOAK_USER:-admin}
+      UMP_KEYCLOAK_PASSWORD: ${UMP_KEYCLOAK_PASSWORD:-admin}
+      UMP_KEYCLOAK_URL: http://keycloak:8080/auth
+      UMP_KEYCLOAK_CLIENT_ID: ${UMP_KEYCLOAK_CLIENT_ID:-ump-client}
+      UMP_KEYCLOAK_REALM: ${UMP_KEYCLOAK_REALM:-UrbanModelPlatform}
+      UMP_DATABASE_NAME: ${UMP_DATABASE_NAME:-ump}
+      UMP_DATABASE_USER: ${UMP_DATABASE_USER:-ump}
+      UMP_DATABASE_PASSWORD: ${UMP_DATABASE_PASSWORD:-ump}
+      UMP_DATABASE_HOST: api-db
+      UMP_DATABASE_PORT: 5432
+      UMP_GEOSERVER_WORKSPACE_NAME: ${UMP_GEOSERVER_WORKSPACE_NAME:-UMP}
+      UMP_GEOSERVER_USER: ${UMP_GEOSERVER_USER:-admin}
+      UMP_GEOSERVER_PASSWORD: ${UMP_GEOSERVER_PASSWORD:-geoserver}
+      UMP_GEOSERVER_URL: http://geoserver:8080/geoserver
+      # For production, consider using separate databases for API and Geoserver
+      UMP_GEOSERVER_DB_PORT: 5432
+      UMP_GEOSERVER_DB_NAME: ${UMP_DATABASE_NAME:-ump}
+      UMP_GEOSERVER_DB_USER: ${UMP_DATABASE_USER:-ump}
+      UMP_GEOSERVER_DB_PASSWORD: ${UMP_DATABASE_PASSWORD:-ump}
+      UMP_GEOSERVER_DB_HOST: api-db
+      UMP_GEOSERVER_CONNECTION_TIMEOUT: ${UMP_GEOSERVER_CONNECTION_TIMEOUT:-60}
+      UMP_JOB_DELETE_INTERVAL: ${UMP_JOB_DELETE_INTERVAL:-240}
     volumes:
       - ./providers.yaml:/home/pythonuser/providers.yaml
     networks:
-      - dev
+      - prod
     depends_on:
+      - api-db
       - keycloak
-      - postgis
 
-  postgis:
+  api-db:
     image: postgis/postgis:14-3.3
+    restart: "unless-stopped"
     volumes:
-      - ./src/ump/initializers/db:/docker-entrypoint-initdb.d:delegated
       - postgres_data:/var/lib/postgresql/data/
     environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - ${POSTGRES_PORT}:5432
+      POSTGRES_DB: ${UMP_DATABASE_NAME}
+      POSTGRES_USER: ${UMP_DATABASE_USER}
+      POSTGRES_PASSWORD: ${UMP_DATABASE_PASSWORD}
+    expose:
+      - 5432
     networks:
-      - dev
+      - prod
 
   geoserver:
     image: kartoza/geoserver:2.22.0
-    depends_on:
-      - postgis
+    restart: "unless-stopped"
     ports:
-      - ${GEOSERVER_PORT_EXTERNAL}:8080
+      - ${GEOSERVER_PORT_EXTERNAL:-8181}:8080
     volumes:
-      - ./geoserver_data:/opt/geoserver/data_dir
+      - geoserver_data:/opt/geoserver/data_dir
     environment:
-      GEOSERVER_WORKSPACE: ${GEOSERVER_WORKSPACE}
-      GEOSERVER_ADMIN_USER: ${GEOSERVER_ADMIN_USER}
-      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD}
-      GEOSERVER_BASE_URL: ${GEOSERVER_BASE_URL}
-      GEOSERVER_POSTGIS_HOST: ${GEOSERVER_POSTGIS_HOST}
-      GEOSERVER_TIMEOUT: ${GEOSERVER_TIMEOUT}
-
+      GEOSERVER_ADMIN_USER: ${UMP_GEOSERVER_USER}
+      GEOSERVER_ADMIN_PASSWORD: ${UMP_GEOSERVER_PASSWORD}
+      # Production: Consider using separate database for Geoserver
+      HOST: api-db
+      POSTGRES_DB: ${UMP_DATABASE_NAME}
+      POSTGRES_USER: ${UMP_DATABASE_USER}
+      POSTGRES_PASS: ${UMP_DATABASE_PASSWORD}
+    depends_on:
+      - api-db
     networks:
-      - dev
+      - prod
 
-# ToDo: Refactor Model Server with public image to deploy
-  modelserver:
-    image: lgvudh.azurecr.io/analytics/example_ogcapi_processes:main
-    env_file:
-    - path: .env
-      required: true # default
-    volumes:
-      - ./modelserver_example/pygeoapi-config.yml:/home/pythonuser/pygeoapi-config.yaml
-      - ./modelserver_example/example-openapi.yml:/home/pythonuser/pygeoapi-openapi.yaml
-    ports:
-      - ${PYGEOAPI_SERVER_PORT_EXTERNAL}:${PYGEOAPI_SERVER_PORT_INTERNAL}
-    command: [
-      '/bin/bash', '-c',
-      'pygeoapi openapi generate /home/pythonuser/pygeoapi-config.yaml --output-file /home/pythonuser/pygeoapi-openapi.yaml && pygeoapi serve --flask'
-    ]
-    networks:
-      - dev
       
   keycloak:
-    container_name: ump-keycloak
     image: quay.io/keycloak/keycloak:25.0
+    restart: "unless-stopped"
     ports: 
-      - ${KEYCLOAK_PORT_EXTERNAL}:8080
+      - ${KEYCLOAK_PORT_EXTERNAL:-8282}:8080
     environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_USER}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
+      KEYCLOAK_ADMIN: ${UMP_KEYCLOAK_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${UMP_KEYCLOAK_PASSWORD:-admin}
       KC_DB: postgres
-      KC_DB_URL_HOST: postgis
+      KC_DB_URL_HOST: kc-db
       KC_DB_URL_PORT: 5432
       KC_DB_URL_DATABASE: keycloak
-      KC_DB_USERNAME: ${POSTGRES_USER}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KC_HOSTNAME: ${KEYCLOAK_HOST}
+      KC_DB_USERNAME: ${UMP_KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${UMP_KEYCLOAK_DB_PASSWORD:-keycloak}
+      KC_HOSTNAME: ${UMP_KEYCLOAK_HOSTNAME:-localhost}
       KC_HOSTNAME_PATH: /auth
       KC_HTTP_RELATIVE_PATH: /auth
     depends_on:
-      - postgis
+      - kc-db
     command: ['start', '--proxy-headers', 'xforwarded', '--http-enabled', 'true']
     networks:
-      - dev
+      - prod
+
+  kc-db:
+    image: postgis/postgis:14-3.3
+    restart: "unless-stopped"
+    volumes:
+      - kc-db_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: ${UMP_KEYCLOAK_DB_USER:-keycloak}
+      POSTGRES_PASSWORD: ${UMP_KEYCLOAK_DB_PASSWORD:-keycloak}
+    expose:
+      - 5432
+    networks:
+      - prod
