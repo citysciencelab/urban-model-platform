@@ -7,6 +7,7 @@
 # - the token verification
 import atexit
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 from logging.config import dictConfig
@@ -88,33 +89,12 @@ def cleanup():
                 .get("result-storage", None)
             )
             if result_storage == "geoserver":
-                requests.delete(
-                    f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
-                    + f"/layers/{job_id}.xml",
-                    auth=(
-                        config.UMP_GEOSERVER_USER,
-                        config.UMP_GEOSERVER_PASSWORD.get_secret_value(),
-                    ),
-                    timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
-                )
-                requests.delete(
-                    f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
-                    + f"/datastores/{job_id}/featuretypes/{job_id}.xml",
-                    auth=(
-                        config.UMP_GEOSERVER_USER,
-                        config.UMP_GEOSERVER_PASSWORD.get_secret_value(),
-                    ),
-                    timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
-                )
-                requests.delete(
-                    f"{config.UMP_GEOSERVER_URL_WORKSPACE}/{config.UMP_GEOSERVER_WORKSPACE_NAME}"
-                    + f"/datastores/{job_id}.xml",
-                    auth=(
-                        config.UMP_GEOSERVER_USER,
-                        config.UMP_GEOSERVER_PASSWORD.get_secret_value(),
-                    ),
-                    timeout=config.UMP_GEOSERVER_CONNECTION_TIMEOUT,
-                )
+                from ump.geoserver.geoserver import Geoserver
+                geoserver = Geoserver()
+                try:
+                    geoserver.delete_job_results(job_id)
+                except Exception as e:
+                    logging.error(f"Failed to cleanup geoserver results for job {job_id}: {e}")
 
 
 # TODO: this is NOT good for production environments!

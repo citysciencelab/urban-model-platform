@@ -33,6 +33,9 @@ class UmpSettings(BaseSettings):
     UMP_GEOSERVER_DB_NAME: str = "ump"
     UMP_GEOSERVER_DB_USER: str = "ump"
     UMP_GEOSERVER_DB_PASSWORD: SecretStr = SecretStr("ump")
+    # Internal Geoserver datastore configuration (used by Geoserver container for internal datastores)
+    UMP_GEOSERVER_INTERNAL_DB_HOST: str = "geoserver-db"
+    UMP_GEOSERVER_INTERNAL_DB_PORT: int = 5432
     UMP_GEOSERVER_WORKSPACE_NAME: str = "UMP"
     UMP_GEOSERVER_USER: str = "geoserver"
     UMP_GEOSERVER_PASSWORD: SecretStr = SecretStr("geoserver")
