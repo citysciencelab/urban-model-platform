@@ -125,9 +125,10 @@ initiate-prod:
 	@echo 'Setting up production environment files...'
 	
 	@if [ ! -f .env.prod ]; then \
-		cp .env.example .env.prod; \
-		echo 'Created .env.prod from .env.example - Please configure production values!'; \
+		cp .env.prod.example .env.prod; \
+		echo 'Created .env.prod from .env.prod.example - Please configure production values!'; \
 		echo 'Important: Update database passwords, API URLs, and registry settings'; \
+		echo 'See .env.prod.example for production-specific guidance'; \
 	else \
 		echo '.env.prod already exists'; \
 	fi
