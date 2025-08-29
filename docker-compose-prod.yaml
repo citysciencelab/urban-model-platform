@@ -1,4 +1,7 @@
-# Production ready docker-compose file for the Urban Model Platform
+# This is an example production file for the Urban Model Platform
+# It does not (!) include a reverse proxy configuration, a nginx setup, or other specific production setups
+
+
 networks:
   prod:
     driver: bridge
