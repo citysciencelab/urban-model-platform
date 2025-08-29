@@ -3,12 +3,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import psycopg2
 import requests
 from flask import Blueprint, jsonify
-from sqlalchemy import text
 
-from ump.api.db_handler import DBHandler, db_engine
+from ump.api.db_handler import DBHandler
 from ump.config import app_settings as config
 from ump.geoserver.geoserver import Geoserver
 
