@@ -13,7 +13,6 @@ from ump.api.db_handler import engine
 from ump.api.models.job import Job, JobStatus
 from ump.api.models.ogc_exception import OGCExceptionResponse
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
-from ump.config import app_settings
 from ump.config import app_settings as config
 from ump.errors import InvalidUsage, OGCProcessException
 from ump.utils import fetch_json, fetch_response_content
@@ -155,7 +154,7 @@ class Process:
                     auth.get(
                         "resource_access", {}
                         ).get(
-                            app_settings.UMP_KEYCLOAK_CLIENT_ID, {}
+                            config.UMP_KEYCLOAK_CLIENT_ID, {}
                         ).get(
                             "roles", [])
                         )
