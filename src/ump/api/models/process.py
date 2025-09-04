@@ -9,8 +9,6 @@ import aiohttp
 from flask import g
 
 import ump.api.providers as providers
-
-from ump.config import app_settings
 from ump.api.db_handler import engine
 from ump.api.models.job import Job, JobStatus
 from ump.api.models.ogc_exception import OGCExceptionResponse
@@ -156,7 +154,7 @@ class Process:
                     auth.get(
                         "resource_access", {}
                         ).get(
-                            app_settings.UMP_KEYCLOAK_CLIENT_ID, {}
+                            config.UMP_KEYCLOAK_CLIENT_ID, {}
                         ).get(
                             "roles", [])
                         )
@@ -316,7 +314,7 @@ class Process:
                 convert_to(
                     %(parameters)s :: json :: text || %(process_version)s || %(user_id)s,
                     'UTF8'
-                ),
+                )
             ),
             'base64'
         )

@@ -2,7 +2,8 @@
 SHELL=/bin/bash
 
 .PHONY: build initiate-dev build-image upload-image start-dev \
-        start-dev-example restart-dev stop-dev build-docs clean-docs
+        start-dev-example restart-dev stop-dev build-docs clean-docs \
+        start-geoserver-db stop-geoserver-db
 
 config ?= .env
 
@@ -58,25 +59,20 @@ upload-image: build-image
 	docker compose -f docker-compose-build.yaml push api
 
 start-dev:
-	($(CONDA_ACTIVATE) ./.venv)
-
-	@ echo 'Starting development environment containers: ump database, geoserver, keycloak, keycloak database'
+	@ echo 'Starting development environment containers: ump database, geoserver database, geoserver, keycloak, keycloak database'
+	docker compose -f docker-compose-dev.yaml up -d api-db geoserver-db keycloak kc-db geoserver
 	
-	docker compose -f docker-compose-dev.yaml up -d api-db keycloak kc-db
+	@ echo 'Waiting for databases to be ready'
+	sleep 10
+
+	@ echo 'Activating conda environment and running flask commands'
+	$(CONDA_ACTIVATE) ./.venv && \
+	FLASK_APP=src/ump/main.py flask db upgrade && \
+	FLASK_APP=src/ump/main.py flask db current
 	
-	@ echo 'Waiting for database to be ready'
-	sleep 7
-
-	@ echo 'initialize the database'
-	FLASK_APP=src.ump.main flask db init   
-
-	@ echo 'running database migrations'
-	FLASK_APP=src.ump.main flask db upgrade
-
-	@ echo 'Current database state'
-	FLASK_APP=src.ump.main flask db current
-	
-	@ echo 'Now start a debug session with your preferred IDE, e.g. VSCode using launch.json'
+	@ echo 'Starting Flask development server...'
+	$(CONDA_ACTIVATE) ./.venv && \
+	FLASK_APP=src/ump/main.py FLASK_ENV=development flask run --host=0.0.0.0 --port=5000 --debug
 
 
 start-dev-example: start-dev
