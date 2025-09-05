@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import aiohttp
 import geopandas as gpd
 
+from ump.api import remote_auth
 from ump.api.models.ogc_exception import OGCExceptionResponse
 import ump.api.providers as providers
 from ump.api.db_handler import DBHandler
@@ -409,21 +410,26 @@ class Job:
         if self.status != JobStatus.successful.value:
             self.results_not_available()
 
+        headers = {
+            "Content-type": "application/json",
+            "Accept": "application/json",
+        }
+
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
         self.provider_url = provider.server_url
 
+        auth_strategy = remote_auth.get_auth_strategy(provider.authentication)
+        provider_auth = auth_strategy.get_auth()
+        headers.update(provider_auth.headers)
+
         async with aiohttp.ClientSession(timeout=results_client_timeout) as session:
-            auth = providers.authenticate_provider(provider)
 
             results = await fetch_json(
                 session,
                 url=f"{self.provider_url}jobs/{self.remote_job_id}/results?f=json",
                 json=self.parameters,
-                headers={
-                    "Content-type": "application/json",
-                    "Accept": "application/json",
-                },
-                auth=auth
+                headers=headers,
+                auth=provider_auth.auth
             )
 
             return results
