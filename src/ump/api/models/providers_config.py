@@ -102,7 +102,11 @@ class ApiKeyAuthConfig(BaseModel):
     key_name: str
     key_value: SecretStr
 
-AuthConfig = BasicAuthConfig | ApiKeyAuthConfig
+class NoAuthConfig(BaseModel):
+    type: Literal["NoAuth"] = "NoAuth"
+
+
+AuthConfig = BasicAuthConfig | ApiKeyAuthConfig | NoAuthConfig
 
 class ProviderConfig(BaseModel):
     name: str
@@ -120,7 +124,7 @@ class ProviderConfig(BaseModel):
             "Default is 60 seconds."
         )
     )
-    authentication: AuthConfig | None = None
+    authentication: AuthConfig = Field(default_factory=NoAuthConfig)
     processes: dict[ProviderName, ProcessConfig] = Field(
         description= (
             "Processes are defined as a dictionary with process name as key "
