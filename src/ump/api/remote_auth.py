@@ -21,7 +21,11 @@ class BasicAuthStrategy(AuthStrategy):
 
     def get_auth(self) -> ProviderAuth:
         import aiohttp
-        return ProviderAuth(auth=aiohttp.BasicAuth(self.config.user, self.config.password.get_secret_value()))
+        return ProviderAuth(
+            auth=aiohttp.BasicAuth(
+                self.config.user, self.config.password.get_secret_value()
+            )
+        )
 
 
 class ApiKeyAuthStrategy(AuthStrategy):
