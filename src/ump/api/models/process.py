@@ -8,6 +8,7 @@ from multiprocessing import dummy
 import aiohttp
 from flask import g
 
+from ump.api import remote_auth
 import ump.api.providers as providers
 from ump.api.db_handler import engine
 from ump.api.models.job import Job, JobStatus
@@ -192,15 +193,15 @@ class Process:
     async def load_process_details(self):
         provider_config = providers.get_providers()[self.provider_prefix]
 
-        # return auth (BasicAuth curently, only)
-        # TODO: add support for other auth methods: JWT, ...
-        auth = providers.authenticate_provider(provider_config)
+        auth_strategy = remote_auth.get_auth_strategy(provider_config.authentication)
+        provider_auth = auth_strategy.get_auth()
 
         async with aiohttp.ClientSession(timeout=client_timeout) as session:
             process_details = await fetch_json(
                 session=session,
                 url=f"{provider_config.server_url}processes/{self.process_id}",
-                auth=auth,
+                auth=provider_auth.auth,
+                headers=provider_auth.headers
             )
             for key in process_details:
                 setattr(self, key, process_details[key])
@@ -364,12 +365,22 @@ class Process:
             logger.info("Job found, returning cached job.")
             return Job(job_id, user)
 
-        auth = providers.authenticate_provider(provider)
+        headers = {
+                "Content-type": "application/json",
+                "Accept": "application/json",
+                "Prefer": "respond-async",
+        }
+
+        auth_strategy = remote_auth.get_auth_strategy(provider.authentication)
+        provider_auth = auth_strategy.get_auth()
+        headers.update(provider_auth.headers)
 
         async with aiohttp.ClientSession(timeout=client_timeout) as session:
             try:
                 response = await self._submit_remote_job(
-                    session, str(provider.server_url), request_body, auth
+                    session, str(provider.server_url),
+                    request_body, provider_auth,
+                    headers
                 )
 
                 response_content = await fetch_response_content(response)
@@ -384,7 +395,7 @@ class Process:
 
                 # this can probably be omitted here and deferred for _wait_for_status
                 remote_job_status_info = await self._fetch_remote_job_status(
-                    session, provider.server_url, remote_job_id, auth
+                    session, provider.server_url, remote_job_id, provider_auth
                 )
 
                 self._update_job_from_status(
@@ -435,18 +446,17 @@ class Process:
         session: aiohttp.ClientSession,
         url: str,
         request_body: dict,
-        auth: aiohttp.BasicAuth | None,
+        auth: remote_auth.ProviderAuth,
+        headers: dict | None = None,
     ) -> aiohttp.ClientResponse:
+        
+
 
         response = await session.post(
             f"{url}processes/{self.process_id}/execution",
             json=request_body,
-            auth=auth,
-            headers={
-                "Content-type": "application/json",
-                "Accept": "application/json",
-                "Prefer": "respond-async",
-            },
+            auth=auth.auth,
+            headers=headers
         )
 
         if response.headers or response.content_type == "application/json":
@@ -483,16 +493,17 @@ class Process:
         return job
 
     async def _fetch_remote_job_status(
-        self, session: aiohttp.ClientSession, url, remote_job_id, auth
+        self, session: aiohttp.ClientSession,
+        url: str,
+        remote_job_id: str,
+        auth: remote_auth.ProviderAuth,
+        headers: dict | None = None,
     ) -> dict:
         job_status = await fetch_json(
             session=session,
             url=f"{url}jobs/{remote_job_id}?f=json",
-            auth=auth,
-            headers={
-                "Content-type": "application/json",
-                "Accept": "application/json",
-            },
+            auth=auth.auth,
+            headers=headers,
         )
 
         return job_status
