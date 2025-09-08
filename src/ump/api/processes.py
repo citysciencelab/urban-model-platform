@@ -9,7 +9,6 @@ from flask import g
 from ump.config import app_settings
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.api.providers import (
-    authenticate_provider,
     get_providers,
 )
 from ump.errors import OGCProcessException
