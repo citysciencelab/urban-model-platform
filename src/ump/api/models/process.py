@@ -375,6 +375,8 @@ class Process:
         provider_auth = auth_strategy.get_auth()
         headers.update(provider_auth.headers)
 
+        # TODO: if a server decides to ignore the Prefer header, response contains results, not job status info
+        # need to adress this case!
         async with aiohttp.ClientSession(timeout=client_timeout) as session:
             try:
                 response = await self._submit_remote_job(
