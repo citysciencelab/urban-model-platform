@@ -109,9 +109,10 @@ class ProviderLoader(FileSystemEventHandler):
                 name: provider.model_copy(deep=True) 
                 for name, provider in new_providers.items()
             }
+            logger.debug(PROVIDERS)
         except Exception as e:
             PROVIDERS = old_providers
-            raise
+            raise e
 
 
 # Initialize the ProviderLoader and load providers initially
@@ -150,18 +151,6 @@ def get_provider(provider_name: str) -> Optional[ProviderConfig]:
     """Get a specific provider by name (thread-safe)"""
     with PROVIDERS_LOCK:
         return PROVIDERS.get(provider_name)
-
-
-def authenticate_provider(provider: ProviderConfig):
-    """Create authentication object for a provider"""
-    auth = None
-    if provider.authentication:
-        auth = aiohttp.BasicAuth(
-            provider.authentication.user, 
-            provider.authentication.password.get_secret_value()
-        )
-    return auth
-
 
 def check_process_availability(provider: str, process_id: str) -> bool:
     """Check if a process is available and not excluded"""
