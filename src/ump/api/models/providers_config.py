@@ -97,16 +97,21 @@ class BasicAuthConfig(BaseModel):
     user: str
     password: SecretStr
 
+
 class ApiKeyAuthConfig(BaseModel):
-    type: Literal["ApiKey"]
+    type: Literal["ApiKey"] = "ApiKey"
     key_name: str
     key_value: SecretStr
+
+class BearerTokenAuthConfig(BaseModel):
+    type: Literal["BearerToken"] = "BearerToken"
+    token: SecretStr
 
 class NoAuthConfig(BaseModel):
     type: Literal["NoAuth"] = "NoAuth"
 
 
-AuthConfig = BasicAuthConfig | ApiKeyAuthConfig | NoAuthConfig
+AuthConfig = BasicAuthConfig | ApiKeyAuthConfig | BearerTokenAuthConfig | NoAuthConfig
 
 class ProviderConfig(BaseModel):
     name: str
