@@ -7,7 +7,6 @@ from pydantic import (
     SecretStr,
     TypeAdapter,
     field_validator,
-    model_validator,
 )
 
 # a type alias to give context to an otherwise generic str
@@ -99,12 +98,12 @@ class BasicAuthConfig(BaseModel):
 
 
 class ApiKeyAuthConfig(BaseModel):
-    type: Literal["ApiKey"] = "ApiKey"
+    type: Literal["ApiKey"]
     key_name: str
     key_value: SecretStr
 
 class BearerTokenAuthConfig(BaseModel):
-    type: Literal["BearerToken"] = "BearerToken"
+    type: Literal["BearerToken"]
     token: SecretStr
 
 class NoAuthConfig(BaseModel):
