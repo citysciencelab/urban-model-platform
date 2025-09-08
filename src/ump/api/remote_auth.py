@@ -1,8 +1,12 @@
+from abc import ABC
 from typing import Dict, Type
 from ump.api.models.providers_config import ApiKeyAuthConfig, AuthConfig, BasicAuthConfig, BearerTokenAuthConfig
 
 
-class AuthStrategy:
+class AuthStrategy(ABC):
+    def __init__(self, config: AuthConfig | None):
+        self.config = config
+
     def get_auth(self) -> 'ProviderAuth':
         raise NotImplementedError
 
@@ -12,6 +16,9 @@ class ProviderAuth:
         self.headers = headers or {}
 
 class NoAuthStrategy(AuthStrategy):
+    def __init__(self, config = None):
+        self.config = config
+
     def get_auth(self) -> ProviderAuth:
         return ProviderAuth()
 
@@ -56,10 +63,11 @@ def get_auth_strategy(auth_config: AuthConfig) -> AuthStrategy:
     if auth_config is None:
         # No authentication details provided, use NoAuthStrategy
         return NoAuthStrategy()
-    
-    strategy_cls = AUTH_STRATEGY_REGISTRY.get(auth_config.type)
-    
+
+    strategy_cls: type[AuthStrategy] | None = AUTH_STRATEGY_REGISTRY.get(auth_config.type)
+
     if not strategy_cls:
         raise ValueError(f"Unknown auth type: {auth_config.type}")
 
-    return strategy_cls()
+
+    return strategy_cls(auth_config)
