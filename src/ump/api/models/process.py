@@ -395,7 +395,7 @@ class Process:
 
                 # this can probably be omitted here and deferred for _wait_for_status
                 remote_job_status_info = await self._fetch_remote_job_status(
-                    session, provider.server_url, remote_job_id, provider_auth
+                    session, str(provider.server_url), remote_job_id, provider_auth
                 )
 
                 self._update_job_from_status(
@@ -574,18 +574,26 @@ class Process:
         else:
             await self._store_results_if_needed(job)
 
-    async def _poll_job_until_finished(self, job, provider_config):
-        while True:
-            status_info = await self._fetch_remote_job_status(
-                aiohttp.ClientSession(timeout=client_timeout),
-                provider_config.server_url,
-                job.remote_job_id,
-                providers.authenticate_provider(provider_config),
-            )
-            self._update_job_from_status(job, status_info)
-            if self.is_finished(status_info):
-                break
-            await asyncio.sleep(config.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL)
+    async def _poll_job_until_finished(
+            self, job: Job, provider_config: ProviderConfig
+        ) -> dict:
+
+        auth_strategy = remote_auth.get_auth_strategy(provider_config.authentication)
+        provider_auth = auth_strategy.get_auth()
+
+        async with aiohttp.ClientSession(timeout=client_timeout) as session:
+
+            while True:
+                status_info = await self._fetch_remote_job_status(
+                    session,
+                    str(provider_config.server_url),
+                    job.remote_job_id,
+                    provider_auth,
+                )
+                self._update_job_from_status(job, status_info)
+                if self.is_finished(status_info):
+                    break
+                await asyncio.sleep(config.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL)
         
         return status_info
 
