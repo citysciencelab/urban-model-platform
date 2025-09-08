@@ -1,5 +1,5 @@
 from typing import Dict, Type
-from ump.api.models.providers_config import ApiKeyAuthConfig, AuthConfig, BasicAuthConfig
+from ump.api.models.providers_config import ApiKeyAuthConfig, AuthConfig, BasicAuthConfig, BearerTokenAuthConfig
 
 
 class AuthStrategy:
@@ -23,17 +23,27 @@ class BasicAuthStrategy(AuthStrategy):
         import aiohttp
         return ProviderAuth(auth=aiohttp.BasicAuth(self.config.user, self.config.password.get_secret_value()))
 
+
 class ApiKeyAuthStrategy(AuthStrategy):
     def __init__(self, config: ApiKeyAuthConfig):
         self.config = config
 
     def get_auth(self) -> ProviderAuth:
         # Returns headers dict for API key
-        return ProviderAuth(headers={self.config.key_name: self.config.key_value.get_secret_value()})
+        return ProviderAuth(headers={"x-api-key": self.config.key_value.get_secret_value()})
+
+class BearerTokenAuthStrategy(AuthStrategy):
+    def __init__(self, config: BearerTokenAuthConfig):
+        self.config = config
+
+    def get_auth(self) -> ProviderAuth:
+        # Returns headers dict for Bearer token
+        return ProviderAuth(headers={"Authorization": f"Bearer {self.config.token.get_secret_value()}"})
 
 AUTH_STRATEGY_REGISTRY: Dict[str, Type[AuthStrategy]] = {
     "BasicAuth": BasicAuthStrategy,
     "ApiKey": ApiKeyAuthStrategy,
+    "BearerToken": BearerTokenAuthStrategy,
     "NoAuth": NoAuthStrategy,  # No authentication
 }
 
