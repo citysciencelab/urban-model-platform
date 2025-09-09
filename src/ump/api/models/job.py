@@ -427,7 +427,6 @@ class Job:
             results = await fetch_json(
                 session,
                 url=f"{self.provider_url}jobs/{self.remote_job_id}/results?f=json",
-                json=self.parameters,
                 headers=headers,
                 auth=provider_auth.auth
             )
