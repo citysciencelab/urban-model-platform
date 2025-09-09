@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -92,4 +92,39 @@ ALLOWED_CONTENT_MEDIA_TYPES = [
     "text/plain",
 ]
 
+
+class Metadata(BaseModel):
+    title: Optional[str] = None
+    role: Optional[str] = None
+    href: Optional[str] = None
+
+
+class AdditionalParameter(BaseModel):
+    name: str
+    value: List[Any]
+
+
+class AdditionalParameters(BaseModel):
+    parameters: Optional[List[AdditionalParameter]] = None
+
+
+class DescriptionType(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    metadata: Optional[List[Metadata]] = None
+    additionalParameters: Optional[AdditionalParameters] = None
+
+
+class ProcessInput(DescriptionType):
+    minOccurs: Optional[int] = 1
+    maxOccurs: Optional[Union[int, str]] = 1
+    schema: JSONSchema
+
+
+class ProcessOutput(DescriptionType):
+    schema: JSONSchema
+
+
 JSONSchema.model_rebuild()
+
