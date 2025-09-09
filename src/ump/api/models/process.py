@@ -343,7 +343,7 @@ class Process:
             "Executing %s on model server %s with params %s as process %s for user %s",
             self.process_id,
             str(provider.server_url),
-            exec_body,
+            str(exec_body)[:50],
             self.process_id_with_prefix,
             user,
         )
@@ -395,9 +395,11 @@ class Process:
                     remote_job_id, name, request_body, user
                 )
 
+                headers.pop("Prefer", None)
                 # this can probably be omitted here and deferred for _wait_for_status
                 remote_job_status_info = await self._fetch_remote_job_status(
-                    session, str(provider.server_url), remote_job_id, provider_auth
+                    session, str(provider.server_url), remote_job_id, provider_auth,
+                    headers # remove prefer header
                 )
 
                 self._update_job_from_status(
@@ -508,6 +510,8 @@ class Process:
             headers=headers,
         )
 
+        logger.debug(job_status)
+
         return job_status
 
     async def _extract_remote_job_id(self, response: aiohttp.ClientResponse) -> str:
@@ -553,7 +557,9 @@ class Process:
 
         try:
             await asyncio.wait_for(
-                self._poll_job_until_finished(job, provider_config),
+                self._poll_job_until_finished(
+                    job, provider_config
+                ),
                 timeout=timeout_seconds,
             )
         except asyncio.TimeoutError:
@@ -564,6 +570,9 @@ class Process:
                     f" timeout ({provider_config.timeout} sec.) was reached."
                 ),
             )
+        # TODO: consider better error handling: this except block catches all exceptions
+        # even programming errors, which should be fixed, not caught
+        # setting job to "failed" even if remote job was successfull!
         except Exception as e:
             logger.error("Error while waiting for job results: %s", e)
             self._set_job_failed(
@@ -580,8 +589,15 @@ class Process:
             self, job: Job, provider_config: ProviderConfig
         ) -> dict:
 
+        headers = {
+            "Content-type": "application/json",
+            "Accept": "application/json",
+        }
+
         auth_strategy = remote_auth.get_auth_strategy(provider_config.authentication)
         provider_auth = auth_strategy.get_auth()
+
+        headers.update(provider_auth.headers)
 
         async with aiohttp.ClientSession(timeout=client_timeout) as session:
 
@@ -591,6 +607,7 @@ class Process:
                     str(provider_config.server_url),
                     job.remote_job_id,
                     provider_auth,
+                    headers
                 )
                 self._update_job_from_status(job, status_info)
                 if self.is_finished(status_info):
