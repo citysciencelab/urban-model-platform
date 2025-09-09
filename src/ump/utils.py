@@ -37,8 +37,10 @@ async def fetch_response_content(
 
 # TODO: retry on timeouts, connection errors, etc.
 async def fetch_json(
-        session: aiohttp.ClientSession, url,
-        raise_for_status=False, **kwargs
+        session: aiohttp.ClientSession,
+        url,
+        raise_for_status=False,
+        **kwargs
 ) -> dict:
     try:
         async with session.get(url, **kwargs) as response:
