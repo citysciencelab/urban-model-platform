@@ -20,10 +20,10 @@ from ump.utils import fetch_json, join_url_parts
 
 
 results_client_timeout = aiohttp.ClientTimeout(
-    total=10,  # Set a reasonable timeout for the requests
+    total=20,  # Set a reasonable timeout for the requests
     connect=2,  # Connection timeout
     sock_connect=2,  # Socket connection timeout
-    sock_read=5,  # Socket read timeout
+    sock_read=15,  # Socket read timeout
 )
 
 # TODO class violates Single Responsibility Principle (SRP), it mixes

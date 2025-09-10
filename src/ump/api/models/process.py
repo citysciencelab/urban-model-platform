@@ -21,7 +21,7 @@ from ump.utils import fetch_json, fetch_response_content
 logger = logging.getLogger(__name__)
 
 client_timeout = aiohttp.ClientTimeout(
-    total=5,  # Set a reasonable timeout for the requests
+    total=10,  # Set a reasonable timeout for the requests
     connect=2,  # Connection timeout
     sock_connect=2,  # Socket connection timeout
     sock_read=5,  # Socket read timeout
