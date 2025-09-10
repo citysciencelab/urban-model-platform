@@ -39,10 +39,7 @@ Currently, model servers have to provide endpoints that comply with the OGC proc
 | --------- | --------| ----------------------- | --------------------------------------- |
 | url       | String  | Any http/https URL | URL of the model server. |
 | name      | String  | Any   | Name of the model server.               |
-| **authentication** | Object  |  |  |
-| authentication.type      | String  | BasicAuth | Type of authentication  (currently, only BasicAuth is supported) |
-| authentication.user      | String  | Any                  | Username for BasicAuth.                 |
-| authentication.password  | String  | Any              | Password for BasicAuth.                 |
+| **authentication** | Auth Object (see bewlow)  |  |  |
 | timeout   | Integer | 60                      | Time before a request to a modelserver is given up. |
 | **processes** | Object  |    | |
 | processes.result-storage | String  | ["geoserver" \\| "remote"] | Storage option for the process results. If the attribute is set to `remote`, no results will be stored in the UMP itself, but provided directly from the model server. In case it is set to `geoserver`, UMP will load the geoserver component and tries to store the result data in a specific Geoserver layer.  |
@@ -51,3 +48,32 @@ Currently, model servers have to provide endpoints that comply with the OGC proc
 | processes.anonymous-access | Boolean | [True \\| False] | If set to `True`, the process can be seen and run by anonymous users. Jobs and layers created by anonymous users will be cleaned up after some time (this can be configured in `config.py`). |
 | processes.deterministic | Boolean | [True \\| False] | If set to `True`, jobs will be cached based on a hash of the input parameters, the process version and the user id. |
 | processes.exclude | Boolean | [True \\| False] | If set to `True`, the process will be excluded from the list of available processes. |
+
+### Authentication types
+
+**Note**: The supported auth types assume fixed tokens or keys. Renewal of tokens is currently not supported. 
+
+#### BasicAuth
+
+This type uses standard Basic Authentication method.
+
+| Parameter | Type    | Possible Values         | Description              |
+| authentication.type      | String  | [BasicAuth] | Type of authentication |
+| authentication.user      | String  | Any         | Username for BasicAuth. |
+| authentication.password  | String  | Any         | Password for BasicAuth. |
+
+#### ApiKeyAuth
+
+Authentification against remote servers is done via submitting a header with "X-API-KEY" containing the provided ApiKey to all requests. 
+
+| Parameter | Type    | Possible Values         | Description              |
+| authentication.type      | String  | [ApiKey] | Type of authentication |
+| authentication.key_name      | String  | Any         | The name of the key. |
+| authentication.key_value  | String  | Any         | The key. |
+
+#### BearerAuth
+Authentification against remote servers is done via submitting a header with  "Authorization: Bearer YOUR-TOKEN".
+
+| Parameter | Type    | Possible Values         | Description              |
+| authentication.type      | String  | [BearerToken] | Type of authentication |
+| authentication.token      | String  | Any         | Your bearer token or jwt |
