@@ -1,0 +1,73 @@
+from abc import ABC
+from typing import Dict, Type
+from ump.api.models.providers_config import ApiKeyAuthConfig, AuthConfig, BasicAuthConfig, BearerTokenAuthConfig
+
+
+class AuthStrategy(ABC):
+    def __init__(self, config: AuthConfig | None):
+        self.config = config
+
+    def get_auth(self) -> 'ProviderAuth':
+        raise NotImplementedError
+
+class ProviderAuth:
+    def __init__(self, auth=None, headers=None):
+        self.auth = auth
+        self.headers = headers or {}
+
+class NoAuthStrategy(AuthStrategy):
+    def __init__(self, config = None):
+        self.config = config
+
+    def get_auth(self) -> ProviderAuth:
+        return ProviderAuth()
+
+class BasicAuthStrategy(AuthStrategy):
+    def __init__(self, config: BasicAuthConfig):
+        self.config = config
+
+    def get_auth(self) -> ProviderAuth:
+        import aiohttp
+        return ProviderAuth(
+            auth=aiohttp.BasicAuth(
+                self.config.user, self.config.password.get_secret_value()
+            )
+        )
+
+
+class ApiKeyAuthStrategy(AuthStrategy):
+    def __init__(self, config: ApiKeyAuthConfig):
+        self.config = config
+
+    def get_auth(self) -> ProviderAuth:
+        # Returns headers dict for API key
+        return ProviderAuth(headers={"x-api-key": self.config.key_value.get_secret_value()})
+
+class BearerTokenAuthStrategy(AuthStrategy):
+    def __init__(self, config: BearerTokenAuthConfig):
+        self.config = config
+
+    def get_auth(self) -> ProviderAuth:
+        # Returns headers dict for Bearer token
+        return ProviderAuth(headers={"Authorization": f"Bearer {self.config.token.get_secret_value()}"})
+
+AUTH_STRATEGY_REGISTRY: Dict[str, Type[AuthStrategy]] = {
+    "BasicAuth": BasicAuthStrategy,
+    "ApiKey": ApiKeyAuthStrategy,
+    "BearerToken": BearerTokenAuthStrategy,
+    "NoAuth": NoAuthStrategy,  # No authentication
+}
+
+def get_auth_strategy(auth_config: AuthConfig) -> AuthStrategy:
+
+    if auth_config is None:
+        # No authentication details provided, use NoAuthStrategy
+        return NoAuthStrategy()
+
+    strategy_cls: type[AuthStrategy] | None = AUTH_STRATEGY_REGISTRY.get(auth_config.type)
+
+    if not strategy_cls:
+        raise ValueError(f"Unknown auth type: {auth_config.type}")
+
+
+    return strategy_cls(auth_config)

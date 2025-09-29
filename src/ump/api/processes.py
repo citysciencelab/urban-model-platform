@@ -6,10 +6,10 @@ import aiohttp
 from aiohttp import ClientSession, ClientTimeout
 from flask import g
 
+from ump.api.remote_auth import get_auth_strategy
 from ump.config import app_settings
 from ump.api.models.providers_config import ProcessConfig, ProviderConfig
 from ump.api.providers import (
-    authenticate_provider,
     get_providers,
 )
 from ump.errors import OGCProcessException
@@ -77,15 +77,25 @@ async def fetch_provider_processes(
 ):
     """Fetch processes for a specific provider and filter them."""
     provider_processes = []
+
+    headers = {
+        "Content-type": "application/json",
+        "Accept": "application/json",
+    }
+
+    auth_strategy = get_auth_strategy(provider_config.authentication)
+    provider_auth = auth_strategy.get_auth()
+
+    headers.update(provider_auth.headers)
+
     try:
-        provider_auth = authenticate_provider(provider_config)
-        
+    
         results = await fetch_json(
             session=session,
             url=f"{provider_config.server_url}processes",
             raise_for_status=True,
-            headers={"Content-type": "application/json", "Accept": "application/json"},
-            auth=provider_auth
+            headers=headers,
+            auth=provider_auth.auth
         )
 
         # TODO: instead of manually checking for a key, we should validate the response
