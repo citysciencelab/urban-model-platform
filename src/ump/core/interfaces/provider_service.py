@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 
-class ProviderService(ABC):
+class ProviderPort(ABC):
     @abstractmethod
     def list_processes(self) -> List[Dict[str, Any]]:
         """

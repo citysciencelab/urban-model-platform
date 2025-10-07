@@ -8,7 +8,7 @@ from typing import List, Optional
 from pydantic import ValidationError
 from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
-from ump.core.services.provider_config_service import ProviderConfigService
+from ump.core.interfaces.provider_config import ProviderConfigPort
 from ump.core.models.providers_config import ProviderConfig, ProcessConfig, ModelServers, model_servers_adapter
 
 import time
@@ -42,7 +42,7 @@ class _ConfigFileHandler(FileSystemEventHandler):
         self._reload_timer.start()
 
 
-class ProviderConfigFileAdapter(ProviderConfigService):
+class ProviderConfigFileAdapter(ProviderConfigPort):
     def __init__(self, config_path: str):
         self._config_path = config_path
         self._lock = threading.Lock()
