@@ -16,14 +16,14 @@ class LoggingAdapter(LoggingPort):
         if not self.logger.hasHandlers():
             self.logger.addHandler(handler)
 
-    def info(self, msg: str):
-        self.logger.info(msg)
+    def info(self, msg: str, *args):
+        self.logger.info(msg, *args)
 
-    def warning(self, msg: str):
-        self.logger.warning(msg)
+    def warning(self, msg: str, *args):
+        self.logger.warning(msg, *args)
 
-    def error(self, msg: str):
-        self.logger.error(msg)
+    def error(self, msg: str, *args):
+        self.logger.error(msg, *args)
 
-    def debug(self, msg: str):
-        self.logger.debug(msg)
+    def debug(self, msg: str, *args):
+        self.logger.debug(msg, *args)
