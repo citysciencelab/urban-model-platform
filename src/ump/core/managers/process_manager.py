@@ -5,7 +5,11 @@ from ump.core.interfaces.http_client import HttpClientPort
 from ump.core.models.process import Process, ProcessList, ProcessSummary
 from ump.core.models.providers_config import ProviderConfig
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
+from ump.core.managers.process_cache import ProcessListCache
+
+from ump.core.settings import logger
 import asyncio
+import time
 from typing import List
 
 class ProcessManager(ProcessesPort):
@@ -13,23 +17,32 @@ class ProcessManager(ProcessesPort):
         self, 
         provider_config_service: ProvidersPort,
         http_client: HttpClientPort,
-        process_id_validator: ProcessIdValidatorPort
+        process_id_validator: ProcessIdValidatorPort,
+        cache_expiry_seconds: int = 300
     ) -> None:
         self.provider_config_service = provider_config_service
         self.http_client = http_client
         self.process_id_validator = process_id_validator
+        self._process_cache = ProcessListCache[ProcessSummary](expiry_seconds=cache_expiry_seconds)
 
     async def fetch_processes_for_provider(self, provider_name: str) -> List[ProcessSummary]:
         """
         Fetches the process list for a single provider asynchronously.
+        Uses ProcessCache for caching.
         Returns a list of Process objects for that provider.
         """
+        cached_processes = self._process_cache.get(provider_name)
+        if cached_processes is not None:
+            return cached_processes
+
         provider: ProviderConfig = self.provider_config_service.get_provider(provider_name)
         url = str(provider.url).rstrip("/") + "/processes"
+        
         try:
             # Fetch process metadata from remote provider
             data = await self.http_client.get(url, timeout=provider.timeout)
             processes = []
+            
             for proc in data.get("processes", []):
                 raw_proc_id = proc.get("id")
                 try:
@@ -38,11 +51,17 @@ class ProcessManager(ProcessesPort):
                     proc["id"] = full_proc_id
                     processes.append(ProcessSummary(**proc))
                 except ValueError:
-                    # Skip invalid process IDs
                     continue
+            # Store in cache
+            self._process_cache.set(provider_name, processes)
+
             return processes
         except Exception as e:
-            # On error, log and return empty list (could use cache here)
+            # On error, return cached data if available
+            if cached_processes is not None:
+                # Optionally log warning about fallback
+                logger.warning(f"Using cached processes for provider {provider_name} due to error: {e}")
+                return cached_processes
             # logger.error(f"Failed to fetch processes for provider {provider_name}: {e}")
             return []
 
