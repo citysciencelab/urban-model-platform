@@ -35,6 +35,9 @@ class ProcessManager(ProcessesPort):
                     # Delegate pattern creation to the validator
                     full_proc_id = self.process_id_validator.create(provider_name, raw_proc_id)
                     proc["id"] = full_proc_id
+                    
+                    # TODO: Need to make sure domain in links are exchanged for UMP url
+                    
                     all_processes.append(Process(**proc))
                 except ValueError:
                     # Optionally log or skip invalid process IDs
