@@ -14,14 +14,17 @@ from ump.core.managers.process_manager import ProcessManager
 # it just uses the interface of the core (ProcessesPort)
 def create_app(provider_config_service: ProvidersPort):
     
-    process_port = None
+    process_port: ProcessManager | None = None
     
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         nonlocal process_port
 
         async with AioHttpClientAdapter() as http_client:
-            process_port = ProcessManager(provider_config_service, http_client)
+            process_port = ProcessManager(
+                provider_config_service, http_client,
+                process_id_validator=provider_config_service
+            )
             app.state.process_port = process_port
             yield
     
