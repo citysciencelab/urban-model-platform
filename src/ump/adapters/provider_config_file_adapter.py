@@ -51,7 +51,9 @@ class ProviderConfigFileAdapter(ProvidersPort):
     def __init__(self, config_path: str):
         self._config_path = config_path
         self._lock = threading.Lock()
-        self._providers: ProvidersConfig
+        self._providers: ProvidersConfig = ProvidersConfig(providers=[])
+
+        self.load_providers()
 
     def start_file_watcher(self):
         observer = PollingObserver()
