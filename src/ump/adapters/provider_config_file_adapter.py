@@ -8,7 +8,7 @@ from typing import List, Optional
 from pydantic import ValidationError
 from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
-from ump.core.interfaces.provider_config import ProviderConfigPort
+from ump.core.interfaces.providers import ProvidersPort
 from ump.core.models.providers_config import ProviderConfig, ProcessConfig, ModelServers, model_servers_adapter
 
 import time
@@ -42,7 +42,7 @@ class _ConfigFileHandler(FileSystemEventHandler):
         self._reload_timer.start()
 
 
-class ProviderConfigFileAdapter(ProviderConfigPort):
+class ProviderConfigFileAdapter(ProvidersPort):
     def __init__(self, config_path: str):
         self._config_path = config_path
         self._lock = threading.Lock()
@@ -53,9 +53,12 @@ class ProviderConfigFileAdapter(ProviderConfigPort):
         observer = PollingObserver()
         config_dir = os.path.dirname(self._config_path)
         config_filename = os.path.basename(self._config_path)
+        
         handler = _ConfigFileHandler(self, self._config_path, config_filename)
+        
         observer.schedule(handler, path=config_dir, recursive=False)
         observer.start()
+        
         self._observer = observer
 
     def stop_file_watcher(self):
@@ -68,25 +71,27 @@ class ProviderConfigFileAdapter(ProviderConfigPort):
         Atomar und thread-safe die Provider-Konfiguration aktualisieren, bei Fehlern Rollback.
         """
         with self._lock:
-            old_providers = self._providers.copy()
+            old_providers = self._providers
             try:
                 # Deep copy der neuen Provider-Konfiguration
-                self._providers = {name: provider.model_copy(deep=True) for name, provider in new_providers.items()}
+                self._providers = {
+                    name: provider.model_copy(deep=True)
+                    for name, provider in new_providers.items()
+                }
             except Exception as e:
                 self._providers = old_providers
                 raise e
 
     def _load_providers(self):
-        with self._lock:
-            try:
-                with open(self._config_path, encoding="UTF-8") as file:
-                    content = yaml.safe_load(file)
-                    if content:
-                        validated = model_servers_adapter.validate_python(content)
-                        self._atomic_update(validated)
-            except (FileNotFoundError, yaml.YAMLError, ValidationError) as e:
-                # Log error or handle as needed
-                self._providers = {}
+        try:
+            with open(self._config_path, encoding="UTF-8") as file:
+                content = yaml.safe_load(file)
+                if content:
+                    validated = model_servers_adapter.validate_python(content)
+                    self._atomic_update(validated)
+        except (FileNotFoundError, yaml.YAMLError, ValidationError) as e:
+            # Log error or handle as needed
+            self._providers = {}
 
     def get_providers(self) -> List[ProviderConfig]:
         with self._lock:
@@ -107,7 +112,7 @@ class ProviderConfigFileAdapter(ProviderConfigPort):
         with self._lock:
             return list(self._providers.keys())
 
-    def list_processes(self, provider_name: str) -> List[str]:
+    def get_processes(self, provider_name: str) -> List[str]:
         with self._lock:
             provider = self._providers.get(provider_name)
             if provider:

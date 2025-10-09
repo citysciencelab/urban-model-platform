@@ -4,17 +4,17 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 from ump.core.models.providers_config import ProviderConfig, ProcessConfig
 
-class ProviderConfigPort(ABC):
+class ProvidersPort(ABC):
     @abstractmethod
     def get_providers(self) -> List[ProviderConfig]:
         pass
 
     @abstractmethod
-    def get_provider(self, provider_name: str) -> Optional[ProviderConfig]:
+    def get_provider(self, provider_name: str) -> ProviderConfig:
         pass
 
     @abstractmethod
-    def get_process_config(self, provider_name: str, process_id: str) -> Optional[ProcessConfig]:
+    def get_process_config(self, provider_name: str, process_id: str) -> ProcessConfig:
         pass
 
     @abstractmethod
@@ -22,7 +22,7 @@ class ProviderConfigPort(ABC):
         pass
 
     @abstractmethod
-    def list_processes(self, provider_name: str) -> List[str]:
+    def get_processes(self, provider_name: str) -> List[str]:
         pass
 
     @abstractmethod

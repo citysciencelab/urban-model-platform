@@ -1,11 +1,12 @@
 from fastapi import FastAPI
-from ump.core.services.process_manager import ProcessManager
+from ump.core.interfaces.processes import ProcessesPort
 
-def create_app(process_manager: ProcessManager):
+def create_app(process_port: ProcessesPort):
+
     app = FastAPI()
 
     @app.get("/processes")
-    def get_processes():
-        return process_manager.list_all_processes()
+    def get_all_processes():
+        return process_port.get_all_processes()
 
     return app
