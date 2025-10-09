@@ -6,6 +6,10 @@ from ump.core.models.providers_config import ProviderConfig, ProcessConfig
 
 class ProvidersPort(ABC):
     @abstractmethod
+    def load_providers(self) -> None:
+        """Load or reload provider configurations from the source"""
+        pass
+    @abstractmethod
     def get_providers(self) -> List[ProviderConfig]:
         pass
 
