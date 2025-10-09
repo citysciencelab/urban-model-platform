@@ -10,7 +10,7 @@ select = ["E", "F"]
 # same as isort, black
 line-length = 88
 # Assume Python 3.8
-target-version = "py311"
+target-version = "py314"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
@@ -38,7 +38,7 @@ exclude = [
 
 [tool.poetry]
 name = "ump"
-version = "2.2.0+rc1-apikeyauth"
+version = "3.0.0rc1"
 description = "server federation api, OGC Api Processes-based to connect model servers and centralize access to them"
 authors = [
     "Rico Herzog <rico.herzog@hcu-hamburg.de>",
@@ -55,30 +55,16 @@ Changelog = "https://github.com/citysciencelab/urban-model-platform/changelog.md
 Repository = "https://github.com/citysciencelab/urban-model-platform"
 
 [tool.poetry.dependencies]
-python = ">=3.11,<3.13"
-werkzeug = "^3.0.3"
-flask = "^3.0.3"
-flask-cors = "^4.0.1"
-requests = "^2.32.3"
+python = ">=3.12,<3.15"
 aiohttp = "^3.9.5"
-psycopg2-binary = "^2.9.9"
-numpy = "~=1.26.4"
-geopandas = "^1.0.1"
-geoalchemy2 = "^0.15.2"
-apiflask = "^2.2.0"
 python-dotenv = "^1.0.1"
 gunicorn = "^23.0.0"
 pyyaml = "^6.0.2"
-flask-migrate = "^4.0.7"
-python-keycloak = "^4.3.0"
-sqlalchemy-serializer = "^1.4.22"
 watchdog = "^5.0.3"
-ema-workbench = "^2.5.2"
-ipyparallel = "^8.8.0"
-schedule = "^1.2.2"
 pydantic-settings = "^2.8.1"
 pydantic = "^2.11.1"
-rich = "^14.0.0"
+uvicorn = "^0.37.0"
+fastapi = "^0.118.1"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests
