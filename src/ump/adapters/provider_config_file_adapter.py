@@ -1,6 +1,5 @@
 import os
 import threading
-import time
 from threading import Timer
 from typing import List, Optional
 
@@ -9,7 +8,6 @@ from pydantic import ValidationError
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers.polling import PollingObserver
 
-from old_src.ump import config
 from ump.core.interfaces.providers import ProvidersPort
 from ump.core.models.providers_config import (
     ProcessConfig,
