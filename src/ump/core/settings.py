@@ -7,6 +7,8 @@ from pydantic import FilePath, HttpUrl, SecretStr, computed_field, field_validat
 from pydantic_settings import BaseSettings
 from rich import print
 
+from ump.core.interfaces.logging import LoggingPort
+
 # using pydantic_settings to manage environment variables
 # and do automatic type casting in a central place
 class UmpSettings(BaseSettings):
@@ -62,7 +64,7 @@ class UmpSettings(BaseSettings):
         """Constructs the full URL for the GeoServer workspace"""
         return HttpUrl(str(self.UMP_GEOSERVER_URL) + "/rest/workspaces")
 
-    def print_settings(self):
+    def print_settings(self, logger: LoggingPort):
         """Prints the settings for debugging purposes"""
         logger.info("UMP Settings:")
         print(self)
@@ -76,6 +78,7 @@ class UmpSettings(BaseSettings):
 
 
 app_settings = UmpSettings()
-app_settings.print_settings()
 
 logger = LoggingAdapter(app_settings.UMP_LOG_LEVEL)
+
+app_settings.print_settings(logger)
