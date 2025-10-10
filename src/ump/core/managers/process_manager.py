@@ -2,7 +2,7 @@
 from ump.core.interfaces.processes import ProcessesPort
 from ump.core.interfaces.providers import ProvidersPort
 from ump.core.interfaces.http_client import HttpClientPort
-from ump.core.models.process import Process, ProcessList, ProcessSummary
+from ump.core.models.process import ProcessList, ProcessSummary
 from ump.core.models.providers_config import ProviderConfig
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.managers.process_cache import ProcessListCache
