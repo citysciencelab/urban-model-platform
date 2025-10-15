@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 class HttpClientPort(ABC):
     @abstractmethod
-    async def __aenter__(self):
+    async def __aenter__(self) -> "HttpClientPort":
         """Async context manager entry method"""
         pass
 
