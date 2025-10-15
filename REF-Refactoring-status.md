@@ -64,7 +64,9 @@ Refactor the Urban Model Platform (UMP) codebase to follow hexagonal architectur
 
 ### small changes
 - Improve logging usage across modules (inject `logger` where useful).
-- all links in `ProcessSummery`s of fetched processes should be replaced by local links; this should be an option in the settings class
+- Links in fetched processes are now optionally rewritten to local API links. This is controlled by the setting `UMP_REWRITE_REMOTE_LINKS`.
+- A small utility `src/ump/core/utils/link_rewriter.py` performs the rewriting and is used by the manager.
+- Fetched processes are passed through an explicit handler pipeline in `ProcessManager` (ID enforcement, link rewriting, and future handlers). This makes transformation/validation of remote process metadata explicit and extensible.
 
 ### feature extension
 The following missing features must be implemented:
