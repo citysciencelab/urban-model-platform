@@ -87,6 +87,7 @@ class ProviderConfigFileAdapter(ProvidersPort):
                     ]
                 )
             except Exception as e:
+                logger.error("Error updating providers: %s", e)
                 self._providers = old_providers
                 raise e
 
