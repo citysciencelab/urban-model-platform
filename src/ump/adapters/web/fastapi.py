@@ -5,10 +5,9 @@ from fastapi.responses import JSONResponse
 
 from ump.core.interfaces.http_client import HttpClientPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
+from ump.core.interfaces.processes import ProcessesPort
 from ump.core.interfaces.providers import ProvidersPort
 from ump.core.exceptions import OGCProcessException
-from ump.adapters.aiohttp_client_adapter import AioHttpClientAdapter
-from ump.adapters.colon_process_id_validator import ColonProcessId
 from ump.core.managers.process_manager import ProcessManager
 
 # Note: this a driver adapter, so it depends on the core interface (ProcessesPort)
@@ -21,8 +20,8 @@ def create_app(
     process_id_validator: ProcessIdValidatorPort
 ):
     # must not be injected directly, because it needs to be created in the lifespan
-    process_port: ProcessManager | None = None
-    
+    process_port: ProcessesPort | None = None
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         nonlocal process_port
