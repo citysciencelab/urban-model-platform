@@ -48,6 +48,8 @@ class UmpSettings(BaseSettings):
     UMP_KEYCLOAK_USER: str = "admin"
     UMP_KEYCLOAK_PASSWORD: SecretStr = SecretStr("admin")
     UMP_API_SERVER_URL_PREFIX: str = "/"
+    # When enabled, replace external links in fetched processes with local API links
+    UMP_REWRITE_REMOTE_LINKS: bool = True
 
     # Gunicorn default timeout is 30 seconds
     UMP_SERVER_TIMEOUT: int = 30
