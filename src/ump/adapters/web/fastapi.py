@@ -14,6 +14,7 @@ from ump.core.interfaces.providers import ProvidersPort
 from ump.core.exceptions import OGCProcessException
 from ump.core.managers.process_manager import ProcessManager
 from fastapi.responses import HTMLResponse, FileResponse
+from ump.core.settings import app_settings
 
 # Note: this a driver adapter, so it depends on the core interface (ProcessesPort)
 # but the core does not depend on this adapter
@@ -42,6 +43,30 @@ def create_app(
     
     app = FastAPI(lifespan=lifespan)
 
+    # Helper: create a versioned sub-app that mounts the same handlers but with its own openapi URL
+    def create_versioned_app(version: str):
+        ver_prefix = f"v{version}"
+        # sub-app with its own OpenAPI document exposed under the version prefix
+        sub = FastAPI(
+            title=f"UMP API v{version}",
+            # use relative openapi/docs paths; they will be available under the mount prefix
+            openapi_url="/openapi.json",
+            docs_url="/docs",
+            redoc_url="/redoc",
+        )
+
+        # Reuse the same static/templates for sub-apps by mounting the same directories
+        if adapter_static.exists():
+            sub.mount("/static", StaticFiles(directory=str(adapter_static)), name=f"static-{version}")
+
+        # add routes similar to parent but using sub.state for process_port resolution
+        @sub.get("/processes")
+        async def get_all_processes_sub():
+            # sub-app will share state.process_port from parent app.state
+            return await app.state.process_port.get_all_processes()
+
+        return sub, ver_prefix
+
     # Serve static files and templates from the adapter package itself
     adapter_root = Path(__file__).parent
     adapter_static = adapter_root / "static"
@@ -51,6 +76,13 @@ def create_app(
         app.mount("/static", StaticFiles(directory=str(adapter_static)), name="static")
 
     templates = Jinja2Templates(directory=str(adapter_templates))
+
+    # Mount versioned sub-apps for each supported API version
+    for ver in getattr(app_settings, "UMP_SUPPORTED_API_VERSIONS", ["1.0"]):
+        sub_app, ver_prefix = create_versioned_app(ver)
+        # mount under e.g. /v1.0
+        mount_path = f"/v{ver}"
+        app.mount(mount_path, sub_app)
 
     # Dedicated route for the landing CSS. This is a robust fallback for environments
     # where StaticFiles mounting might not be available (packaged apps, different cwd).
@@ -97,10 +129,13 @@ def create_app(
         # Adapter-local style
         css_href = "/static/style.css"
 
+        # Also include discovered supported versions for the template
+        supported_versions = getattr(app_settings, "UMP_SUPPORTED_API_VERSIONS", ["1.0"])
+
         context = {
             "request": request,
             "title": api.get('title'),
-            "version": "0.0.0",
+            "version": ", ".join(supported_versions),
             "description": api.get('description'),
             "contact_line": contact_line,
             "license_line": "",
@@ -108,6 +143,7 @@ def create_app(
             "powered_by": "<a href='https://github.com/citysciencelab/urban-model-platform'>urban-model-platform</a>",
             "css": css_href,
             "table_rows": table_rows,
+            "supported_versions": supported_versions,
         }
 
         return templates.TemplateResponse("template.html", context)

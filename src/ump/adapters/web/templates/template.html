@@ -16,6 +16,15 @@
       <section class="desc">{{ description }}</section>
 
       <section>
+        <h2>Supported API Versions</h2>
+        <ul>
+        {% for v in supported_versions %}
+          <li>v{{ v }} - <a href="/v{{ v }}/openapi.json">OpenAPI</a> | <a href="/v{{ v }}/docs">Docs</a></li>
+        {% endfor %}
+        </ul>
+      </section>
+
+      <section>
         <h2>API Endpoints</h2>
         <table>
           <thead><tr><th>Path</th><th>Description</th></tr></thead>

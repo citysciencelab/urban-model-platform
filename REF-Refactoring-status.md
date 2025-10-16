@@ -71,15 +71,29 @@ Refactor the Urban Model Platform (UMP) codebase to follow hexagonal architectur
 ### feature extension
 The following missing features must be implemented:
 
-#### Feature 0: Landing page
-A simple landing page (html) which informs visitors about:
+#### Feature 0: Landing page (completed)
+A simple landing page (HTML) which informs visitors about:
 - licence
 - contact
 - available api routes
 
-#### Feature I: API versioning mechanism
-- OGC API processes gets a major overhaul
-- backwards compatibility is probably not maintained
+Notes:
+- Implemented as part of the web adapter using Jinja2 templates.
+- Template and stylesheet are packaged with the web adapter under `src/ump/adapters/web/`:
+  - `src/ump/adapters/web/templates/template.html`
+  - `src/ump/adapters/web/static/style.css`
+  These are mounted and served by the FastAPI adapter; the landing route also supports a JSON fallback (`?f=json` or Accept header).
+
+#### Feature I: API versioning (implemented)
+
+- Strategy: route-based versioning using path prefixes of the form `/v{major}.{minor}/` (for example `/v1.0/`). The landing page at `/` lists the available versions and links to each version's OpenAPI document (e.g. `/v1.0/openapi.json`) and docs (e.g. `/v1.0/docs`).
+- Implementation notes:
+  - Supported versions are configured via `app_settings.UMP_SUPPORTED_API_VERSIONS` (default: `["1.0"]`).
+  - The web adapter (`src/ump/adapters/web/fastapi.py`) creates per-version FastAPI sub-apps and mounts them under `/v{version}` so endpoints like `/v1.0/processes` are available.
+  - `src/ump/adapters/site_info_static_adapter.py` now advertises per-version routes on the landing page.
+  - The landing template shows supported versions and links to their OpenAPI/docs.
+
+This approach keeps the landing page at `/` (as required by the OGC draft) and makes breaking changes explicit by assigning them to a new version prefix.
 
 #### Feature II: route /processes/process-id
 -> using the `Process` class for validation
