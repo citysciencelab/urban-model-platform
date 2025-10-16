@@ -65,6 +65,7 @@ pydantic-settings = "^2.8.1"
 pydantic = "^2.11.1"
 uvicorn = "^0.37.0"
 fastapi = "^0.118.1"
+jinja2 = "^3.1.6"
 
 [tool.poetry.group.dev.dependencies]
 # formatting, quality, tests
