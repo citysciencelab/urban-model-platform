@@ -130,9 +130,11 @@ Notes:
 
 #### Feature III: /execution endpoint and Jobs and local Job storage
 - implement remote process execution: async
-- implement /jobs route (`JobList`)-> fetch remote jobs
-- implement job list (remote)
-- store a local reference of a remote job (a job storage adapter)
+- return remote job id in location header in response to POST request
+- implement /jobs route (`JobList`)
+- implement /jobs/job-id route
+- store a local reference of a remote job
+
 
 - create a (normalized) database schema for local Jobs and expand pydantic model `Job` to a SQLModel using the SQLModel library
 
