@@ -180,4 +180,29 @@ def create_app(
         process = await app.state.process_port.get_process(process_id)
         return process
 
+    @app.post("/processes/{process_id}/execution")
+    async def execute_process(request: Request, process_id: str):
+        # Read JSON body (execution parameters) and forward relevant headers
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+
+        # Collect headers of interest (Prefer) and forward the rest if needed
+        headers = {}
+        prefer = request.headers.get("prefer") or request.headers.get("Prefer")
+        if prefer:
+            headers["Prefer"] = prefer
+
+        resp = await app.state.process_port.execute_process(process_id, body, headers)
+
+        # If the backend returned structured dict with status/headers/body, map to response
+        if isinstance(resp, dict) and "status" in resp:
+            status = resp.get("status")
+            content = resp.get("body")
+            return JSONResponse(status_code=status or 200, content=content or {})
+
+        # Otherwise return generic JSON
+        return JSONResponse(status_code=200, content=resp or {})
+
     return app
