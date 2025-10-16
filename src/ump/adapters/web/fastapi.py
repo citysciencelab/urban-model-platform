@@ -65,6 +65,10 @@ def create_app(
             # sub-app will share state.process_port from parent app.state
             return await app.state.process_port.get_all_processes()
 
+        @sub.get("/processes/{process_id}")
+        async def get_process_sub(process_id: str):
+            return await app.state.process_port.get_process(process_id)
+
         return sub, ver_prefix
 
     # Serve static files and templates from the adapter package itself
@@ -165,5 +169,10 @@ def create_app(
     @app.get("/processes")
     async def get_all_processes():
         return await app.state.process_port.get_all_processes()
+
+
+    @app.get("/processes/{process_id}")
+    async def get_process(process_id: str):
+        return await app.state.process_port.get_process(process_id)
 
     return app

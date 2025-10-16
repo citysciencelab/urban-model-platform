@@ -14,6 +14,9 @@ from ump.core.settings import logger
 import asyncio
 import time
 from typing import List, Callable, Dict, Any
+from ump.core.models.process import Process
+from ump.core.models.ogcp_exception import OGCExceptionResponse
+from ump.core.exceptions import OGCProcessException
 
 class ProcessManager(ProcessesPort):
     def __init__(
@@ -138,6 +141,74 @@ class ProcessManager(ProcessesPort):
         # Flatten the list of lists into a single list
         all_processes = [proc for sublist in results for proc in sublist]
         return ProcessList(processes=all_processes)
+
+    async def get_process(self, process_id: str) -> Process:
+        """
+        Retrieve a single process by id. The id may include a provider prefix
+        (e.g. 'provider:proc'). If a provider prefix is present we fetch the
+        process description directly from that provider. Otherwise we search
+        across configured providers for a matching process summary and, if
+        possible, attempt to fetch the full description from the provider.
+        """
+        # Try to detect provider prefix
+        try:
+            provider_prefix, raw_id = self.process_id_validator.extract(process_id)
+            # If extract succeeded, attempt to fetch from that provider
+            provider = self.provider_config_service.get_provider(provider_prefix)
+            url = str(provider.url).rstrip("/") + f"/processes/{raw_id}"
+            try:
+                data = await self.http_client.get(url, timeout=provider.timeout)
+                # run handlers on returned dict (if any) and return Process model
+                proc = dict(data)
+                for handler in self._process_handlers:
+                    proc = handler(provider_prefix, proc)
+                return Process(**proc)
+            except OGCProcessException:
+                # re-raise to be handled by the web adapter
+                raise
+            except Exception as e:
+                logger.error(f"Failed to fetch process {process_id} from provider {provider_prefix}: {e}")
+                raise OGCProcessException(
+                    OGCExceptionResponse(
+                        type="about:blank",
+                        title="Upstream Error",
+                        status=502,
+                        detail=f"Could not retrieve process {process_id} from provider {provider_prefix}",
+                        instance=None,
+                    )
+                )
+        except ValueError:
+            # No provider prefix — fall back to searching all providers
+            all_procs = await self.get_all_processes()
+            for proc_summary in all_procs.processes:
+                if proc_summary.id.endswith(f":{process_id}") or proc_summary.id == process_id:
+                    # Try to fetch full description from provider if link available
+                    # Look for a 'self' link or processes/{id} link in summary
+                    provider_prefix, _ = self.process_id_validator.extract(proc_summary.id)
+                    provider = self.provider_config_service.get_provider(provider_prefix)
+                    # attempt to fetch full description
+                    url = str(provider.url).rstrip("/") + f"/processes/{process_id}"
+                    try:
+                        data = await self.http_client.get(url, timeout=provider.timeout)
+                        proc = dict(data)
+                        for handler in self._process_handlers:
+                            proc = handler(provider_prefix, proc)
+                        return Process(**proc)
+                    except Exception:
+                        # If fetching full description fails, but summary has enough data,
+                        # construct a Process from the summary (no inputs/outputs)
+                        return Process(**proc_summary.model_dump())
+
+            # Not found
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="about:blank",
+                    title="Not Found",
+                    status=404,
+                    detail=f"Process '{process_id}' not found",
+                    instance=None,
+                )
+            )
 
     async def cleanup(self) -> None:
         """Cleanup resources"""
