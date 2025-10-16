@@ -24,6 +24,10 @@
             // "preLaunchTask": "start-postgis-container",
             // "postDebugTask": "stop-postgis-container",
             "justMyCode": false,
+            "autoReload": {
+                "enable": true,
+                "extraFiles": ["src/ump/**/*.py"]
+            }
         },
         {
             "name": "ump + db",
