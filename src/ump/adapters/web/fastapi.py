@@ -15,6 +15,7 @@ from ump.core.exceptions import OGCProcessException
 from ump.core.managers.process_manager import ProcessManager
 from fastapi.responses import HTMLResponse, FileResponse
 from ump.core.settings import app_settings
+from ump.core.models.process import ProcessList, Process
 
 # Note: this a driver adapter, so it depends on the core interface (ProcessesPort)
 # but the core does not depend on this adapter
@@ -60,14 +61,16 @@ def create_app(
             sub.mount("/static", StaticFiles(directory=str(adapter_static)), name=f"static-{version}")
 
         # add routes similar to parent but using sub.state for process_port resolution
-        @sub.get("/processes")
+        @sub.get("/processes", response_model=ProcessList, response_model_exclude_none=True)
         async def get_all_processes_sub():
             # sub-app will share state.process_port from parent app.state
-            return await app.state.process_port.get_all_processes()
+            process_list = await app.state.process_port.get_all_processes()
+            return process_list
 
-        @sub.get("/processes/{process_id}")
+        @sub.get("/processes/{process_id}", response_model=Process, response_model_exclude_none=True)
         async def get_process_sub(process_id: str):
-            return await app.state.process_port.get_process(process_id)
+            process = await app.state.process_port.get_process(process_id)
+            return process
 
         return sub, ver_prefix
 
@@ -166,13 +169,15 @@ def create_app(
             }
         )
 
-    @app.get("/processes")
+    @app.get("/processes", response_model=ProcessList, response_model_exclude_none=True)
     async def get_all_processes():
-        return await app.state.process_port.get_all_processes()
+        process_list = await app.state.process_port.get_all_processes()
+        return process_list
 
 
-    @app.get("/processes/{process_id}")
+    @app.get("/processes/{process_id}", response_model=Process, response_model_exclude_none=True)
     async def get_process(process_id: str):
-        return await app.state.process_port.get_process(process_id)
+        process = await app.state.process_port.get_process(process_id)
+        return process
 
     return app
