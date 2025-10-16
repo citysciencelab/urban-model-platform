@@ -9,6 +9,7 @@ from ump.core.settings import app_settings
 from ump.core.models.providers_config import ProviderConfig
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.managers.process_cache import ProcessListCache
+from ump.core.managers.process_cache import ProcessCache
 
 from ump.core.settings import logger
 import asyncio
@@ -30,6 +31,9 @@ class ProcessManager(ProcessesPort):
         self.http_client = http_client
         self.process_id_validator = process_id_validator
         self._process_cache = ProcessListCache[ProcessSummary](expiry_seconds=cache_expiry_seconds)
+        # cache individual process descriptions by id
+        self._process_cache_by_id = ProcessCache[Process](expiry_seconds=cache_expiry_seconds)
+
         # A pipeline of handlers (functions) that transform a fetched process dict.
         # Each handler has signature: handler(provider_name: str, proc: Dict[str, Any]) -> Dict[str, Any]
         # Handlers can raise ValueError to indicate the process should be skipped.
@@ -86,7 +90,10 @@ class ProcessManager(ProcessesPort):
         """
         cached_processes = self._process_cache.get(provider_name)
         if cached_processes is not None:
+            logger.info(f"Process list cache hit for provider '{provider_name}': {len(cached_processes)} processes")
             return cached_processes
+        else:
+            logger.info(f"Process list cache miss for provider '{provider_name}'")
 
         provider: ProviderConfig = self.provider_config_service.get_provider(provider_name)
         url = str(provider.url).rstrip("/") + "/processes"
@@ -117,6 +124,7 @@ class ProcessManager(ProcessesPort):
                     continue
             # Store in cache
             self._process_cache.set(provider_name, processes)
+            logger.debug(f"Cached {len(processes)} processes for provider '{provider_name}'")
 
             return processes
         except Exception as e:
@@ -150,6 +158,14 @@ class ProcessManager(ProcessesPort):
         across configured providers for a matching process summary and, if
         possible, attempt to fetch the full description from the provider.
         """
+        # First check cache by full process id
+        cached = self._process_cache_by_id.get(process_id)
+        if cached is not None:
+            logger.info(f"Process cache hit for id '{process_id}'")
+            return cached
+        else:
+            logger.info(f"Process cache miss for id '{process_id}'")
+
         # Try to detect provider prefix
         try:
             provider_prefix, raw_id = self.process_id_validator.extract(process_id)
@@ -162,7 +178,16 @@ class ProcessManager(ProcessesPort):
                 proc = dict(data)
                 for handler in self._process_handlers:
                     proc = handler(provider_prefix, proc)
-                return Process(**proc)
+                model = Process(**proc)
+                # cache under canonical id
+                self._process_cache_by_id.set(model.id, model)
+                logger.debug(f"Cached process '{model.id}' in per-process cache")
+                # also cache under bare id for convenience (e.g., 'echo')
+                if ":" in model.id:
+                    bare = model.id.split(":", 1)[1]
+                    self._process_cache_by_id.set(bare, model)
+                    logger.debug(f"Also cached process under bare id '{bare}'")
+                return model
             except OGCProcessException:
                 # re-raise to be handled by the web adapter
                 raise
@@ -193,11 +218,25 @@ class ProcessManager(ProcessesPort):
                         proc = dict(data)
                         for handler in self._process_handlers:
                             proc = handler(provider_prefix, proc)
-                        return Process(**proc)
+                        model = Process(**proc)
+                        self._process_cache_by_id.set(model.id, model)
+                        logger.debug(f"Cached process '{model.id}' in per-process cache")
+                        if ":" in model.id:
+                            bare = model.id.split(":", 1)[1]
+                            self._process_cache_by_id.set(bare, model)
+                            logger.debug(f"Also cached process under bare id '{bare}'")
+                        return model
                     except Exception:
                         # If fetching full description fails, but summary has enough data,
                         # construct a Process from the summary (no inputs/outputs)
-                        return Process(**proc_summary.model_dump())
+                        model = Process(**proc_summary.model_dump())
+                        self._process_cache_by_id.set(model.id, model)
+                        logger.debug(f"Cached process '{model.id}' in per-process cache (from summary fallback)")
+                        if ":" in model.id:
+                            bare = model.id.split(":", 1)[1]
+                            self._process_cache_by_id.set(bare, model)
+                            logger.debug(f"Also cached process under bare id '{bare}' (from summary fallback)")
+                        return model
 
             # Not found
             raise OGCProcessException(
