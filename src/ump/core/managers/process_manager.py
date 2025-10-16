@@ -100,7 +100,8 @@ class ProcessManager(ProcessesPort):
         
         try:
             # Fetch process metadata from remote provider
-            data = await self.http_client.get(url, timeout=provider.timeout)
+            # Let the HTTP adapter use its internal default timeout when none is provided
+            data = await self.http_client.get(url)
             processes = []
             
             for raw_proc in data.get("processes", []):
@@ -116,10 +117,10 @@ class ProcessManager(ProcessesPort):
                 except ValueError:
                     # Handler indicated to skip this process (e.g. invalid id)
                     continue
-                except Exception as e:
+                except Exception as handler_error:
                     # Log unexpected handler errors and skip the process
                     logger.warning(
-                        f"Error processing fetched process for provider {provider_name}: {e}"
+                        f"Error processing fetched process for provider {provider_name}: {handler_error}"
                     )
                     continue
             # Store in cache
@@ -127,13 +128,13 @@ class ProcessManager(ProcessesPort):
             logger.debug(f"Cached {len(processes)} processes for provider '{provider_name}'")
 
             return processes
-        except Exception as e:
+        except Exception as fetch_error:
             # On error, return cached data if available
             if cached_processes is not None:
                 # Optionally log warning about fallback
-                logger.warning(f"Using cached processes for provider {provider_name} due to error: {e}")
+                logger.warning(f"Using cached processes for provider {provider_name} due to error: {fetch_error}")
                 return cached_processes
-            # logger.error(f"Failed to fetch processes for provider {provider_name}: {e}")
+            # logger.error(f"Failed to fetch processes for provider {provider_name}: {fetch_error}")
             return []
 
     async def get_all_processes(self) -> ProcessList:
@@ -173,7 +174,7 @@ class ProcessManager(ProcessesPort):
             provider = self.provider_config_service.get_provider(provider_prefix)
             url = str(provider.url).rstrip("/") + f"/processes/{raw_id}"
             try:
-                data = await self.http_client.get(url, timeout=provider.timeout)
+                data = await self.http_client.get(url)
                 # run handlers on returned dict (if any) and return Process model
                 proc = dict(data)
                 for handler in self._process_handlers:
@@ -191,8 +192,8 @@ class ProcessManager(ProcessesPort):
             except OGCProcessException:
                 # re-raise to be handled by the web adapter
                 raise
-            except Exception as e:
-                logger.error(f"Failed to fetch process {process_id} from provider {provider_prefix}: {e}")
+            except Exception as fetch_error:
+                logger.error(f"Failed to fetch process {process_id} from provider {provider_prefix}: {fetch_error}")
                 raise OGCProcessException(
                     OGCExceptionResponse(
                         type="about:blank",
@@ -214,7 +215,7 @@ class ProcessManager(ProcessesPort):
                     # attempt to fetch full description
                     url = str(provider.url).rstrip("/") + f"/processes/{process_id}"
                     try:
-                        data = await self.http_client.get(url, timeout=provider.timeout)
+                        data = await self.http_client.get(url)
                         proc = dict(data)
                         for handler in self._process_handlers:
                             proc = handler(provider_prefix, proc)
@@ -226,9 +227,12 @@ class ProcessManager(ProcessesPort):
                             self._process_cache_by_id.set(bare, model)
                             logger.debug(f"Also cached process under bare id '{bare}'")
                         return model
-                    except Exception:
+                    except Exception as fetch_error:
                         # If fetching full description fails, but summary has enough data,
                         # construct a Process from the summary (no inputs/outputs)
+                        logger.debug(
+                            f"Fetching full description failed for '{proc_summary.id}': {fetch_error} - falling back to summary"
+                        )
                         model = Process(**proc_summary.model_dump())
                         self._process_cache_by_id.set(model.id, model)
                         logger.debug(f"Cached process '{model.id}' in per-process cache (from summary fallback)")
@@ -252,3 +256,68 @@ class ProcessManager(ProcessesPort):
     async def cleanup(self) -> None:
         """Cleanup resources"""
         await self.http_client.close()
+
+    async def execute_process(self, process_id: str, body: dict, headers: dict) -> dict:
+        """
+        Execute a process by forwarding the request to the appropriate provider.
+        Honors the Prefer header for async execution semantics. Returns a dict
+        with the provider response payload or a local representation for async.
+        """
+        # Determine provider prefix if present
+        try:
+            provider_prefix, raw_id = self.process_id_validator.extract(process_id)
+        except ValueError:
+            # No prefix provided: try to resolve by searching summaries
+            all_procs = await self.get_all_processes()
+            provider_prefix = None
+            raw_id = process_id
+            for proc_summary in all_procs.processes:
+                if proc_summary.id.endswith(f":{process_id}") or proc_summary.id == process_id:
+                    provider_prefix, _ = self.process_id_validator.extract(proc_summary.id)
+                    break
+
+        if provider_prefix is None:
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="about:blank",
+                    title="Not Found",
+                    status=404,
+                    detail=f"Process '{process_id}' not found",
+                    instance=None,
+                )
+            )
+
+        provider = self.provider_config_service.get_provider(provider_prefix)
+        url = str(provider.url).rstrip("/") + f"/processes/{raw_id}/execution"
+
+        # Respect Prefer header (e.g., 'respond-async') — forward as-is to provider
+        prefer = headers.get("prefer") or headers.get("Prefer")
+        forward_headers = {}
+        if prefer:
+            forward_headers["Prefer"] = prefer
+
+        try:
+            # Forward the execution request (adapter will apply its default timeout)
+            resp = await self.http_client.post(url, json=body, headers=forward_headers)
+            # The adapter returns a dict with 'status','headers','body'
+            # If the provider returned 202 (accepted) for async, we can construct a local job reference
+            status = resp.get("status") if isinstance(resp, dict) else None
+            if status == 202 or (prefer and "respond-async" in (prefer or "")):
+                # For now, return the provider response directly; step 2 will add local job storage
+                logger.info(f"Execution forwarded async for process '{process_id}' to provider '{provider_prefix}'")
+                return resp
+            # Otherwise return the provider's body as-is
+            return resp
+        except OGCProcessException:
+            raise
+        except Exception as execution_error:
+            logger.error(f"Failed to execute process {process_id} on provider {provider_prefix}: {execution_error}")
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="about:blank",
+                    title="Upstream Error",
+                    status=502,
+                    detail=f"Could not execute process {process_id} on provider {provider_prefix}",
+                    instance=None,
+                )
+            )
