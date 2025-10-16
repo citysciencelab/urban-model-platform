@@ -23,3 +23,14 @@ class ProcessesPort(ABC):
     async def cleanup(self) -> None:
         """Cleanup resources"""
         pass
+
+    @abstractmethod
+    async def execute_process(self, process_id: str, body: dict, headers: dict) -> dict:
+        """Execute a process identified by process_id. Implementations should
+        respect common OGC semantics, including honoring the Prefer header
+        (e.g. Prefer: respond-async) when forwarding requests to providers.
+
+        Returns a dict representing the provider response (or a local job
+        representation for async executions).
+        """
+        pass
