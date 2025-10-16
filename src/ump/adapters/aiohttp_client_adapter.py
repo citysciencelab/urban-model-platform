@@ -1,5 +1,6 @@
 # ump/adapters/aiohttp_client_adapter.py
 import asyncio
+import json
 import aiohttp
 from typing import Any, Dict, Optional
 
@@ -74,7 +75,7 @@ class AioHttpClientAdapter(HttpClientPort):
                 try:
                     # Attempt to parse JSON from the response
                     response_data = await response.json()
-                except aiohttp.ContentTypeError:
+                except (aiohttp.ContentTypeError, json.JSONDecodeError, ValueError) as json_error:
                     # Response isn't JSON; log a snippet and raise domain error
                     response_text = await response.text()
                     logger.error(
