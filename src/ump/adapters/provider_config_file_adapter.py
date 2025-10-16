@@ -86,10 +86,10 @@ class ProviderConfigFileAdapter(ProvidersPort):
                         for provider in new_providers.providers
                     ]
                 )
-            except Exception as e:
-                logger.error("Error updating providers: %s", e)
+            except Exception as update_error:
+                logger.error("Error updating providers: %s", update_error)
                 self._providers = old_providers
-                raise e
+                raise update_error
 
     def load_providers(self):
         logger.info("(Re)Loading providers from %s", self._config_path)
@@ -104,12 +104,12 @@ class ProviderConfigFileAdapter(ProvidersPort):
                     logger.info("Providers (re)loaded successfully")
         except FileNotFoundError:
             logger.error("Providers file not found: %s", self._config_path)
-        except yaml.YAMLError as e:
-            logger.error("Failed to parse providers file: %s", e)
-        except ValidationError as e:
-            logger.error("Validation error in providers file: %s", e)
-        except Exception as e:
-            logger.error("Unexpected error loading providers: %s", e)
+        except yaml.YAMLError as parse_error:
+            logger.error("Failed to parse providers file: %s", parse_error)
+        except ValidationError as validation_error:
+            logger.error("Validation error in providers file: %s", validation_error)
+        except Exception as unexpected_error:
+            logger.error("Unexpected error loading providers: %s", unexpected_error)
 
     def get_providers(self) -> List[ProviderConfig]:
         with self._lock:
