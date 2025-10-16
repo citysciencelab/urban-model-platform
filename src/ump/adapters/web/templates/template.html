@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{{ title }} - API Landing</title>
+    <link rel="stylesheet" href="{{ css }}">
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <h1>{{ title }}</h1>
+        <div class="meta">Version {{ version }}</div>
+      </header>
+
+      <section class="desc">{{ description }}</section>
+
+      <section>
+        <h2>API Endpoints</h2>
+        <table>
+          <thead><tr><th>Path</th><th>Description</th></tr></thead>
+          <tbody>
+            {{ table_rows | safe }}
+          </tbody>
+        </table>
+      </section>
+
+      <footer class="footer">
+        <div>{{ contact_line | safe }}</div>
+        <div>{{ license_line | safe }}</div>
+        <div>{{ terms_of_service | safe }}</div>
+        <hr style="width:25%;text-align:left;margin-left:0">
+        <small>powered by {{ powered_by | safe }}</small>
+      </footer>
+    </div>
+  </body>
+</html>

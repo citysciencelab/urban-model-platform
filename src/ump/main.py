@@ -8,6 +8,7 @@ import uvicorn
 from ump.adapters.provider_config_file_adapter import ProviderConfigFileAdapter
 from ump.adapters.web.fastapi import create_app
 from ump.core.settings import logger
+from ump.adapters.site_info_static_adapter import StaticSiteInfoAdapter
 
 # main lives at the outermost layer (not in core)
 # Instantiates all the concrete adapters
@@ -25,10 +26,14 @@ def main():
     
     # Create app with lifespan that manages the http client
     # injecting necessary dependencies
+    # Static site info adapter provides landing page metadata
+    site_info_adapter = StaticSiteInfoAdapter()
+
     app = create_app(
         provider_config_adapter,
         AioHttpClientAdapter(),
-        ColonProcessId()
+        ColonProcessId(),
+        site_info=site_info_adapter,
     )
 
     uvicorn.run(app, host="0.0.0.0", port=8000)

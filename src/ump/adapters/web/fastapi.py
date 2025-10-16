@@ -2,13 +2,18 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pathlib import Path
 
 from ump.core.interfaces.http_client import HttpClientPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.interfaces.processes import ProcessesPort
+from ump.core.interfaces.site_info import SiteInfoPort
 from ump.core.interfaces.providers import ProvidersPort
 from ump.core.exceptions import OGCProcessException
 from ump.core.managers.process_manager import ProcessManager
+from fastapi.responses import HTMLResponse, FileResponse
 
 # Note: this a driver adapter, so it depends on the core interface (ProcessesPort)
 # but the core does not depend on this adapter
@@ -17,7 +22,8 @@ from ump.core.managers.process_manager import ProcessManager
 def create_app(
     provider_config_service: ProvidersPort,
     http_client: HttpClientPort,
-    process_id_validator: ProcessIdValidatorPort
+    process_id_validator: ProcessIdValidatorPort,
+    site_info: SiteInfoPort | None = None,
 ):
     # must not be injected directly, because it needs to be created in the lifespan
     process_port: ProcessesPort | None = None
@@ -35,6 +41,76 @@ def create_app(
             yield
     
     app = FastAPI(lifespan=lifespan)
+
+    # Serve static files and templates from the adapter package itself
+    adapter_root = Path(__file__).parent
+    adapter_static = adapter_root / "static"
+    adapter_templates = adapter_root / "templates"
+
+    if adapter_static.exists():
+        app.mount("/static", StaticFiles(directory=str(adapter_static)), name="static")
+
+    templates = Jinja2Templates(directory=str(adapter_templates))
+
+    # Dedicated route for the landing CSS. This is a robust fallback for environments
+    # where StaticFiles mounting might not be available (packaged apps, different cwd).
+    @app.get("/landing.css", name="landing_css")
+    async def landing_css():
+        css_path = Path(__file__).parent / "static" / "landing.css"
+        if css_path.exists():
+            return FileResponse(str(css_path), media_type="text/css")
+        return JSONResponse(status_code=404, content={})
+
+    # Landing page route (optional) - uses site_info adapter if provided
+    @app.get("/", response_class=HTMLResponse)
+    async def landing(request: Request):
+        # Content negotiation: query param 'f' or Accept header
+        f = request.query_params.get("f")
+        accept = request.headers.get("accept", "")
+
+        api = site_info.get_site_info() if site_info is not None else {
+            "title": "Urban Model Platform",
+            "description": "API available at /processes",
+            "routes": [{"path": "/processes", "description": "List available processes"}],
+            "contact": "",
+        }
+
+        # JSON response when requested
+        if f == "json" or ("application/json" in accept and f != "html"):
+            return JSONResponse(api)
+
+        # Build table rows
+        links = api.get("routes", [])
+        table_rows = "".join(
+            f"<tr><td><a href='{r['path']}'>{r['path']}</a></td><td>{r.get('description','')}</td></tr>"
+            for r in links
+        )
+
+        contact = api.get("contact") or {}
+        contact_line = " | ".join(
+            filter(None, [
+                f"<a href='{contact.get('url')}'>{contact.get('name')}</a>" if isinstance(contact, dict) and contact.get('url') else None,
+                f"<a href='mailto:{contact.get('email')}'>{contact.get('email')}</a>" if isinstance(contact, dict) and contact.get('email') else None,
+            ])
+        )
+
+        # Adapter-local style
+        css_href = "/static/style.css"
+
+        context = {
+            "request": request,
+            "title": api.get('title'),
+            "version": "0.0.0",
+            "description": api.get('description'),
+            "contact_line": contact_line,
+            "license_line": "",
+            "terms_of_service": "",
+            "powered_by": "<a href='https://github.com/citysciencelab/urban-model-platform'>urban-model-platform</a>",
+            "css": css_href,
+            "table_rows": table_rows,
+        }
+
+        return templates.TemplateResponse("template.html", context)
 
     # Exception handler for OGC Process exceptions
     @app.exception_handler(OGCProcessException)

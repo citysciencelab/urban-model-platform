@@ -50,6 +50,10 @@ class UmpSettings(BaseSettings):
     UMP_API_SERVER_URL_PREFIX: str = "/"
     # When enabled, replace external links in fetched processes with local API links
     UMP_REWRITE_REMOTE_LINKS: bool = True
+    # Landing page/site metadata
+    UMP_SITE_TITLE: str = "Urban Model Platform"
+    UMP_SITE_DESCRIPTION: str = "An OGC API Processes gateway for urban models."
+    UMP_SITE_CONTACT: str = "maintainers@example.org"
 
     # Gunicorn default timeout is 30 seconds
     UMP_SERVER_TIMEOUT: int = 30

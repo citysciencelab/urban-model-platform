@@ -1,0 +1,7 @@
+body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f6f8fa; color: #333; }
+.header { background: #0b5f8a; color: white; padding: 24px; }
+.container { max-width: 900px; margin: 24px auto; padding: 16px; background: white; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.routes { list-style: none; padding-left: 0; }
+.routes li { margin: 8px 0; }
+.routes a { color: #0b5f8a; text-decoration: none; font-weight: 600; }
+.footer { text-align: center; color: #666; margin: 12px 0; }
