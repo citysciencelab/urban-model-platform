@@ -1,53 +1,61 @@
 # ump/core/managers/process_manager.py
-from ump.core.interfaces.processes import ProcessesPort
-from ump.core.interfaces.providers import ProvidersPort
-from ump.core.interfaces.http_client import HttpClientPort
-from ump.core.models.process import ProcessList, ProcessSummary
-from ump.core.models.link import Link
-from ump.core.utils.link_rewriter import rewrite_links_to_local
-from ump.core.settings import app_settings
-from ump.core.models.providers_config import ProviderConfig
-from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
-from ump.core.managers.process_cache import ProcessListCache
-from ump.core.managers.process_cache import ProcessCache
-
-from ump.core.settings import logger
 import asyncio
 import time
-from typing import List, Callable, Dict, Any
-from ump.core.models.process import Process
-from ump.core.models.ogcp_exception import OGCExceptionResponse
+from typing import Any, Callable, Dict, List
+
 from ump.core.exceptions import OGCProcessException
+from ump.core.interfaces.http_client import HttpClientPort
+from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
+from ump.core.interfaces.processes import ProcessesPort
+from ump.core.interfaces.providers import ProvidersPort
+from ump.core.managers.process_cache import ProcessCache, ProcessListCache
+from ump.core.models.link import Link
+from ump.core.models.ogcp_exception import OGCExceptionResponse
+from ump.core.models.process import Process, ProcessList, ProcessSummary
+from ump.core.models.providers_config import ProviderConfig
+from ump.core.settings import app_settings, logger
+from ump.core.utils.link_rewriter import rewrite_links_to_local
+
 
 class ProcessManager(ProcessesPort):
     def __init__(
-        self, 
+        self,
         provider_config_service: ProvidersPort,
         http_client: HttpClientPort,
         process_id_validator: ProcessIdValidatorPort,
-        cache_expiry_seconds: int = 300
+        cache_expiry_seconds: int = 300,
     ) -> None:
         self.provider_config_service = provider_config_service
         self.http_client = http_client
         self.process_id_validator = process_id_validator
-        self._process_cache = ProcessListCache[ProcessSummary](expiry_seconds=cache_expiry_seconds)
+        self._process_cache = ProcessListCache[ProcessSummary](
+            expiry_seconds=cache_expiry_seconds
+        )
         # cache individual process descriptions by id
-        self._process_cache_by_id = ProcessCache[Process](expiry_seconds=cache_expiry_seconds)
+        self._process_cache_by_id = ProcessCache[Process](
+            expiry_seconds=cache_expiry_seconds
+        )
 
         # A pipeline of handlers (functions) that transform a fetched process dict.
         # Each handler has signature: handler(provider_name: str, proc: Dict[str, Any]) -> Dict[str, Any]
         # Handlers can raise ValueError to indicate the process should be skipped.
-        self._process_handlers: List[Callable[[str, Dict[str, Any]], Dict[str, Any]]] = [
+        self._process_handlers: List[
+            Callable[[str, Dict[str, Any]], Dict[str, Any]]
+        ] = [
             self._handle_process_id,
             self._handle_rewrite_links,
         ]
 
-    def add_process_handler(self, handler: Callable[[str, Dict[str, Any]], Dict[str, Any]]):
+    def add_process_handler(
+        self, handler: Callable[[str, Dict[str, Any]], Dict[str, Any]]
+    ):
         """Register an additional process handler at runtime."""
         self._process_handlers.append(handler)
 
     # --- Default handlers -------------------------------------------------
-    def _handle_process_id(self, provider_name: str, proc: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_process_id(
+        self, provider_name: str, proc: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Enforce and create the canonical process id using the injected validator.
 
         Raises ValueError if the id cannot be created/validated.
@@ -59,11 +67,14 @@ class ProcessManager(ProcessesPort):
         proc["id"] = full_proc_id
         return proc
 
-    def _handle_rewrite_links(self, provider_name: str, proc: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_rewrite_links(
+        self, provider_name: str, proc: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Rewrite remote links to local links if enabled in settings.
         This handler is a no-op if links are missing or rewriting is disabled.
         """
         from ump.core.settings import app_settings
+
         if not app_settings.UMP_REWRITE_REMOTE_LINKS:
             return proc
 
@@ -74,7 +85,10 @@ class ProcessManager(ProcessesPort):
             from ump.core.utils.link_rewriter import rewrite_links_to_local
 
             proc_links = [Link(**l) for l in proc.get("links", [])]
-            proc["links"] = [l.model_dump() for l in rewrite_links_to_local(str(proc.get("id")), proc_links)]
+            proc["links"] = [
+                l.model_dump()
+                for l in rewrite_links_to_local(str(proc.get("id")), proc_links)
+            ]
         except Exception:
             logger.warning(f"Failed to rewrite links for process {proc.get('id')}")
             # leave them empty
@@ -82,7 +96,9 @@ class ProcessManager(ProcessesPort):
 
         return proc
 
-    async def fetch_processes_for_provider(self, provider_name: str) -> List[ProcessSummary]:
+    async def fetch_processes_for_provider(
+        self, provider_name: str
+    ) -> List[ProcessSummary]:
         """
         Fetches the process list for a single provider asynchronously.
         Uses ProcessCache for caching.
@@ -90,20 +106,24 @@ class ProcessManager(ProcessesPort):
         """
         cached_processes = self._process_cache.get(provider_name)
         if cached_processes is not None:
-            logger.info(f"Process list cache hit for provider '{provider_name}': {len(cached_processes)} processes")
+            logger.info(
+                f"Process list cache hit for provider '{provider_name}': {len(cached_processes)} processes"
+            )
             return cached_processes
         else:
             logger.info(f"Process list cache miss for provider '{provider_name}'")
 
-        provider: ProviderConfig = self.provider_config_service.get_provider(provider_name)
+        provider: ProviderConfig = self.provider_config_service.get_provider(
+            provider_name
+        )
         url = str(provider.url).rstrip("/") + "/processes"
-        
+
         try:
             # Fetch process metadata from remote provider
             # Let the HTTP adapter use its internal default timeout when none is provided
             data = await self.http_client.get(url)
             processes = []
-            
+
             for raw_proc in data.get("processes", []):
                 # make a shallow copy so handlers can mutate safely
                 proc: Dict[str, Any] = dict(raw_proc)
@@ -125,14 +145,18 @@ class ProcessManager(ProcessesPort):
                     continue
             # Store in cache
             self._process_cache.set(provider_name, processes)
-            logger.debug(f"Cached {len(processes)} processes for provider '{provider_name}'")
+            logger.debug(
+                f"Cached {len(processes)} processes for provider '{provider_name}'"
+            )
 
             return processes
         except Exception as fetch_error:
             # On error, return cached data if available
             if cached_processes is not None:
                 # Optionally log warning about fallback
-                logger.warning(f"Using cached processes for provider {provider_name} due to error: {fetch_error}")
+                logger.warning(
+                    f"Using cached processes for provider {provider_name} due to error: {fetch_error}"
+                )
                 return cached_processes
             # logger.error(f"Failed to fetch processes for provider {provider_name}: {fetch_error}")
             return []
@@ -181,11 +205,11 @@ class ProcessManager(ProcessesPort):
                     proc = handler(provider_prefix, proc)
                 model = Process(**proc)
                 # cache under canonical id
-                self._process_cache_by_id.set(model.id, model)
-                logger.debug(f"Cached process '{model.id}' in per-process cache")
+                self._process_cache_by_id.set(model.pid, model)
+                logger.debug(f"Cached process '{model.pid}' in per-process cache")
                 # also cache under bare id for convenience (e.g., 'echo')
-                if ":" in model.id:
-                    bare = model.id.split(":", 1)[1]
+                if ":" in model.pid:
+                    bare = model.pid.split(":", 1)[1]
                     self._process_cache_by_id.set(bare, model)
                     logger.debug(f"Also cached process under bare id '{bare}'")
                 return model
@@ -193,7 +217,9 @@ class ProcessManager(ProcessesPort):
                 # re-raise to be handled by the web adapter
                 raise
             except Exception as fetch_error:
-                logger.error(f"Failed to fetch process {process_id} from provider {provider_prefix}: {fetch_error}")
+                logger.error(
+                    f"Failed to fetch process {process_id} from provider {provider_prefix}: {fetch_error}"
+                )
                 raise OGCProcessException(
                     OGCExceptionResponse(
                         type="about:blank",
@@ -207,11 +233,18 @@ class ProcessManager(ProcessesPort):
             # No provider prefix — fall back to searching all providers
             all_procs = await self.get_all_processes()
             for proc_summary in all_procs.processes:
-                if proc_summary.id.endswith(f":{process_id}") or proc_summary.id == process_id:
+                if (
+                    proc_summary.pid.endswith(f":{process_id}")
+                    or proc_summary.pid == process_id
+                ):
                     # Try to fetch full description from provider if link available
                     # Look for a 'self' link or processes/{id} link in summary
-                    provider_prefix, _ = self.process_id_validator.extract(proc_summary.id)
-                    provider = self.provider_config_service.get_provider(provider_prefix)
+                    provider_prefix, _ = self.process_id_validator.extract(
+                        proc_summary.pid
+                    )
+                    provider = self.provider_config_service.get_provider(
+                        provider_prefix
+                    )
                     # attempt to fetch full description
                     url = str(provider.url).rstrip("/") + f"/processes/{process_id}"
                     try:
@@ -220,10 +253,12 @@ class ProcessManager(ProcessesPort):
                         for handler in self._process_handlers:
                             proc = handler(provider_prefix, proc)
                         model = Process(**proc)
-                        self._process_cache_by_id.set(model.id, model)
-                        logger.debug(f"Cached process '{model.id}' in per-process cache")
-                        if ":" in model.id:
-                            bare = model.id.split(":", 1)[1]
+                        self._process_cache_by_id.set(model.pid, model)
+                        logger.debug(
+                            f"Cached process '{model.pid}' in per-process cache"
+                        )
+                        if ":" in model.pid:
+                            bare = model.pid.split(":", 1)[1]
                             self._process_cache_by_id.set(bare, model)
                             logger.debug(f"Also cached process under bare id '{bare}'")
                         return model
@@ -231,15 +266,19 @@ class ProcessManager(ProcessesPort):
                         # If fetching full description fails, but summary has enough data,
                         # construct a Process from the summary (no inputs/outputs)
                         logger.debug(
-                            f"Fetching full description failed for '{proc_summary.id}': {fetch_error} - falling back to summary"
+                            f"Fetching full description failed for '{proc_summary.pid}': {fetch_error} - falling back to summary"
                         )
                         model = Process(**proc_summary.model_dump())
-                        self._process_cache_by_id.set(model.id, model)
-                        logger.debug(f"Cached process '{model.id}' in per-process cache (from summary fallback)")
-                        if ":" in model.id:
-                            bare = model.id.split(":", 1)[1]
+                        self._process_cache_by_id.set(model.pid, model)
+                        logger.debug(
+                            f"Cached process '{model.pid}' in per-process cache (from summary fallback)"
+                        )
+                        if ":" in model.pid:
+                            bare = model.pid.split(":", 1)[1]
                             self._process_cache_by_id.set(bare, model)
-                            logger.debug(f"Also cached process under bare id '{bare}' (from summary fallback)")
+                            logger.debug(
+                                f"Also cached process under bare id '{bare}' (from summary fallback)"
+                            )
                         return model
 
             # Not found
@@ -272,8 +311,13 @@ class ProcessManager(ProcessesPort):
             provider_prefix = None
             raw_id = process_id
             for proc_summary in all_procs.processes:
-                if proc_summary.id.endswith(f":{process_id}") or proc_summary.id == process_id:
-                    provider_prefix, _ = self.process_id_validator.extract(proc_summary.id)
+                if (
+                    proc_summary.pid.endswith(f":{process_id}")
+                    or proc_summary.pid == process_id
+                ):
+                    provider_prefix, _ = self.process_id_validator.extract(
+                        proc_summary.pid
+                    )
                     break
 
         if provider_prefix is None:
@@ -304,14 +348,18 @@ class ProcessManager(ProcessesPort):
             status = resp.get("status") if isinstance(resp, dict) else None
             if status == 202 or (prefer and "respond-async" in (prefer or "")):
                 # For now, return the provider response directly; step 2 will add local job storage
-                logger.info(f"Execution forwarded async for process '{process_id}' to provider '{provider_prefix}'")
+                logger.info(
+                    f"Execution forwarded async for process '{process_id}' to provider '{provider_prefix}'"
+                )
                 return resp
             # Otherwise return the provider's body as-is
             return resp
         except OGCProcessException:
             raise
         except Exception as execution_error:
-            logger.error(f"Failed to execute process {process_id} on provider {provider_prefix}: {execution_error}")
+            logger.error(
+                f"Failed to execute process {process_id} on provider {provider_prefix}: {execution_error}"
+            )
             raise OGCProcessException(
                 OGCExceptionResponse(
                     type="about:blank",
