@@ -81,3 +81,18 @@ async def test_timeout_maps_to_ogc_timeout():
             with pytest.raises(OGCProcessException) as excinfo:
                 await client.get(url)
             assert excinfo.value.response.status == 504
+
+
+@pytest.mark.asyncio
+async def test_post_non_json_returns_text():
+    # When provider returns non-JSON content for a POST, adapter.post should
+    # return a dict with 'body' containing the raw text.
+    url = "http://example.test/processes/echo/execution"
+    with aioresponses() as m:
+        m.post(url, body="<html>ok</html>", status=202, headers={"Content-Type": "text/html"})
+
+        async with AioHttpClientAdapter() as client:
+            resp = await client.post(url, json={})
+            assert isinstance(resp, dict)
+            assert resp.get("status") == 202
+            assert resp.get("body") == "<html>ok</html>"
