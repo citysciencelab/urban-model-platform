@@ -128,17 +128,101 @@ Notes:
 - Link rewriting (controlled by `UMP_REWRITE_REMOTE_LINKS`) still happens inside the manager as a handler in the processing pipeline; it will rewrite remote links into local API links when enabled.
 
 
-#### Feature III: /execution endpoint and Jobs and local Job storage
-- implement remote process execution: async
-- return remote job id in location header in response to POST request
-- implement /jobs route (`JobList`)
-- implement /jobs/job-id route
-- store a local reference of a remote job
+#### Feature III: /execution endpoint and Jobs and local Job storage (STEP 1 status)
 
+Current status (Step 1 - async execution forwarding):
 
-- create a (normalized) database schema for local Jobs and expand pydantic model `Job` to a SQLModel using the SQLModel library
+- The FastAPI route `/processes/{process_id}/execution` exists in `src/ump/adapters/web/fastapi.py` and forwards requests to `app.state.process_port.execute_process(...)`.
+- `ProcessManager.execute_process(...)` is implemented but currently behaves as a simple forwarder: it resolves the provider, calls the injected `HttpClientPort.post(...)`, and returns the provider's response (the adapter POST returns a dict with `status`, `headers`, `body`).
+- The real HTTP adapter `AioHttpClientAdapter` is implemented in `src/ump/adapters/aiohttp_client_adapter.py`. It returns `{status, headers, body}` for POST and maps transport/JSON errors into `OGCProcessException` (502/504/etc.).
 
-- use a migrations system for the database schema
+Recent TDD work and implementation notes (new insights)
+
+- Tests added (TDD-first):
+  - `tests/test_fastapi_execute_async.py` — fast integration-style tests that assert the behavior expected for async execute flows (always create a local job, return HTTP 201 + Location, include a `statusInfo` body when available, follow provider `Location` header when present, handle missing `statusInfo` as a failure, map provider timeouts and transport errors correctly, and resolve relative Location headers against the provider base URL).
+  - `tests/test_aiohttp_adapter.py` — adapter unit tests that confirm JSON responses are parsed, non-JSON bodies are treated as text (mapped to 502 when appropriate), and timeouts map to 504.
+  - `tests/test_fastapi_execute_e2e.py` — full-stack test using the real `AioHttpClientAdapter` with `aioresponses` to mock provider flows and assert the full path from FastAPI -> ProcessManager -> Adapter -> provider.
+  - `tests/test_process_manager.py` — restored unit tests that drive manager behavior using fakes for `HttpClientPort`, `ProvidersPort` and `ProcessIdValidatorPort`.
+
+- Adapter contract clarified (important for core code):
+  - `HttpClientPort.post(url, json=None, timeout: float | None = None, headers: dict | None = None) -> dict`
+    - Returns a dict with keys: `status` (int), `headers` (dict-like), and `body` (parsed JSON when possible, otherwise raw text).
+    - Network/transport errors and JSON parse failures are mapped to `OGCProcessException` with appropriate HTTP-status-like codes (e.g., 502 for bad gateway / non-JSON body where JSON expected, 504 for timeouts). Adapters should be conservative and raise domain exceptions rather than try to apply business logic — business rules belong in core.
+
+- TDD-driven desired `execute_process` behavior (summary):
+  1. Accept an execute request body and headers (including `Prefer: respond-async`/`respond-sync` semantics will be supported later). For Step 1 always treat as async-execute and create a local job.
+  2. Create a local job immediately with a generated local id (UUID), timestamps (created), provider reference, and a snapshot of inputs.
+  3. Forward the request to the provider's `/processes/{remote_id}/execution` endpoint using the injected `HttpClientPort` and the provider-specific timeout (from `ProviderConfig.timeout` when present).
+  4. Inspect the provider response:
+     - If it contains a `statusInfo` JSON body, persist it as the job's current status snapshot.
+     - Else if it contains a `Location` header, resolve the header (handle relative URLs), perform a `GET` on that location (same adapter) to fetch `statusInfo`, and persist it if valid.
+     - Else mark the job as failed and include diagnostic details (provider status, reason) in the job snapshot.
+  5. Persist the job in the local job store (in-memory for Step 1). The store should expose async CRUD methods and be replaceable by a DB-backed adapter later.
+  6. Return HTTP 201 with header `Location: /jobs/{local_job_id}` and body containing the `statusInfo` snapshot (or a minimal failure structure if statusInfo could not be obtained).
+
+- Job model & in-memory store guidance (Step 1):
+  - Create a `Job` Pydantic model in `src/ump/core/models/job.py` with fields: `id` (local uuid str), `provider` (provider name or url), `remote_job_id` (optional), `status` (string/status code), `status_info` (JSON/dict), `inputs` (JSON), `created`, `started`, `finished`, `updated` timestamps, and `links` list (for job result links).
+  - Provide a thin `StatusInfo` Pydantic model that mirrors the OGC `statusInfo` schema (jobID, status, type, progress, created/updated timestamps, links).
+  - Implement `src/ump/core/interfaces/job_repository.py` as a port with async methods: `create(job: Job) -> Job`, `get(job_id: str) -> Job | None`, `update(job: Job) -> Job`, `list(provider: str | None) -> list[Job]`, and `mark_failed(job_id: str, reason: str) -> Job`.
+  - Provide `src/ump/adapters/job_repository_inmemory.py` implementing the port with an asyncio.Lock for concurrency and an in-memory dict mapping local job id -> Job objects.
+
+- JobManager responsibilities (core orchestration):
+  - Provide `create_and_forward(process_id, inputs, headers) -> (job: Job, response_status, response_headers, response_body)` which encapsulates the lifecycle described above: create job, forward to provider, follow Location if required, update job snapshot and persist.
+  - Expose small helpers: `fetch_remote_status(location, provider)` (uses `HttpClientPort.get` and handles relative resolution) and `merge_status_info(existing: dict, remote: dict) -> dict` (shallow merge/overwrite semantics; domain rules may be extended in Step 2).
+  - Keep all business rules in core; adapters only implement persistence and network I/O.
+
+- Error handling & mapping notes:
+  - If the provider returns non-JSON and we expected `statusInfo` JSON, treat this as a gateway error for the purposes of the job snapshot (record provider response text and set job status to `failed` with details) but do not crash the web adapter: the endpoint should still create a local job and return 201 with a failure/pending statusInfo body.
+  - Timeouts from adapters should be surfaced as `OGCProcessException` with status 504 so JobManager can mark the job as failed with a clear diagnostic message.
+
+Immediate actionable checklist (mirrors TODO and TDD priorities):
+- [ ] Add `src/ump/core/models/job.py` (Pydantic `Job` + `StatusInfo`).
+- [ ] Add `src/ump/core/interfaces/job_repository.py` port.
+- [ ] Implement `src/ump/adapters/job_repository_inmemory.py`.
+- [ ] Add `src/ump/core/managers/job_manager.py` implementing `create_and_forward` and helpers to follow `Location`.
+- [ ] Wire `ProcessManager.execute_process` to call `JobManager.create_and_forward` and return HTTP 201 + Location.
+- [ ] Add `/jobs` + `/jobs/{id}` routes to the web adapter for Step 1 (read-only stack against in-memory repo).
+
+What is NOT implemented yet for Step 1 (short):
+
+- Local job creation/storage: there is no job model or any in-memory/persistent store yet. For Step 1 we should add a lightweight in-memory job store (replaceable by DB in Step 2).
+- Execute flow: the manager must be extended to always create a local job, populate a statusInfo snapshot, follow provider `Location` headers when necessary to fetch job status, and return HTTP 201 with Location header pointing to the local job plus the statusInfo body.
+- Validation: request body validation against the OGC `execute` schema is not enforced yet.
+
+Brief notes about tests already added (TDD):
+
+- Lightweight FastAPI integration tests: `tests/test_fastapi_execute_async.py` — TDD-style tests that cover the expected behaviors around async execute handling (forwarding valid statusInfo, following `Location`, handling missing statusInfo, provider errors/timeouts, always creating a local job, resolving relative Location headers). These tests currently express the desired behavior and will drive implementation.
+- Adapter tests: `tests/test_aiohttp_adapter.py` — unit-level tests for `AioHttpClientAdapter` (JSON parsing, non-JSON -> 502, timeouts -> 504, POST text fallback).
+- Full-stack E2E test: `tests/test_fastapi_execute_e2e.py` — uses the real `AioHttpClientAdapter` together with `aioresponses` to mock provider responses and verify the full call path from FastAPI -> ProcessManager -> Adapter -> provider.
+- ProcessManager unit tests: `tests/test_process_manager.py` — earlier unit tests using a fake HTTP client exist to exercise manager logic in isolation.
+
+Recommended next actions (for the next coding assistant):
+
+1. Add a minimal `Job` model and an in-memory job store in core (e.g., `src/ump/core/models/job.py` and `src/ump/core/managers/job_store.py`). Keep the store replaceable by a DB-backed adapter later.
+2. Extend `ProcessManager.execute_process` to implement the async execute flow:
+  - Create a local job immediately (uuid, timestamps, provider ref, inputs).
+  - Call `http_client.post(...)` to forward execution.
+  - If the provider response includes a JSON body conforming to statusInfo, use it to populate the local job status snapshot.
+  - Else if the provider response has a `Location` header, resolve relative locations against the provider base URL and `http_client.get(location)` to fetch the statusInfo; use it if valid.
+  - Else mark the job as failed and include diagnostic details.
+  - Persist the job in the in-memory store and return HTTP 201 with `Location: /jobs/{local_id}` and the job's statusInfo body.
+3. Implement lightweight validation of incoming execute request bodies (Pydantic or jsonschema) and return 400 on invalid input (no job created).
+4. Run the newly added TDD tests (lightweight FastAPI tests and adapter/E2E tests) and iterate until they pass. Use `aioresponses` for adapter/E2E mocks.
+5. Keep the adapter conservative: it should supply raw `status/headers/body` and map transport errors to `OGCProcessException`; business rules (statusInfo merging, job lifecycle) belong to `ProcessManager`.
+
+Pointers for the assistant taking over the task:
+
+- FastAPI route: `src/ump/adapters/web/fastapi.py` — where `execute_process` is wired.
+- Core manager: `src/ump/core/managers/process_manager.py` — extend `execute_process` to implement job creation, Location-following and statusInfo population.
+- HTTP adapter: `src/ump/adapters/aiohttp_client_adapter.py` — the adapter contract (returns dict) that `ProcessManager` relies on.
+- Tests to run: `tests/test_fastapi_execute_async.py`, `tests/test_fastapi_execute_e2e.py`, `tests/test_aiohttp_adapter.py`, `tests/test_process_manager.py`.
+
+Quick prioritized checklist (for the next session):
+- [ ] Create `Job` model + in-memory job store.
+- [ ] Implement extended `execute_process` flow in `ProcessManager`.
+- [ ] Validate execute request bodies and return 400 on invalid input.
+- [ ] Update FastAPI route to return 201 + Location for async executes.
+- [ ] Run adapter, lightweight, and E2E tests and make code changes until green.
 
 ```yaml
 #JobControlOptions.yaml
