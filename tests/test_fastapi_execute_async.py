@@ -9,7 +9,7 @@ from ump.core.interfaces.providers import ProvidersPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.models.providers_config import ProviderConfig
 
-# these test are for testing fastapi adapter routes 
+# these tests are for testing fastapi adapter routes 
 # and Processmanager logic (integration tests)
 
 class FakeProvider:
@@ -59,6 +59,7 @@ class FakeProcessIdValidator(ProcessIdValidatorPort):
 
 
 class FakeHttpClient(HttpClientPort):
+    # mocks a client adapter implementation (we don't test the adapter here)
     def __init__(self, post_response: Dict[str, Any]):
         # post_response is the dict the adapter should return for POST
         self._post_response = post_response
@@ -112,7 +113,12 @@ def test_forward_valid_statusinfo():
 
 
 class MultiFakeHttpClient(HttpClientPort):
-    """Fake HTTP client supporting both GET and POST mappings."""
+    """Fake HTTP client supporting both GET and POST mappings.
+    We do not want to test the adapter here, just simulate
+    provider responses for the ProcessManager logic tests.
+    The mappings ensure that specific URLs return predefined
+    responses for GET and POST requests.
+    """
 
     def __init__(self, get_responses: Dict[str, Any] | None = None, post_responses: Dict[Tuple[str, str], Any] | None = None):
         self._get = get_responses or {}
