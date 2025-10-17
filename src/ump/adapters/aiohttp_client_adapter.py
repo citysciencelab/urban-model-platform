@@ -75,7 +75,9 @@ class AioHttpClientAdapter(HttpClientPort):
                 try:
                     # Attempt to parse JSON from the response
                     response_data = await response.json()
-                except (aiohttp.ContentTypeError, json.JSONDecodeError, ValueError) as json_error:
+                except (
+                    aiohttp.ContentTypeError, json.JSONDecodeError, ValueError
+                ) as json_error:
                     # Response isn't JSON; log a snippet and raise domain error
                     response_text = await response.text()
                     logger.error(
