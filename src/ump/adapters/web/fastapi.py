@@ -203,6 +203,11 @@ def create_app(
 
         resp = await app.state.process_port.execute_process(process_id, body, headers)
 
+        # need to return location header to client when async execute
+            # locate job id from provider response header
+            # translate into this servers url
+            # return to client
+
         # If the backend returned structured dict with status/headers/body, map to response
         if isinstance(resp, dict) and "status" in resp:
             status = resp.get("status")
