@@ -1,10 +1,10 @@
 from enum import Enum
+from typing import Any, Dict, List, Optional, Union
+
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
-from typing import List, Dict, Optional, Any, Union
 
-
-from ump.core.models.link import Link
 from ump.core.models.additional_parameter import AdditionalParameter
+from ump.core.models.link import Link
 
 
 class ProcessJobControlOptions(str, Enum):
@@ -12,13 +12,16 @@ class ProcessJobControlOptions(str, Enum):
     ASYNC_EXECUTE = "async-execute"
     DISMISS = "dismiss"
 
+
 class ProcessOutputTransmission(str, Enum):
     VALUE = "value"
     REFERENCE = "reference"
 
+
 class ResponseType(str, Enum):
     RAW = "raw"
     DOCUMENT = "document"
+
 
 class Schema(BaseModel):
     type: Optional[str] = None
@@ -55,10 +58,12 @@ class ProcessInput(BaseModel):
         exclude_none = True
         populate_by_name = True
 
+
 class Metadata(BaseModel):
     title: str
     role: str
     href: str
+
 
 class ProcessOutput(BaseModel):
     title: str
@@ -71,6 +76,7 @@ class ProcessOutput(BaseModel):
         populate_by_name=True,
     )
 
+
 class DescriptionType(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -78,8 +84,9 @@ class DescriptionType(BaseModel):
     metadata: Optional[List[Metadata]] = None
     additionalParameters: Optional[AdditionalParameter] = None
 
+
 class ProcessSummary(DescriptionType):
-    id: str
+    pid: str = Field(alias="id")
     version: str
     jobControlOptions: List[ProcessJobControlOptions]
     outputTransmission: List[ProcessOutputTransmission]
@@ -90,11 +97,12 @@ class ProcessSummary(DescriptionType):
         exclude_none = True
         populate_by_name = True
 
+
 class Process(ProcessSummary):
     inputs: Optional[Dict[str, ProcessInput]] = None
     outputs: Optional[Dict[str, ProcessOutput]] = None
 
+
 class ProcessList(BaseModel):
     processes: List[ProcessSummary]
     links: Optional[List[Link]] = None
-
