@@ -21,4 +21,9 @@
     "ruff.importStrategy": "fromEnvironment",
     "black-formatter.importStrategy": "fromEnvironment",
     "python.analysis.typeCheckingMode": "basic",
+    "python.testing.pytestArgs": [
+        "."
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
 }
