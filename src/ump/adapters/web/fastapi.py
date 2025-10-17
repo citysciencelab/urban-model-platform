@@ -169,13 +169,20 @@ def create_app(
             }
         )
 
-    @app.get("/processes", response_model=ProcessList, response_model_exclude_none=True)
+    @app.get(
+            "/processes", response_model=ProcessList,
+            response_model_exclude_none=True, response_model_by_alias=True
+    )
     async def get_all_processes():
         process_list = await app.state.process_port.get_all_processes()
         return process_list
 
 
-    @app.get("/processes/{process_id}", response_model=Process, response_model_exclude_none=True)
+    @app.get(
+            "/processes/{process_id}", response_model=Process,
+            response_model_exclude_none=True,
+            response_model_by_alias=True
+    )
     async def get_process(process_id: str):
         process = await app.state.process_port.get_process(process_id)
         return process
