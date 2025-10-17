@@ -59,7 +59,8 @@ class SimpleValidator(ProcessIdValidatorPort):
 
 @pytest.mark.asyncio
 async def test_e2e_forward_statusinfo_with_real_adapter():
-    # this is an e2e test that uses the real AioHttpClientAdapter to
+    # this is an e2e test that test the routes, uses the real AioHttpClientAdapter
+    # and ProcessManager to
     # forward a process execution request to a mocked provider endpoint
     # and returns the provider's statusInfo response as-is to the client
     provider = SimpleProvider(name="infra", url="http://provider.local/")
