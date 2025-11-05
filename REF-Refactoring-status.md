@@ -139,49 +139,113 @@ Current status (Step 1 - async execution forwarding):
 Recent TDD work and implementation notes (new insights)
 
 - Tests added (TDD-first):
-  - `tests/test_fastapi_execute_async.py` — fast integration-style tests that assert the behavior expected for async execute flows (always create a local job, return HTTP 201 + Location, include a `statusInfo` body when available, follow provider `Location` header when present, handle missing `statusInfo` as a failure, map provider timeouts and transport errors correctly, and resolve relative Location headers against the provider base URL).
-  - `tests/test_aiohttp_adapter.py` — adapter unit tests that confirm JSON responses are parsed, non-JSON bodies are treated as text (mapped to 502 when appropriate), and timeouts map to 504.
-  - `tests/test_fastapi_execute_e2e.py` — full-stack test using the real `AioHttpClientAdapter` with `aioresponses` to mock provider flows and assert the full path from FastAPI -> ProcessManager -> Adapter -> provider.
-  - `tests/test_process_manager.py` — restored unit tests that drive manager behavior using fakes for `HttpClientPort`, `ProvidersPort` and `ProcessIdValidatorPort`.
+  - `tests/test_fastapi_execute_async.py` — lightweight FastAPI-focused tests describing the desired async execute semantics (always create a local job, return HTTP 201 + Location, forward statusInfo, follow provider `Location` header if needed, handle missing statusInfo as failure, map provider timeouts and transport errors, resolve relative Location headers).
+  - `tests/test_aiohttp_adapter.py` — adapter unit tests covering JSON parsing, non-JSON responses, and timeout/error mappings.
+  - `tests/test_fastapi_execute_e2e.py` — full-stack E2E test using the real `AioHttpClientAdapter` with `aioresponses` to mock provider flows.
+  - `tests/test_process_manager.py` — unit tests for `ProcessManager` using precise fakes for ports.
 
 - Adapter contract clarified (important for core code):
   - `HttpClientPort.post(url, json=None, timeout: float | None = None, headers: dict | None = None) -> dict`
     - Returns a dict with keys: `status` (int), `headers` (dict-like), and `body` (parsed JSON when possible, otherwise raw text).
-    - Network/transport errors and JSON parse failures are mapped to `OGCProcessException` with appropriate HTTP-status-like codes (e.g., 502 for bad gateway / non-JSON body where JSON expected, 504 for timeouts). Adapters should be conservative and raise domain exceptions rather than try to apply business logic — business rules belong in core.
+    - Network/transport errors and JSON parse failures are mapped to `OGCProcessException` with appropriate status codes (e.g., 502, 504). Adapters must be conservative; business rules remain in core.
 
-- TDD-driven desired `execute_process` behavior (summary):
-  1. Accept an execute request body and headers (including `Prefer: respond-async`/`respond-sync` semantics will be supported later). For Step 1 always treat as async-execute and create a local job.
-  2. Create a local job immediately with a generated local id (UUID), timestamps (created), provider reference, and a snapshot of inputs.
-  3. Forward the request to the provider's `/processes/{remote_id}/execution` endpoint using the injected `HttpClientPort` and the provider-specific timeout (from `ProviderConfig.timeout` when present).
-  4. Inspect the provider response:
-     - If it contains a `statusInfo` JSON body, persist it as the job's current status snapshot.
-     - Else if it contains a `Location` header, resolve the header (handle relative URLs), perform a `GET` on that location (same adapter) to fetch `statusInfo`, and persist it if valid.
-     - Else mark the job as failed and include diagnostic details (provider status, reason) in the job snapshot.
-  5. Persist the job in the local job store (in-memory for Step 1). The store should expose async CRUD methods and be replaceable by a DB-backed adapter later.
-  6. Return HTTP 201 with header `Location: /jobs/{local_job_id}` and body containing the `statusInfo` snapshot (or a minimal failure structure if statusInfo could not be obtained).
+- JobManager proposal (new core component)
+  - Introduce a `JobManager` in core to own job lifecycle concerns: job creation, remote execution forwarding, Location-following for provider-side job resources, merging/persisting `statusInfo` snapshots, and exposing job query/update operations.
+  - `JobManager` depends on `HttpClientPort`, `ProvidersPort`, `ProcessIdValidatorPort`, and a `JobRepositoryPort` (persistence).
+  - Keep `ProcessManager` focused on process discovery/description and delegate execute-related orchestration to `JobManager`.
 
-- Job model & in-memory store guidance (Step 1):
-  - Create a `Job` Pydantic model in `src/ump/core/models/job.py` with fields: `id` (local uuid str), `provider` (provider name or url), `remote_job_id` (optional), `status` (string/status code), `status_info` (JSON/dict), `inputs` (JSON), `created`, `started`, `finished`, `updated` timestamps, and `links` list (for job result links).
-  - Provide a thin `StatusInfo` Pydantic model that mirrors the OGC `statusInfo` schema (jobID, status, type, progress, created/updated timestamps, links).
-  - Implement `src/ump/core/interfaces/job_repository.py` as a port with async methods: `create(job: Job) -> Job`, `get(job_id: str) -> Job | None`, `update(job: Job) -> Job`, `list(provider: str | None) -> list[Job]`, and `mark_failed(job_id: str, reason: str) -> Job`.
-  - Provide `src/ump/adapters/job_repository_inmemory.py` implementing the port with an asyncio.Lock for concurrency and an in-memory dict mapping local job id -> Job objects.
+- Persistence & JobRepository port
+  - Add `src/ump/core/interfaces/job_repository.py` (async CRUD API) and an in-memory adapter `src/ump/adapters/job_repository_inmemory.py` for Step 1.
+  - JobRepository must be swap-able with a SQLModel-backed adapter in Step 2.
 
-- JobManager responsibilities (core orchestration):
-  - Provide `create_and_forward(process_id, inputs, headers) -> (job: Job, response_status, response_headers, response_body)` which encapsulates the lifecycle described above: create job, forward to provider, follow Location if required, update job snapshot and persist.
-  - Expose small helpers: `fetch_remote_status(location, provider)` (uses `HttpClientPort.get` and handles relative resolution) and `merge_status_info(existing: dict, remote: dict) -> dict` (shallow merge/overwrite semantics; domain rules may be extended in Step 2).
-  - Keep all business rules in core; adapters only implement persistence and network I/O.
+- Job model & statusInfo handling
+  - Add a Pydantic `Job` model in `src/ump/core/models/job.py` and a thin `StatusInfo` model mirroring OGC's `statusInfo`.
+  - Important rule: DO NOT embed `inputs` or `inputs_url` inside the OGC `statusInfo` payload. The OGC `statusInfo` must remain schema-compliant. Store inputs separately on the `Job` model and expose them via a dedicated endpoint (e.g., `GET /jobs/{id}/inputs`) or a presigned/object-storage URL.
+  - Minimal `Job` fields for Step 1: `id` (UUID), `process_id`, `provider`, `remote_job_id` (opt), `status` (normalized string), `status_info` (dict), `inputs` (opt, inline only for small payloads), `created/started/updated/finished` timestamps, and `links` list.
 
-- Error handling & mapping notes:
-  - If the provider returns non-JSON and we expected `statusInfo` JSON, treat this as a gateway error for the purposes of the job snapshot (record provider response text and set job status to `failed` with details) but do not crash the web adapter: the endpoint should still create a local job and return 201 with a failure/pending statusInfo body.
-  - Timeouts from adapters should be surfaced as `OGCProcessException` with status 504 so JobManager can mark the job as failed with a clear diagnostic message.
+- Inputs handling & large payloads
+  - For Step 1 keep tests/simple: inline small inputs and store metadata (size/checksum).
+  - For production (Step 2) adopt object-storage for large inputs: keep `inputs_storage`, `inputs_url`, `inputs_checksum`, `inputs_size` on the `Job` row and do not return large blobs inside `statusInfo`.
+  - Provide a presigned-upload / presigned-download flow and a secure `GET /jobs/{id}/inputs` endpoint for retrieving inputs (authorization required).
+
+- Desired execute_process behavior (TDD summary)
+  1. Validate execute request body (basic schema check) and treat `Prefer: respond-async` as async (Step 1 always async).
+  2. Create a local job immediately (UUID, timestamps, provider ref, inputs metadata).
+  3. Forward the execute POST to provider using `HttpClientPort.post(...)`.
+  4. Inspect provider response:
+     - If a valid `statusInfo` JSON body is returned, persist it as job snapshot.
+     - Else if a `Location` header is present, resolve (support relative Location) and `GET` that location for `statusInfo` — persist if valid.
+     - Else mark job as `failed` and record diagnostic details (provider status/text).
+  5. Persist job using `JobRepository` and return HTTP 201 with `Location: /jobs/{local_job_id}` and body containing the job's `statusInfo` snapshot (even when failed).
+  6. Map adapter timeouts/errors into job failure snapshots (do not crash the endpoint).
+
+- Testing guidance (TDD -> implementation)
+  - Unit tests: JobManager with InMemoryJobRepository + fake HttpClientPort for all cases (statusInfo, Location-follow, missing statusInfo, non-JSON, timeouts).
+  - Adapter tests: `AioHttpClientAdapter` with `aioresponses` (JSON vs non-JSON vs timeout behavior).
+  - FastAPI lightweight tests: use a fake HttpClientPort to exercise FastAPI route + JobManager logic quickly.
+  - Full-stack E2E: create app wiring with real `AioHttpClientAdapter` + `aioresponses` for end-to-end verification.
+
+
+Event sourcing, CQRS, and job history: design decision
+
+- For now, we will not implement full CQRS or event sourcing. Instead, we will:
+  - Implement a CRUD JobRepository with an append-only `job_statuses` (history) table (A: hybrid approach).
+  - Optionally add an `append_event(job_event)` primitive to the JobRepositoryPort (B: event log for future migration/testing).
+  - This gives us: fast reads, simple writes, a full audit trail, and replayability for most needs, with minimal complexity.
+  - If/when we need advanced projections, replay, or scaling, we can migrate to CQRS + Event Sourcing later.
+
+Rationale:
+- CRUD + history table is simple, testable, and covers most audit/replay needs.
+- CQRS + event sourcing is powerful but adds significant complexity and infra cost; only migrate if you need advanced projections, strict event audit, or heavy read/write scaling.
 
 Immediate actionable checklist (mirrors TODO and TDD priorities):
 - [ ] Add `src/ump/core/models/job.py` (Pydantic `Job` + `StatusInfo`).
-- [ ] Add `src/ump/core/interfaces/job_repository.py` port.
+- [ ] Add `src/ump/core/interfaces/job_repository.py` (async port).
 - [ ] Implement `src/ump/adapters/job_repository_inmemory.py`.
 - [ ] Add `src/ump/core/managers/job_manager.py` implementing `create_and_forward` and helpers to follow `Location`.
 - [ ] Wire `ProcessManager.execute_process` to call `JobManager.create_and_forward` and return HTTP 201 + Location.
-- [ ] Add `/jobs` + `/jobs/{id}` routes to the web adapter for Step 1 (read-only stack against in-memory repo).
+- [ ] Add `/jobs` + `/jobs/{id}` and `GET /jobs/{id}/inputs` routes to the web adapter (Step 1 read-only against in-memory repo).
+- [ ] Add job_statuses history table and repository methods (A: hybrid approach).
+- [ ] Optionally add append_event(job_event) to JobRepositoryPort and in-memory event log (B: event log for future migration/testing).
+- [ ] Add tests asserting that `statusInfo` responses never include inputs or inputs_url (OGC schema compliance).
+
+Minimal DDD guidance (commands, events, aggregates) — lightweight, incremental
+
+To make the Job lifecycle easier to test, evolve, and (later) migrate to CQRS/Event Sourcing, introduce a small, optional DDD scaffolding that remains lightweight for Step 1:
+
+- Concepts to add (minimal):
+  - Commands: immutable intent objects used by the `JobManager` to express actions, e.g. `CreateJobCommand`, `ForwardExecutionCommand`, `FetchRemoteStatusCommand`.
+  - Domain Events: immutable facts emitted when something meaningful happens, e.g. `JobCreated`, `JobForwarded`, `JobStatusUpdated`, `JobFailed`.
+  - Aggregate: `JobAggregate` encapsulates in-memory domain logic and invariant checks. It receives Commands (or Events) and returns Events; it does not perform IO.
+  - Event append primitive: `JobRepository.append_event(event, expected_version=None)` for persisting events to an in-memory list or events table.
+
+- How these pieces fit together (runtime flow):
+  1. API / ProcessManager creates a `CreateJobCommand` and passes it to `JobManager`.
+ 2. `JobManager` constructs or loads a `JobAggregate` and invokes `handle_command(cmd)` to get a list of DomainEvents.
+ 3. `JobManager` persists events via `JobRepository.append_event(...)` and updates the snapshot (`JobRepository.update(...)`).
+ 4. `JobManager` forwards the execution to the provider using `HttpClientPort`, maps provider responses to events (e.g., `JobForwarded`, `JobStatusUpdated`, `JobFailed`), persists them, and updates job snapshot.
+ 5. Optionally dispatch events on an in-memory bus for side-effects (projections, webhooks).
+
+- Benefits (practical):
+  - Testability: unit tests can exercise `JobAggregate` pure logic without IO.
+  - Evolution: you capture discrete facts for replay/projection in the future without flipping the architecture.
+  - Minimal cost: dataclasses + a few helper methods; keep Phase 1 in-memory to avoid infra overhead.
+
+- Minimal files to add (small footprint):
+  - `src/ump/core/commands.py` — small dataclasses for the command shapes.
+  - `src/ump/core/events.py` — dataclasses for domain events.
+  - `src/ump/core/aggregates/job_aggregate.py` — `JobAggregate` with pure `handle_command` and `apply_event` methods.
+  - update `src/ump/core/interfaces/job_repository.py` to include `append_event(event, expected_version: int | None = None)`.
+  - `src/ump/adapters/job_repository_inmemory.py` — implement `append_event` alongside CRUD methods.
+
+- Tests to add (TDD):
+  - `tests/unit/test_job_aggregate.py` — aggregate specs (command -> events -> state transitions).
+  - `tests/unit/test_job_manager_events.py` — JobManager integration with in-memory repo and fake HttpClient.
+
+Keep these optional: if you prefer to delay, we can add only the event-append signature on the port so tests can emit events later. Otherwise I can scaffold the lightweight DDD pieces now.
+Notes:
+- Keep adapters conservative: they provide raw response shape and map transport/IO errors to domain exceptions. Business logic (statusInfo merging, job lifecycle) belongs in core.
+- For Step 1 use an in-memory job store; prepare SQLModel schema and migration plan for Step 2 (hybrid approach with JSONB + history table recommended).
 
 What is NOT implemented yet for Step 1 (short):
 
