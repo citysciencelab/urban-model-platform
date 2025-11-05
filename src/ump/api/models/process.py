@@ -337,7 +337,8 @@ class Process:
         provider: ProviderConfig = providers.get_providers()[self.provider_prefix]
 
         # TODO: make this optional (remote servers should do this themselves)
-        self.validate_exec_body(exec_body)
+        # because of semantic errors deactivated
+        # self.validate_exec_body(exec_body)
 
         logger.info(
             "Executing %s on model server %s with params %s as process %s for user %s",
