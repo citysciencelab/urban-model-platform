@@ -206,85 +206,85 @@ class Process:
             for key in process_details:
                 setattr(self, key, process_details[key])
 
-    def validate_exec_body(self, parameters):
-        if not self.inputs:
-            return
+    # def validate_exec_body(self, parameters):
+    #     if not self.inputs:
+    #         return
 
-        for input in self.inputs:
-            try:
-                if not "schema" in self.inputs[input]:
-                    continue
+    #     for input in self.inputs:
+    #         try:
+    #             if not "schema" in self.inputs[input]:
+    #                 continue
 
-                parameter_metadata = self.inputs[input]
-                schema = parameter_metadata["schema"]
+    #             parameter_metadata = self.inputs[input]
+    #             schema = parameter_metadata["schema"]
 
-                if not input in parameters["inputs"]:
-                    if self.is_required(parameter_metadata):
-                        raise InvalidUsage(
-                            f"Parameter {input} is required",
-                            payload={"parameter_description": parameter_metadata},
-                        )
-                    else:
-                        logger.warning(
-                            "Model execution %s started without parameter %s.",
-                            self.process_id_with_prefix,
-                            input,
-                        )
-                        continue
+    #             if not input in parameters["inputs"]:
+    #                 if self.is_required(parameter_metadata):
+    #                     raise InvalidUsage(
+    #                         f"Parameter {input} is required",
+    #                         payload={"parameter_description": parameter_metadata},
+    #                     )
+    #                 else:
+    #                     logger.warning(
+    #                         "Model execution %s started without parameter %s.",
+    #                         self.process_id_with_prefix,
+    #                         input,
+    #                     )
+    #                     continue
 
-                param = parameters["inputs"][input]
+    #             param = parameters["inputs"][input]
 
-                if "minimum" in schema:
-                    assert param >= schema["minimum"]
+    #             if "minimum" in schema:
+    #                 assert param >= schema["minimum"]
 
-                if "maximum" in schema:
-                    assert param <= schema["maximum"]
+    #             if "maximum" in schema:
+    #                 assert param <= schema["maximum"]
 
-                if "type" in schema:
-                    if schema["type"] == "number":
-                        assert (
-                            type(param) == int
-                            or type(param) == float
-                            or type(param) == complex
-                        )
+    #             if "type" in schema:
+    #                 if schema["type"] == "number":
+    #                     assert (
+    #                         type(param) == int
+    #                         or type(param) == float
+    #                         or type(param) == complex
+    #                     )
 
-                    if schema["type"] == "string":
-                        assert type(param) == str
+    #                 if schema["type"] == "string":
+    #                     assert type(param) == str
 
-                        if "maxLength" in schema:
-                            assert len(param) <= schema["maxLength"]
+    #                     if "maxLength" in schema:
+    #                         assert len(param) <= schema["maxLength"]
 
-                        if "minLength" in schema:
-                            assert len(param) >= schema["minLength"]
+    #                     if "minLength" in schema:
+    #                         assert len(param) >= schema["minLength"]
 
-                    if schema["type"] == "array":
-                        assert type(param) == list
-                        if (
-                            "items" in schema
-                            and "type" in schema["items"]
-                            and schema["items"]["type"] == "string"
-                        ):
-                            for item in param:
-                                assert type(item) == str
-                        if schema["items"]["type"] == "number":
-                            for item in param:
-                                assert (
-                                    type(item) == int
-                                    or type(item) == float
-                                    or type(item) == complex
-                                )
-                        if "uniqueItems" in schema and schema["uniqueItems"]:
-                            assert len(param) == len(set(param))
-                        if "minItems" in schema:
-                            assert len(param) >= schema["minItems"]
+    #                 if schema["type"] == "array":
+    #                     assert type(param) == list
+    #                     if (
+    #                         "items" in schema
+    #                         and "type" in schema["items"]
+    #                         and schema["items"]["type"] == "string"
+    #                     ):
+    #                         for item in param:
+    #                             assert type(item) == str
+    #                     if schema["items"]["type"] == "number":
+    #                         for item in param:
+    #                             assert (
+    #                                 type(item) == int
+    #                                 or type(item) == float
+    #                                 or type(item) == complex
+    #                             )
+    #                     if "uniqueItems" in schema and schema["uniqueItems"]:
+    #                         assert len(param) == len(set(param))
+    #                     if "minItems" in schema:
+    #                         assert len(param) >= schema["minItems"]
 
-                if "pattern" in schema:
-                    assert re.search(schema["pattern"], param)
+    #             if "pattern" in schema:
+    #                 assert re.search(schema["pattern"], param)
 
-            except AssertionError as exc:
-                raise InvalidUsage(
-                    f"Invalid parameter {input} = {param}: does not match mandatory schema {schema}"
-                ) from exc
+    #         except AssertionError as exc:
+    #             raise InvalidUsage(
+    #                 f"Invalid parameter {input} = {param}: does not match mandatory schema {schema}"
+    #             ) from exc
 
     def is_required(self, parameter_metadata):
         if "required" in parameter_metadata:
