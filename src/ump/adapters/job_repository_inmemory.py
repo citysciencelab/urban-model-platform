@@ -76,7 +76,7 @@ class InMemoryJobRepository(JobRepositoryPort):
             # construct a statusInfo snapshot indicating failure
             status_info = JobStatusInfo(
                 jobID=job.id,
-                status=StatusCode(code="failed"),
+                status=StatusCode.failed,
                 message=reason,
                 updated=datetime.now(timezone.utc),
                 created=job.created,

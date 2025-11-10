@@ -1,12 +1,15 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
-from typing import Literal
+from typing import List, Optional, Literal
 from datetime import datetime, timezone
-
+from enum import StrEnum
 from ump.core.models.link import Link
 
-class StatusCode(BaseModel):
-    code: str  # Details je nach statusCode.yaml
+class StatusCode(StrEnum):
+    accepted = "accepted"  # Details je nach statusCode.yaml
+    failed = "failed"
+    running = "running"
+    successful = "successful"
+    dismissed = "dismissed"
 
 class JobStatusInfo(BaseModel):
     jobID: str
@@ -33,10 +36,10 @@ class Job(BaseModel):
     - `status_info` mirrors the latest `JobStatusInfo` snapshot; it MUST NOT contain inputs.
     - Inputs are stored separately (either inline for small payloads or via `inputs_url`).
     - OGC `statusInfo` schema does not define inputs, so we keep them off the DTO.
-        - Timestamps: only local `created` and `updated` are kept here. Remote lifecycle
-            timestamps (started, finished) remain inside `status_info` to avoid redundancy.
-        - `status` duplicates `status_info.status.code` for quick querying/indexing.
-        - Helper accessors (`started_at`, `finished_at`) expose remote timestamps if present.
+    - Timestamps: only local `created` and `updated` are kept here. Remote lifecycle
+      timestamps (started, finished) remain inside `status_info` to avoid redundancy.
+    - `status` duplicates the status code (string) for quick querying/indexing.
+    - Helper accessors (`started_at`, `finished_at`) expose remote timestamps if present.
     """
 
     id: str  # local UUID
@@ -56,8 +59,8 @@ class Job(BaseModel):
 
     # Local timestamps (UTC). Remote started/finished live in status_info.
     created: datetime = Field(
-        default_factory=datetime.now,
-        description="Local creation timestamp (UTC)"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Local creation timestamp (UTC)",
     )
     updated: Optional[datetime] = Field(default=None, description="Local last update timestamp (UTC)")
 
@@ -75,8 +78,9 @@ class Job(BaseModel):
     def apply_status_info(self, info: JobStatusInfo) -> None:
         """Merge latest statusInfo snapshot and keep denormalized status field in sync."""
         self.status_info = info
-        if info and info.status and info.status.code:
-            self.status = info.status.code
+        if info and info.status:
+            # StatusCode is a StrEnum subclass of str; assign directly
+            self.status = str(info.status)
         self.touch()
 
     # Convenience accessors for remote lifecycle timestamps (from status_info)
