@@ -13,6 +13,8 @@ from ump.core.interfaces.site_info import SiteInfoPort
 from ump.core.interfaces.providers import ProvidersPort
 from ump.core.exceptions import OGCProcessException
 from ump.core.managers.process_manager import ProcessManager
+from ump.core.managers.job_manager import JobManager
+from ump.adapters.job_repository_inmemory import InMemoryJobRepository
 from fastapi.responses import HTMLResponse, FileResponse
 from ump.core.settings import app_settings
 from ump.core.models.process import ProcessList, Process
@@ -35,12 +37,28 @@ def create_app(
         nonlocal process_port
 
         async with http_client as client:
+            job_repo = InMemoryJobRepository()
             process_port = ProcessManager(
-                provider_config_service, client,
-                process_id_validator=process_id_validator
+                provider_config_service,
+                client,
+                process_id_validator=process_id_validator,
+                job_repository=job_repo,
             )
+            # attach JobManager
+            job_manager = JobManager(
+                providers=provider_config_service,
+                http_client=client,
+                process_id_validator=process_id_validator,
+                job_repo=job_repo,
+            )
+            process_port.attach_job_manager(job_manager)
             app.state.process_port = process_port
-            yield
+            try:
+                yield
+            finally:
+                # graceful shutdown of polling tasks
+                if hasattr(job_manager, "shutdown"):
+                    await job_manager.shutdown()
     
     app = FastAPI(lifespan=lifespan)
 
@@ -210,9 +228,15 @@ def create_app(
 
         # If the backend returned structured dict with status/headers/body, map to response
         if isinstance(resp, dict) and "status" in resp:
-            status = resp.get("status")
-            content = resp.get("body")
-            return JSONResponse(status_code=status or 200, content=content or {})
+            status = resp.get("status") or 200
+            content = resp.get("body") or {}
+            location = None
+            if isinstance(resp.get("headers"), dict):
+                location = resp["headers"].get("Location")
+            response = JSONResponse(status_code=status, content=content)
+            if location:
+                response.headers["Location"] = location
+            return response
 
         # Otherwise return generic JSON
         return JSONResponse(status_code=200, content=resp or {})
