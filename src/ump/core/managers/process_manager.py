@@ -9,6 +9,8 @@ from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.interfaces.processes import ProcessesPort
 from ump.core.interfaces.providers import ProvidersPort
 from ump.core.managers.process_cache import ProcessCache, ProcessListCache
+from ump.core.managers.job_manager import JobManager
+from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.models.link import Link
 from ump.core.models.ogcp_exception import OGCExceptionResponse
 from ump.core.models.process import Process, ProcessList, ProcessSummary
@@ -23,11 +25,13 @@ class ProcessManager(ProcessesPort):
         provider_config_service: ProvidersPort,
         http_client: HttpClientPort,
         process_id_validator: ProcessIdValidatorPort,
+        job_repository: JobRepositoryPort | None = None,
         cache_expiry_seconds: int = 300,
     ) -> None:
         self.provider_config_service = provider_config_service
         self.http_client = http_client
         self.process_id_validator = process_id_validator
+        self.job_repository = job_repository
         self._process_cache = ProcessListCache[ProcessSummary](
             expiry_seconds=cache_expiry_seconds
         )
@@ -36,7 +40,7 @@ class ProcessManager(ProcessesPort):
             expiry_seconds=cache_expiry_seconds
         )
 
-        # A pipeline of handlers (functions) that transform a fetched process dict.
+    # A pipeline of handlers (functions) that transform a fetched process dict.
         # Each handler has signature: handler(provider_name: str, proc: Dict[str, Any]) -> Dict[str, Any]
         # Handlers can raise ValueError to indicate the process should be skipped.
         self._process_handlers: List[
@@ -297,75 +301,19 @@ class ProcessManager(ProcessesPort):
         await self.http_client.close()
 
     async def execute_process(self, process_id: str, body: dict, headers: dict) -> dict:
-        """
-        Execute a process by forwarding the request to the appropriate provider.
-        Honors the Prefer header for async execution semantics. Returns a dict
-        with the provider response payload or a local representation for async.
-        """
-        # Determine provider prefix if present
-        try:
-            provider_prefix, raw_id = self.process_id_validator.extract(process_id)
-        except ValueError:
-            # No prefix provided: try to resolve by searching summaries
-            all_procs = await self.get_all_processes()
-            provider_prefix = None
-            raw_id = process_id
-            for proc_summary in all_procs.processes:
-                if (
-                    proc_summary.pid.endswith(f":{process_id}")
-                    or proc_summary.pid == process_id
-                ):
-                    provider_prefix, _ = self.process_id_validator.extract(
-                        proc_summary.pid
-                    )
-                    break
-
-        if provider_prefix is None:
+        """Delegate execution to JobManager (always async semantics Step 1)."""
+        if not hasattr(self, "_job_manager") or self._job_manager is None:
             raise OGCProcessException(
                 OGCExceptionResponse(
                     type="about:blank",
-                    title="Not Found",
-                    status=404,
-                    detail=f"Process '{process_id}' not found",
+                    title="Server Error",
+                    status=500,
+                    detail="JobManager not configured",
                     instance=None,
                 )
             )
+        return await self._job_manager.create_and_forward(process_id, body or {}, headers)
 
-        provider = self.provider_config_service.get_provider(provider_prefix)
-        url = str(provider.url).rstrip("/") + f"/processes/{raw_id}/execution"
+    def attach_job_manager(self, job_manager: JobManager) -> None:
+        self._job_manager = job_manager
 
-        # Respect Prefer header (e.g., 'respond-async') — forward as-is to provider
-        prefer = headers.get("prefer") or headers.get("Prefer")
-        forward_headers = {}
-        if prefer:
-            forward_headers["Prefer"] = prefer
-
-        try:
-            # Forward the execution request (adapter will apply its default timeout)
-            resp = await self.http_client.post(url, json=body, headers=forward_headers)
-            # The adapter returns a dict with 'status','headers','body'
-            # If the provider returned 202 (accepted) for async, we can construct a local job reference
-            status = resp.get("status") if isinstance(resp, dict) else None
-            if status == 202 or (prefer and "respond-async" in (prefer or "")):
-                # For now, return the provider response directly; step 2 will add local job storage
-                logger.info(
-                    f"Execution forwarded async for process '{process_id}' to provider '{provider_prefix}'"
-                )
-                return resp
-            # Otherwise return the provider's body as-is
-            return resp
-        except OGCProcessException:
-            raise
-        except Exception as execution_error:
-            logger.error(
-                f"Failed to execute process {process_id} on provider {provider_prefix}: {execution_error}"
-            )
-            raise OGCProcessException(
-                OGCExceptionResponse(
-                    type="about:blank",
-                    title="Upstream Error",
-                    status=502,
-                    detail=f"Could not execute process {process_id} on provider {provider_prefix}",
-                    instance=None,
-                )
-            )
