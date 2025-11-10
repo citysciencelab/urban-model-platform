@@ -46,6 +46,7 @@ class Job(BaseModel):
     process_id: Optional[str] = None
     provider: Optional[str] = None  # provider name or identifier
     remote_job_id: Optional[str] = None  # upstream job id if provider manages jobs
+    remote_status_url: Optional[str] = None  # absolute URL to poll for remote statusInfo
 
     status: Optional[str] = None  # normalized status string (e.g., accepted, running, successful, failed)
     status_info: Optional[JobStatusInfo] = None
@@ -89,4 +90,9 @@ class Job(BaseModel):
 
     def finished_at(self) -> Optional[datetime]:  # pragma: no cover - simple accessor
         return self.status_info.finished if self.status_info else None
+
+    def is_in_terminal_state(self) -> bool:  # pragma: no cover - simple logic
+        if not self.status_info or not self.status_info.status:
+            return False
+        return self.status_info.status in {StatusCode.successful, StatusCode.failed, StatusCode.dismissed}
 
