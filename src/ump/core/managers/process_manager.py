@@ -47,6 +47,12 @@ class ProcessManager(ProcessesPort):
             Callable[[str, Dict[str, Any]], Dict[str, Any]]
         ] = [
             self._handle_process_id,
+            # Fill in spec-required defaults if upstream omits optional-but-expected
+            # sections we rely on (lenient mode). This must run early so later
+            # handlers can assume presence.
+            self._handle_fill_defaults,
+            # Remove / ignore malformed metadata entries so validation doesn't fail.
+            self._handle_sanitize_metadata,
             self._handle_rewrite_links,
         ]
 
@@ -77,7 +83,6 @@ class ProcessManager(ProcessesPort):
         """Rewrite remote links to local links if enabled in settings.
         This handler is a no-op if links are missing or rewriting is disabled.
         """
-        from ump.core.settings import app_settings
 
         if not app_settings.UMP_REWRITE_REMOTE_LINKS:
             return proc
@@ -100,13 +105,124 @@ class ProcessManager(ProcessesPort):
 
         return proc
 
+    def _handle_fill_defaults(
+        self, provider_name: str, proc: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Leniently accept partially non-spec processes by synthesizing
+        reasonable defaults. We NEVER drop a process solely because fields like
+        links, version or jobControlOptions are missing – upstream catalogs are
+        often sparse.
+
+        Rules:
+        - version: default to "0.0.0" if missing
+        - jobControlOptions: default to ["sync-execute", "async-execute"] (common superset)
+        - outputTransmission: default to ["value"]
+        - links: if missing/empty insert a minimal 'self' placeholder; will later be
+          rewritten if link rewriting enabled. We insert the canonical id after
+          the id handler has run (hence this handler is placed after _handle_process_id).
+        - keywords: ensure list type
+        - metadata: ensure list type
+        """
+        # version
+        proc.setdefault("version", "0.0.0")
+
+        # jobControlOptions
+        jco = proc.get("jobControlOptions")
+        if not isinstance(jco, list) or not jco:
+            proc["jobControlOptions"] = ["sync-execute", "async-execute"]
+
+        # outputTransmission
+        ot = proc.get("outputTransmission")
+        if not isinstance(ot, list) or not ot:
+            proc["outputTransmission"] = ["value"]
+
+        # links
+        links = proc.get("links")
+        if not isinstance(links, list) or not links:
+            # minimal placeholder; may be rewritten later; rel 'self' conventional
+            proc["links"] = [
+                {
+                    "href": f"/processes/{proc.get('id', '')}",
+                    "rel": "self",
+                    "type": "application/json",
+                    "title": proc.get("title") or proc.get("id", "process"),
+                }
+            ]
+
+        # keywords / metadata normalization to lists
+        if "keywords" in proc and not isinstance(proc["keywords"], list):
+            proc["keywords"] = [proc["keywords"]]
+        if "metadata" in proc and not isinstance(proc["metadata"], list):
+            proc["metadata"] = [proc["metadata"]]
+
+        return proc
+
+    def _handle_sanitize_metadata(
+        self, provider_name: str, proc: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Drop malformed metadata entries (missing required keys) instead of failing.
+
+        Upstream catalogs sometimes place arbitrary provenance dicts into `metadata`.
+        Our `Metadata` model expects: title, role, href. If an entry lacks any of
+        these keys we silently drop it and log once per process (debug level) with
+        a count of removed entries. If after filtering nothing remains we remove
+        the metadata key entirely so Pydantic treats it as absent.
+
+        We apply the same logic to output metadata (each item in `outputs`).
+        """
+        removed_count = 0
+        # Process-level metadata
+        if isinstance(proc.get("metadata"), list):
+            valid_meta: List[Dict[str, Any]] = []
+            for m in proc["metadata"]:
+                if not isinstance(m, dict):
+                    removed_count += 1
+                    continue
+                if not all(k in m for k in ("title", "role", "href")):
+                    removed_count += 1
+                    continue
+                valid_meta.append(m)
+            if valid_meta:
+                proc["metadata"] = valid_meta
+            else:
+                proc.pop("metadata", None)
+        # Outputs metadata (if detailed description already fetched)
+        if isinstance(proc.get("outputs"), dict):
+            for out_id, out_def in list(proc["outputs"].items()):
+                meta_list = out_def.get("metadata")
+                if isinstance(meta_list, list):
+                    valid_out_meta: List[Dict[str, Any]] = []
+                    for m in meta_list:
+                        if not isinstance(m, dict):
+                            removed_count += 1
+                            continue
+                        if not all(k in m for k in ("title", "role", "href")):
+                            removed_count += 1
+                            continue
+                        valid_out_meta.append(m)
+                    if valid_out_meta:
+                        out_def["metadata"] = valid_out_meta
+                    else:
+                        # Delete malformed metadata entirely
+                        out_def.pop("metadata", None)
+        if removed_count:
+            logger.debug(
+                f"Sanitized metadata for process '{proc.get('id')}' from provider '{provider_name}': removed {removed_count} malformed entries"
+            )
+        return proc
+
     async def fetch_processes_for_provider(
         self, provider_name: str
     ) -> List[ProcessSummary]:
-        """
-        Fetches the process list for a single provider asynchronously.
-        Uses ProcessCache for caching.
-        Returns a list of Process objects for that provider.
+        """Fetch the process list for a single provider.
+
+        Selection rules:
+        - Only processes explicitly listed in `providers.yaml` (respecting `exclude=True`) are exposed.
+        - Remote processes not configured are ignored (future option `mirror_all_processes` could relax this).
+        - Provides curated visibility and avoids surfacing experimental upstream processes accidentally.
+        - If UMP_PER_PROCESS_FETCH is true we bypass the bulk list endpoint and fetch
+          each configured process individually to obtain richer metadata when list
+          responses are sparse.
         """
         cached_processes = self._process_cache.get(provider_name)
         if cached_processes is not None:
@@ -120,50 +236,68 @@ class ProcessManager(ProcessesPort):
         provider: ProviderConfig = self.provider_config_service.get_provider(
             provider_name
         )
-        url = str(provider.url).rstrip("/") + "/processes"
+        # build set of explicitly configured ids (excluding those marked exclude)
+        configured = self.provider_config_service.get_provider(provider_name).processes
+        configured_ids = {p.id for p in configured if not getattr(p, "exclude", False)}
 
-        try:
-            # Fetch process metadata from remote provider
-            # Let the HTTP adapter use its internal default timeout when none is provided
-            data = await self.http_client.get(url)
-            processes = []
+        processes: List[ProcessSummary] = []
 
-            for raw_proc in data.get("processes", []):
-                # make a shallow copy so handlers can mutate safely
-                proc: Dict[str, Any] = dict(raw_proc)
+        if app_settings.UMP_PER_PROCESS_FETCH:
+            # Fetch each configured process individually
+            for cid in configured_ids:
+                raw_id = cid.split(":", 1)[1] if ":" in cid else cid
+                per_url = str(provider.url).rstrip("/") + f"/processes/{raw_id}"
                 try:
-                    # Run the registered handler pipeline. Handlers may raise
-                    # ValueError to indicate the process should be skipped.
+                    data = await self.http_client.get(per_url)
+                    proc = dict(data)
+                    # handlers will rewrite id -> canonical provider-prefixed id
                     for handler in self._process_handlers:
                         proc = handler(provider_name, proc)
-
                     processes.append(ProcessSummary(**proc))
-                except ValueError:
-                    # Handler indicated to skip this process (e.g. invalid id)
-                    continue
-                except Exception as handler_error:
-                    # Log unexpected handler errors and skip the process
+                except Exception as e:
                     logger.warning(
-                        f"Error processing fetched process for provider {provider_name}: {handler_error}"
+                        f"Failed per-process fetch for '{cid}' from provider '{provider_name}': {e}"
                     )
                     continue
-            # Store in cache
-            self._process_cache.set(provider_name, processes)
-            logger.debug(
-                f"Cached {len(processes)} processes for provider '{provider_name}'"
-            )
+        else:
+            # Bulk list followed by filtering
+            list_url = str(provider.url).rstrip("/") + "/processes"
+            try:
+                data = await self.http_client.get(list_url)
+                remote_list = data.get("processes", [])
+            except Exception as fetch_error:
+                if cached_processes is not None:
+                    logger.warning(
+                        f"Using cached processes for provider {provider_name} due to error fetching list: {fetch_error}"
+                    )
+                    return cached_processes
+                return []
 
-            return processes
-        except Exception as fetch_error:
-            # On error, return cached data if available
-            if cached_processes is not None:
-                # Optionally log warning about fallback
-                logger.warning(
-                    f"Using cached processes for provider {provider_name} due to error: {fetch_error}"
-                )
-                return cached_processes
-            # logger.error(f"Failed to fetch processes for provider {provider_name}: {fetch_error}")
-            return []
+            for raw_proc in remote_list:
+                raw_id = raw_proc.get("id")
+                if raw_id is None or raw_id not in configured_ids:
+                    continue
+                proc: Dict[str, Any] = dict(raw_proc)
+                try:
+                    for handler in self._process_handlers:
+                        proc = handler(provider_name, proc)
+                    processes.append(ProcessSummary(**proc))
+                except ValueError as e:
+                    logger.warning(
+                        f"Skipping process '{raw_id}' due to handler ValueError: {e}"
+                    )
+                    continue
+                except Exception as handler_error:
+                    logger.warning(
+                        f"Error processing configured process '{raw_id}' for provider {provider_name}: {handler_error}"
+                    )
+                    continue
+
+        self._process_cache.set(provider_name, processes)
+        logger.debug(
+            f"Cached {len(processes)} configured processes for provider '{provider_name}' (strategy={'per-process' if app_settings.UMP_PER_PROCESS_FETCH else 'bulk-list'})"
+        )
+        return processes
 
     async def get_all_processes(self) -> ProcessList:
         """
