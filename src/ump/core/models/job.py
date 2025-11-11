@@ -45,8 +45,16 @@ class Job(BaseModel):
     id: str  # local UUID
     process_id: Optional[str] = None
     provider: Optional[str] = None  # provider name or identifier
-    remote_job_id: Optional[str] = None  # upstream job id if provider manages jobs
+    remote_job_id: Optional[str] = None  # upstream job id if provider manages jobs (can differ from local UUID)
     remote_status_url: Optional[str] = None  # absolute URL to poll for remote statusInfo
+    # ID separation rationale:
+    # - We generate a local UUID (`id`) for stability, uniqueness across multiple providers, and to allow
+    #   retries or multi-step orchestration without exposing upstream internals.
+    # - Providers may use numeric counters, short hashes, or opaque strings; these become `remote_job_id`.
+    # - The public API route `/jobs/{id}` always uses the local UUID to avoid collisions and leaking provider semantics.
+    # - We store the remote id and status URL for correlation, debugging, and polling, but never depend on them
+    #   for persistence keys. This enables potential future features like re-binding a local job to a new
+    #   remote attempt while keeping the external identifier stable.
 
     status: Optional[str] = None  # normalized status string (e.g., accepted, running, successful, failed)
     status_info: Optional[JobStatusInfo] = None
