@@ -1,5 +1,6 @@
 # ump/adapters/web/fastapi.py
 from contextlib import asynccontextmanager
+from typing import Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,7 +15,6 @@ from ump.core.interfaces.providers import ProvidersPort
 from ump.core.exceptions import OGCProcessException
 from ump.core.managers.process_manager import ProcessManager
 from ump.core.managers.job_manager import JobManager
-from ump.adapters.job_repository_inmemory import InMemoryJobRepository
 from fastapi.responses import HTMLResponse, FileResponse
 from ump.core.settings import app_settings
 from ump.core.models.process import ProcessList, Process
@@ -26,42 +26,35 @@ from pydantic import ValidationError
 # it does not need to implement a port/interface itself
 # it just uses the interface of the core (ProcessesPort)
 def create_app(
-    provider_config_service: ProvidersPort,
+    process_manager_factory: Callable[[HttpClientPort], ProcessManager],
     http_client: HttpClientPort,
-    process_id_validator: ProcessIdValidatorPort,
+    job_manager_factory: Callable[[HttpClientPort, ProcessManager], JobManager],
     site_info: SiteInfoPort | None = None,
 ):
-    # must not be injected directly, because it needs to be created in the lifespan
+    """Create the FastAPI app.
+
+    Adapters and concrete infrastructure (logging, repositories, providers) are
+    assembled outside and passed as factories. This keeps the web adapter focused
+    purely on HTTP concerns and lifecycle orchestration.
+    """
     process_port: ProcessesPort | None = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         nonlocal process_port
-
         async with http_client as client:
-            job_repo = InMemoryJobRepository()
-            process_port = ProcessManager(
-                provider_config_service,
-                client,
-                process_id_validator=process_id_validator,
-                job_repository=job_repo,
-            )
-            # attach JobManager
-            job_manager = JobManager(
-                providers=provider_config_service,
-                http_client=client,
-                process_id_validator=process_id_validator,
-                job_repo=job_repo,
-            )
-            process_port.attach_job_manager(job_manager)
+            process_port = process_manager_factory(client)
+            job_manager = job_manager_factory(client, process_port)  # already wired externally
+            # Safe attach: ProcessManager defines attach_job_manager; guard via hasattr
+            if hasattr(process_port, "attach_job_manager"):
+                getattr(process_port, "attach_job_manager")(job_manager)
             app.state.process_port = process_port
             try:
                 yield
             finally:
-                # graceful shutdown of polling tasks
                 if hasattr(job_manager, "shutdown"):
                     await job_manager.shutdown()
-    
+
     app = FastAPI(lifespan=lifespan)
 
     # Helper: create a versioned sub-app that mounts the same handlers but with its own openapi URL
