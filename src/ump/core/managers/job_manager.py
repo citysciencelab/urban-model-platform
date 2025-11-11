@@ -7,23 +7,23 @@ Step 1 implementation:
  - Updates Job.status_info and persists snapshot via JobRepository.
  - Returns (job, status_info) where status_info is the latest snapshot (may be failure fallback).
 """
+
 from __future__ import annotations
 
-import uuid
 import asyncio
-from typing import Any, Dict, Optional, Set
+import uuid
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional, Set
 from urllib.parse import urljoin
 
+from ump.core.exceptions import OGCProcessException
 from ump.core.interfaces.http_client import HttpClientPort
+from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.interfaces.providers import ProvidersPort
-from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.models.job import Job, JobStatusInfo, StatusCode
-from ump.core.exceptions import OGCProcessException
 from ump.core.models.ogcp_exception import OGCExceptionResponse
-from ump.core.settings import logger, app_settings
-
+from ump.core.settings import app_settings, logger
 
 REQUIRED_STATUS_FIELDS = {"jobID", "status", "type"}
 
@@ -40,7 +40,9 @@ class JobManager:
         self._http = http_client
         self._validator = process_id_validator
         self._repo = job_repo
-        self._poll_interval = getattr(app_settings, "UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL", 5)
+        self._poll_interval = getattr(
+            app_settings, "UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL", 5
+        )
         self._poll_tasks: Set[asyncio.Task] = set()
         self._shutdown = False
 
@@ -64,7 +66,13 @@ class JobManager:
             provider=provider_prefix,
             status=str(StatusCode.accepted),
             inputs=inputs if inputs and self._is_inline_small(inputs) else None,
-            inputs_storage="inline" if inputs and self._is_inline_small(inputs) else "object" if inputs else "inline",
+            inputs_storage=(
+                "inline"
+                if inputs and self._is_inline_small(inputs)
+                else "object"
+                if inputs
+                else "inline"
+            ),
         )
 
         # initial status snapshot (accepted)
@@ -78,34 +86,48 @@ class JobManager:
             message=None,
             progress=0,
         )
+
         job.apply_status_info(accepted_si)
+
+        # store job
         await self._repo.create(job)
         await self._repo.append_status(job.id, accepted_si)
 
+        # Forward execute request to provider
         prefer = headers.get("Prefer") or headers.get("prefer")
         forward_headers = {}
         if prefer:
             forward_headers["Prefer"] = prefer
 
-        exec_url = str(provider.url).rstrip("/") + f"/processes/{raw_id}/execution"
+        exec_url = f"{str(provider.url).rstrip('/')}/processes/{raw_id}/execution"
         try:
-            provider_resp = await self._http.post(exec_url, json=inputs or {}, headers=forward_headers)
+            provider_resp = await self._http.post(
+                exec_url, json=inputs or {}, headers=forward_headers
+            )
         except OGCProcessException as exc:
             # mark job failed and return failure snapshot
-            await self._repo.mark_failed(job.id, reason=exc.response.title, diagnostic=exc.response.detail)
+            await self._repo.mark_failed(
+                job.id, reason=exc.response.title, diagnostic=exc.response.detail
+            )
             failed_job = await self._repo.get(job.id)
             return {
                 "status": 201,
                 "headers": {"Location": f"/jobs/{job_id}"},
-                "body": failed_job.status_info.model_dump() if failed_job and failed_job.status_info else {},
+                "body": failed_job.status_info.model_dump()
+                if failed_job and failed_job.status_info
+                else {},
             }
         except Exception as exc:
-            await self._repo.mark_failed(job.id, reason="Upstream Error", diagnostic=str(exc))
+            await self._repo.mark_failed(
+                job.id, reason="Upstream Error", diagnostic=str(exc)
+            )
             failed_job = await self._repo.get(job.id)
             return {
                 "status": 201,
                 "headers": {"Location": f"/jobs/{job_id}"},
-                "body": failed_job.status_info.model_dump() if failed_job and failed_job.status_info else {},
+                "body": failed_job.status_info.model_dump()
+                if failed_job and failed_job.status_info
+                else {},
             }
 
         # Parse provider response
@@ -126,7 +148,9 @@ class JobManager:
                 follow_resp = await self._http.get(resolved)
                 status_info = self._extract_status_info(follow_resp)
             except Exception as follow_err:
-                logger.warning(f"Failed to follow provider Location {location}: {follow_err}")
+                logger.warning(
+                    f"Failed to follow provider Location {location}: {follow_err}"
+                )
 
         if not status_info:
             # create failure snapshot if provider did not supply valid statusInfo
@@ -140,7 +164,9 @@ class JobManager:
                 created=accepted_si.created,
                 progress=None,
             )
-            job.diagnostic = f"provider_status={provider_status} body_type={type(provider_body).__name__}"
+            job.diagnostic = (
+                f"provider_status={provider_status} body_type={type(provider_body).__name__}"
+            )
         else:
             # Ensure jobID consistency; capture remote job ID if different
             if status_info.jobID and status_info.jobID != job.id:
