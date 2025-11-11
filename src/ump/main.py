@@ -1,14 +1,18 @@
 # main.py
 import os
 
+import uvicorn
 from ump.adapters.aiohttp_client_adapter import AioHttpClientAdapter
 from ump.adapters.colon_process_id_validator import ColonProcessId
-import uvicorn
-
 from ump.adapters.provider_config_file_adapter import ProviderConfigFileAdapter
-from ump.adapters.web.fastapi import create_app
-from ump.core.settings import logger
 from ump.adapters.site_info_static_adapter import StaticSiteInfoAdapter
+from ump.adapters.job_repository_inmemory import InMemoryJobRepository
+from ump.adapters.logging_adapter import LoggingAdapter
+from ump.adapters.web.fastapi import create_app
+from ump.core.managers.process_manager import ProcessManager
+from ump.core.managers.job_manager import JobManager
+from ump.core.settings import set_logger, app_settings
+
 
 # main lives at the outermost layer (not in core)
 # Instantiates all the concrete adapters
@@ -19,20 +23,38 @@ def main():
     config_path = os.path.join(os.path.dirname(__file__), "../../providers.yaml")
     config_path = os.path.abspath(config_path)
 
-    provider_config_adapter = ProviderConfigFileAdapter(config_path)
-    provider_config_adapter.start_file_watcher()
-
-    logger.info("Starting UMP FastAPI application...")
-    
-    # Create app with lifespan that manages the http client
-    # injecting necessary dependencies
-    # Static site info adapter provides landing page metadata
+    # Instantiate infrastructure adapters
+    providers_port = ProviderConfigFileAdapter(config_path)
+    providers_port.start_file_watcher()
+    http_client = AioHttpClientAdapter()
+    process_id_validator = ColonProcessId()
+    job_repo = InMemoryJobRepository()
     site_info_adapter = StaticSiteInfoAdapter()
 
+    # Inject logging adapter (decoupled from core)
+    set_logger(LoggingAdapter("UMP", app_settings.UMP_LOG_LEVEL))
+
+    # Factories passed to web adapter keep composition here
+    def process_manager_factory(client):
+        return ProcessManager(
+            providers_port,
+            client,
+            process_id_validator=process_id_validator,
+            job_repository=job_repo,
+        )
+
+    def job_manager_factory(client, process_manager):
+        return JobManager(
+            providers=providers_port,
+            http_client=client,
+            process_id_validator=process_id_validator,
+            job_repo=job_repo,
+        )
+
     app = create_app(
-        provider_config_adapter,
-        AioHttpClientAdapter(),
-        ColonProcessId(),
+        process_manager_factory=process_manager_factory,
+        http_client=http_client,
+        job_manager_factory=job_manager_factory,
         site_info=site_info_adapter,
     )
 
