@@ -106,26 +106,79 @@ services:
     networks:
       - dev
 
-  modelserver:
-    image: ${CONTAINER_REGISTRY}/${IMAGE_NAME}/example_ogcapi_processes:main
-    build:
-      context: ./modelserver_example
-      dockerfile: Dockerfile
+  noise-v4-api:
+    image: lgvanalytics.azurecr.io/noiseprocesses:v4.0.5custom-coefficients-1.2.5
+    restart: "unless-stopped"
     environment:
-      PYGEOAPI_CONFIG: /home/pythonuser/pygeoapi-config.yaml
-      PYGEOAPI_OPENAPI: /home/pythonuser/pygeoapi-openapi.yaml
-      PYGEOAPI_SERVER_HOST: ${PYGEOAPI_SERVER_HOST}
-      PYGEOAPI_SERVER_PORT_INTERNAL: ${PYGEOAPI_SERVER_PORT_INTERNAL}
-      PYGEOAPI_SERVER_PORT_EXTERNAL: ${PYGEOAPI_SERVER_PORT_EXTERNAL}
+      FP_CELERY_BROKER_DB: '0'
+      FP_CELERY_BROKER_HOST: "noise-v4-redis"
+      FP_CELERY_BROKER_PORT: '6379'
+      NP_JAVA_LIB_DIR: "/app/dist/lib"
+      NP_LOG_LEVEL: DEBUG
+
+      FP_RESULTS_CACHE_TTL_DAYS: '365'
+      FP_RESULT_CACHE_DB: '1'
+      FP_RESULT_CACHE_HOST: "noise-v4-redis"
+      FP_RESULT_CACHE_PORT: '6379'
+
+      FP_API_TITLE: "Noise calculation - OGC API Processes"
+      FP_API_DESCRIPTION: "An OGC API Processes implementation for noise calculations."
+
+      FP_CELERY_TASK_TLIMIT_HARD: 1800
+      FP_CELERY_TASK_TLIMIT_SOFT: 1500
+      FP_RESULTS_TEMP_TTL_HOURS: 24
+
+      FP_JOB_STATUS_TTL_DAYS: 365
+      FP_SYNC_EXECUTION_TIMEOUT_SECONDS: 10
+      FP_LOG_LEVEL: "DEBUG"
+
+      NP_JAVA_MAX_HEAP_SIZE: 2048
+      NP_JAVA_INITIAL_HEAP_SIZE: 1024
+      NP_DATABASE_IN_MEMORY: True
+    command: ['uvicorn', 'app:app', '--host', '0.0.0.0', '--port', '8000', "--log-level", "debug"]
     ports:
-      - ${PYGEOAPI_SERVER_PORT_EXTERNAL}:${PYGEOAPI_SERVER_PORT_INTERNAL}
-    command: [
-      '/bin/bash', '-c',
-      'pygeoapi openapi generate /home/pythonuser/pygeoapi-config.yaml --output-file /home/pythonuser/pygeoapi-openapi.yaml && pygeoapi serve --flask'
-    ]
+      - 8001:8000
     networks:
       - dev
+
+  noise-v4-worker:
+    image: lgvanalytics.azurecr.io/noiseprocesses:v4.0.5custom-coefficients-1.2.5
+    restart: "unless-stopped"
+    environment:
+      FP_RESULT_CACHE_DB: '1'
+      FP_RESULT_CACHE_HOST: "noise-v4-redis"
+      FP_RESULT_CACHE_PORT: '6379'
+      FP_RESULTS_CACHE_TTL_DAYS: 365
       
+      NP_JAVA_LIB_DIR: "/app/dist/lib"
+      
+      NP_JAVA_MAX_HEAP_SIZE: 2048
+      NP_JAVA_INITIAL_HEAP_SIZE: 1024
+      NP_DATABASE_IN_MEMORY: True
+
+      FP_CELERY_BROKER_HOST: "noise-v4-redis"
+      FP_CELERY_BROKER_PORT: 6379
+      FP_CELERY_BROKER_DB: 0
+      FP_CELERY_TASK_TLIMIT_HARD: 1800 # 22 Minutes
+      FP_CELERY_TASK_TLIMIT_SOFT: 1200 # 20 Minutes
+
+      FP_JOB_STATUS_TTL_DAYS: 365
+
+    # ports:
+    #   - ${WEBAPP_PORT_CONTAINER}:${WEBAPP_PORT}
+    command: ['celery', '-A', 'fastprocesses.worker.celery_app', 'worker', '--loglevel=debug']
+    networks:
+      - dev
+
+  noise-v4-redis:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.27.1
+    # expose: 
+    #   - ${REDIS_PORT}
+    restart: "unless-stopped"
+    command: dragonfly --requirepass "" # --appendonly yes
+    networks:
+      - dev
+
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
     ports: 
