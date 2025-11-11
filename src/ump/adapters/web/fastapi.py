@@ -18,6 +18,8 @@ from ump.adapters.job_repository_inmemory import InMemoryJobRepository
 from fastapi.responses import HTMLResponse, FileResponse
 from ump.core.settings import app_settings
 from ump.core.models.process import ProcessList, Process
+from ump.core.models.execute_request import ExecuteRequest, InlineOrRef
+from pydantic import ValidationError
 
 # Note: this a driver adapter, so it depends on the core interface (ProcessesPort)
 # but the core does not depend on this adapter
@@ -207,11 +209,47 @@ def create_app(
 
     @app.post("/processes/{process_id}/execution")
     async def execute_process(request: Request, process_id: str):
-        # Read JSON body (execution parameters) and forward relevant headers
+        # Parse and validate execute request body against ExecuteRequest model.
         try:
-            body = await request.json()
+            raw = await request.json()
         except Exception:
-            body = None
+            raw = {}
+
+        # Allow clients to send simplified inputs like {"inputs":{"a":1}} without wrapping in InlineOrRef
+        def coerce_inline(value):
+            # If already an InlineOrRef instance
+            if isinstance(value, InlineOrRef):
+                return value
+            
+            # Dict with explicit value or href fields
+            if isinstance(value, dict) and ("value" in value or "href" in value):
+                return InlineOrRef(
+                    value=value.get("value"),
+                    href=value.get("href"),
+                    format=value.get("format"),
+                )
+            
+            # Primitive scalar -> inline value
+            if not isinstance(value, (list, tuple, dict)):
+                return InlineOrRef(value=value, href=None, format=None)
+            
+            # Unsupported complex dict without required keys -> treat whole dict as value
+            if isinstance(value, dict):
+                return InlineOrRef(value=value, href=None, format=None)
+            return value
+
+        if isinstance(raw, dict) and "inputs" in raw and isinstance(raw["inputs"], dict):
+            coerced_inputs = {}
+            for k, v in raw["inputs"].items():
+                if isinstance(v, list):
+                    coerced_inputs[k] = [coerce_inline(item) for item in v]
+                else:
+                    coerced_inputs[k] = coerce_inline(v)
+            raw["inputs"] = coerced_inputs
+        try:
+            exec_req = ExecuteRequest(**raw)
+        except ValidationError as ve:
+            return JSONResponse(status_code=400, content={"type":"about:blank","title":"Invalid Execute Request","detail":ve.errors()})
 
         # Collect headers of interest (Prefer) and forward the rest if needed
         headers = {}
@@ -219,7 +257,9 @@ def create_app(
         if prefer:
             headers["Prefer"] = prefer
 
-        resp = await app.state.process_port.execute_process(process_id, body, headers)
+        provider_payload = exec_req.as_provider_payload()
+        # We pass only normalized input values (provider_payload['inputs']) to JobManager for storage.
+        resp = await app.state.process_port.execute_process(process_id, provider_payload.get("inputs", {}), headers)
 
         # need to return location header to client when async execute
             # locate job id from provider response header
