@@ -128,62 +128,73 @@ Notes:
 - Link rewriting (controlled by `UMP_REWRITE_REMOTE_LINKS`) still happens inside the manager as a handler in the processing pipeline; it will rewrite remote links into local API links when enabled.
 
 
-#### Feature III: /execution endpoint and Jobs and local Job storage (STEP 1 status)
+#### Feature III: /execution endpoint, Jobs, polling, and local storage (Step 1 implemented)
 
-Current status (Step 1 - async execution forwarding):
+Current status (Step 1 COMPLETE — async execution forwarding with local job lifecycle):
 
-- The FastAPI route `/processes/{process_id}/execution` exists in `src/ump/adapters/web/fastapi.py` and forwards requests to `app.state.process_port.execute_process(...)`.
-- `ProcessManager.execute_process(...)` is implemented but currently behaves as a simple forwarder: it resolves the provider, calls the injected `HttpClientPort.post(...)`, and returns the provider's response (the adapter POST returns a dict with `status`, `headers`, `body`).
-- The real HTTP adapter `AioHttpClientAdapter` is implemented in `src/ump/adapters/aiohttp_client_adapter.py`. It returns `{status, headers, body}` for POST and maps transport/JSON errors into `OGCProcessException` (502/504/etc.).
+Implemented pieces:
+1. `Job` model (`src/ump/core/models/job.py`) including: `id` (UUID), `process_id`, `provider_name`, `remote_job_id`, `remote_status_url`, timestamps, `status_code`, `status_info` snapshot history, and helpers like `is_in_terminal_state()` plus documented ID separation rationale (local vs remote vs public id).
+2. `JobRepositoryPort` (`src/ump/core/interfaces/job_repository.py`) and in-memory adapter `InMemoryJobRepository` for fast TDD; ready to swap with SQLModel adapter later.
+3. `JobManager` (`src/ump/core/managers/job_manager.py`): orchestrates `create_and_forward` by:
+   - Creating local job immediately.
+   - Forwarding execute request downstream.
+   - Capturing statusInfo directly from provider body OR following a `Location` header to GET remote status when needed.
+   - Normalizing failures (transport/error, missing statusInfo) into terminal `failed` snapshots.
+   - Scheduling background polling tasks for remote jobs until a terminal state is reached (interval from `UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL`).
+   - Graceful shutdown via `shutdown()` awaited in FastAPI lifespan.
+4. `ExecuteRequest` model (`src/ump/core/models/execute_request.py`) with rich normalization (`from_raw`) moving coercion out of web adapter. Transmission modes, inline/ref inputs, outputs, response preference, subscriber callbacks all normalized centrally.
+5. Process execution delegation: `ProcessManager.execute_process` now delegates entirely to `JobManager.create_and_forward` (adapter route calls ProcessManager, which no longer contains forwarding logic itself).
+6. Link & metadata leniency: handler pipeline in `ProcessManager` now includes `_handle_fill_defaults` (injects `version`, `jobControlOptions`, `outputTransmission`, minimal self link) and `_handle_sanitize_metadata` (drops malformed metadata dicts). This ensures partially non-spec processes are still exposed.
+7. Per-process fetch strategy: `UMP_PER_PROCESS_FETCH` setting toggles between bulk `/processes` list filtering and individual `/processes/{id}` fetches for richer metadata.
+8. Logger decoupling: core no longer directly imports `LoggingAdapter`; `main.py` acts as composition root and injects logging via `set_logger` before building factories handed to the FastAPI adapter.
+9. Composition root refactor: `main.py` now wires all concrete adapters (providers, HTTP client, repository, process id validator, logging) and passes factories to `create_app`. Web adapter no longer instantiates infra objects.
+10. Remote status polling: background tasks query `remote_status_url` until terminal state (success/failed/ dismissed etc.) then stop; tasks are tracked for cleanup.
 
-Recent TDD work and implementation notes (new insights)
+Lifecycle sequence (happy path):
+1. HTTP POST hits `/processes/{process_id}/execution` with raw body.
+2. Web adapter parses raw JSON; `ExecuteRequest.from_raw` normalizes inputs & outputs.
+3. ProcessManager delegates to JobManager.
+4. JobManager creates local job record (status=accepted) and persists.
+5. Forwards execute to provider; captures body or follows `Location`.
+6. Derives `StatusInfo` snapshot; updates job status (e.g. `running`, `finished`).
+7. Starts polling task if remote job not terminal and remote status endpoint present.
+8. Returns HTTP 201 with `Location: /jobs/{local_job_id}` and the current `statusInfo` snapshot body.
 
-- Tests added (TDD-first):
-  - `tests/test_fastapi_execute_async.py` — lightweight FastAPI-focused tests describing the desired async execute semantics (always create a local job, return HTTP 201 + Location, forward statusInfo, follow provider `Location` header if needed, handle missing statusInfo as failure, map provider timeouts and transport errors, resolve relative Location headers).
-  - `tests/test_aiohttp_adapter.py` — adapter unit tests covering JSON parsing, non-JSON responses, and timeout/error mappings.
-  - `tests/test_fastapi_execute_e2e.py` — full-stack E2E test using the real `AioHttpClientAdapter` with `aioresponses` to mock provider flows.
-  - `tests/test_process_manager.py` — unit tests for `ProcessManager` using precise fakes for ports.
+Failure / edge handling:
+- Missing statusInfo & no Location: mark job `failed` with diagnostic message.
+- Transport errors/timeouts: catch, mark failed, persist snapshot, still return 201 (client can inspect statusInfo for failure detail). Upstream HTTP codes mapped to OGC error responses when appropriate.
+- Polling stops automatically on terminal state or shutdown.
 
-- Adapter contract clarified (important for core code):
-  - `HttpClientPort.post(url, json=None, timeout: float | None = None, headers: dict | None = None) -> dict`
-    - Returns a dict with keys: `status` (int), `headers` (dict-like), and `body` (parsed JSON when possible, otherwise raw text).
-    - Network/transport errors and JSON parse failures are mapped to `OGCProcessException` with appropriate status codes (e.g., 502, 504). Adapters must be conservative; business rules remain in core.
+ID strategy (documented in code):
+- Local UUID: internal canonical job primary key; stable for public routes.
+- Remote job id: only stored when provider returns one; never replaces local id.
+- Public job route id: same as local UUID (no leakage of remote semantics).
+This separation avoids coupling deletion/retry semantics to remote provider identifiers and supports multi-provider orchestration.
 
-- JobManager proposal (new core component)
-  - Introduce a `JobManager` in core to own job lifecycle concerns: job creation, remote execution forwarding, Location-following for provider-side job resources, merging/persisting `statusInfo` snapshots, and exposing job query/update operations.
-  - `JobManager` depends on `HttpClientPort`, `ProvidersPort`, `ProcessIdValidatorPort`, and a `JobRepositoryPort` (persistence).
-  - Keep `ProcessManager` focused on process discovery/description and delegate execute-related orchestration to `JobManager`.
+Normalization decisions:
+- Inputs kept outside `statusInfo` (OGC compliance); dedicated endpoint & storage separation pending (see remaining tasks).
+- Default jobControlOptions/outputTransmission/version injected for sparse upstream process definitions.
+- Malformed metadata safely ignored (logged debug).
 
-- Persistence & JobRepository port
-  - Add `src/ump/core/interfaces/job_repository.py` (async CRUD API) and an in-memory adapter `src/ump/adapters/job_repository_inmemory.py` for Step 1.
-  - JobRepository must be swap-able with a SQLModel-backed adapter in Step 2.
+What is still pending for Feature III:
+1. `/jobs` list & `/jobs/{id}` detail endpoints (read snapshots + metadata).
+2. `/jobs/{id}/inputs` or presigned URL strategy to expose stored inputs (ensuring they remain segregated from `statusInfo`).
+3. SQLModel-based repository + Alembic migrations (job table + status history table).
+4. Inputs large-object separation (object storage integration, checksum & size metadata fields).
+5. Test coverage: finalize unit tests for JobManager helpers, remote polling, ExecuteRequest normalization, ProcessManager handler pipeline, and integration tests for new /jobs endpoints.
+6. Optional minimal DDD scaffolding (commands/events/aggregate) – deferred unless complexity grows; current CRUD + snapshot history sufficient.
+7. Enhanced status history (append-only table) and event log optional.
+8. Authorization layer (JWT) to restrict job visibility (ties into Feature IV).
 
-- Job model & statusInfo handling
-  - Add a Pydantic `Job` model in `src/ump/core/models/job.py` and a thin `StatusInfo` model mirroring OGC's `statusInfo`.
-  - Important rule: DO NOT embed `inputs` or `inputs_url` inside the OGC `statusInfo` payload. The OGC `statusInfo` must remain schema-compliant. Store inputs separately on the `Job` model and expose them via a dedicated endpoint (e.g., `GET /jobs/{id}/inputs`) or a presigned/object-storage URL.
-  - Minimal `Job` fields for Step 1: `id` (UUID), `process_id`, `provider`, `remote_job_id` (opt), `status` (normalized string), `status_info` (dict), `inputs` (opt, inline only for small payloads), `created/started/updated/finished` timestamps, and `links` list.
+Removed or superseded tasks (were proposals, now done): Add Job model, JobRepositoryPort, in-memory repo, JobManager, execute delegation, normalization factory, polling loop, leniency handlers, composition root decoupling.
 
-- Inputs handling & large payloads
-  - For Step 1 keep tests/simple: inline small inputs and store metadata (size/checksum).
-  - For production (Step 2) adopt object-storage for large inputs: keep `inputs_storage`, `inputs_url`, `inputs_checksum`, `inputs_size` on the `Job` row and do not return large blobs inside `statusInfo`.
-  - Provide a presigned-upload / presigned-download flow and a secure `GET /jobs/{id}/inputs` endpoint for retrieving inputs (authorization required).
+Design trade-offs accepted in Step 1:
+- Always async semantics (no sync shortcut yet) simplifies initial implementation; sync execute deferred.
+- Polling interval is global; per-provider backoff not yet implemented.
+- StatusInfo snapshots currently overwritten (history table planned to preserve transitions).
+- Object storage integration postponed to keep test surface small.
 
-- Desired execute_process behavior (TDD summary)
-  1. Validate execute request body (basic schema check) and treat `Prefer: respond-async` as async (Step 1 always async).
-  2. Create a local job immediately (UUID, timestamps, provider ref, inputs metadata).
-  3. Forward the execute POST to provider using `HttpClientPort.post(...)`.
-  4. Inspect provider response:
-     - If a valid `statusInfo` JSON body is returned, persist it as job snapshot.
-     - Else if a `Location` header is present, resolve (support relative Location) and `GET` that location for `statusInfo` — persist if valid.
-     - Else mark job as `failed` and record diagnostic details (provider status/text).
-  5. Persist job using `JobRepository` and return HTTP 201 with `Location: /jobs/{local_job_id}` and body containing the job's `statusInfo` snapshot (even when failed).
-  6. Map adapter timeouts/errors into job failure snapshots (do not crash the endpoint).
-
-- Testing guidance (TDD -> implementation)
-  - Unit tests: JobManager with InMemoryJobRepository + fake HttpClientPort for all cases (statusInfo, Location-follow, missing statusInfo, non-JSON, timeouts).
-  - Adapter tests: `AioHttpClientAdapter` with `aioresponses` (JSON vs non-JSON vs timeout behavior).
-  - FastAPI lightweight tests: use a fake HttpClientPort to exercise FastAPI route + JobManager logic quickly.
-  - Full-stack E2E: create app wiring with real `AioHttpClientAdapter` + `aioresponses` for end-to-end verification.
+Next incremental enhancements (suggested order): implement /jobs endpoints → inputs separation & endpoint → SQLModel repo & migrations → status history/events → auth gating of job resources.
 
 
 Event sourcing, CQRS, and job history: design decision
@@ -198,16 +209,14 @@ Rationale:
 - CRUD + history table is simple, testable, and covers most audit/replay needs.
 - CQRS + event sourcing is powerful but adds significant complexity and infra cost; only migrate if you need advanced projections, strict event audit, or heavy read/write scaling.
 
-Immediate actionable checklist (mirrors TODO and TDD priorities):
-- [ ] Add `src/ump/core/models/job.py` (Pydantic `Job` + `StatusInfo`).
-- [ ] Add `src/ump/core/interfaces/job_repository.py` (async port).
-- [ ] Implement `src/ump/adapters/job_repository_inmemory.py`.
-- [ ] Add `src/ump/core/managers/job_manager.py` implementing `create_and_forward` and helpers to follow `Location`.
-- [ ] Wire `ProcessManager.execute_process` to call `JobManager.create_and_forward` and return HTTP 201 + Location.
-- [ ] Add `/jobs` + `/jobs/{id}` and `GET /jobs/{id}/inputs` routes to the web adapter (Step 1 read-only against in-memory repo).
-- [ ] Add job_statuses history table and repository methods (A: hybrid approach).
-- [ ] Optionally add append_event(job_event) to JobRepositoryPort and in-memory event log (B: event log for future migration/testing).
-- [ ] Add tests asserting that `statusInfo` responses never include inputs or inputs_url (OGC schema compliance).
+Immediate actionable checklist (updated):
+- [ ] Add `/jobs` (list) and `/jobs/{id}` (detail) endpoints.
+- [ ] Implement inputs separation & `/jobs/{id}/inputs` (no inputs in statusInfo).
+- [ ] SQLModel JobRepository + Alembic migrations (jobs + status history).
+- [ ] Status history persistence (append snapshots) & optional events.
+- [ ] Tests: JobManager polling, ExecuteRequest normalization, handler pipeline, /jobs endpoints.
+- [ ] Optional: adaptive polling/backoff per provider.
+- [ ] Optional: auth rules (JWT) restricting job visibility.
 
 Minimal DDD guidance (commands, events, aggregates) — lightweight, incremental
 
@@ -397,4 +406,4 @@ python -m src.ump.main
 
 ---
 
-_Last updated: 2025-10-15_
+_Last updated: 2025-11-11_
