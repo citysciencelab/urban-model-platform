@@ -1,5 +1,12 @@
-# Logging adapter for application-wide logging
-from ump.adapters.logging_adapter import LoggingAdapter
+"""Core settings module.
+
+Hexagonal note: the core must not depend on concrete adapter implementations.
+Previously this module imported `LoggingAdapter` (an infrastructure adapter)
+directly, creating an inward dependency. We now provide only a `LoggingPort`
+placeholder and a setter used by the composition root (web adapter) to inject
+an implementation at startup. A lightweight NoOpLogger is used until then so
+imports do not fail when modules call `logger.info` during initialization.
+"""
 
 from pathlib import Path
 
@@ -8,6 +15,7 @@ from pydantic_settings import BaseSettings
 from rich import print
 
 from ump.core.interfaces.logging import LoggingPort
+import logging
 
 # using pydantic_settings to manage environment variables
 # and do automatic type casting in a central place
@@ -52,6 +60,11 @@ class UmpSettings(BaseSettings):
     UMP_SUPPORTED_API_VERSIONS: list[str] = ["1.0"]
     # When enabled, replace external links in fetched processes with local API links
     UMP_REWRITE_REMOTE_LINKS: bool = True
+    # If true, fetch each configured process individually via /processes/{id} instead
+    # of fetching the bulk /processes list and filtering. This is slower for large
+    # catalogs but ensures we get full descriptions even if the list endpoint omits
+    # fields. Defaults to False for performance.
+    UMP_PER_PROCESS_FETCH: bool = False
     # Landing page/site metadata
     UMP_SITE_TITLE: str = "Urban Model Platform"
     UMP_SITE_DESCRIPTION: str = "An OGC API Processes gateway for urban models."
@@ -87,6 +100,28 @@ class UmpSettings(BaseSettings):
 
 app_settings = UmpSettings()
 
-logger = LoggingAdapter(app_settings.UMP_LOG_LEVEL)
 
-app_settings.print_settings(logger)
+class NoOpLogger(LoggingPort):
+    def info(self, msg: str, *args):
+        pass
+    def warning(self, msg: str, *args):
+        pass
+    def error(self, msg: str, *args):
+        pass
+    def debug(self, msg: str, *args):
+        pass
+
+
+logger: LoggingPort = NoOpLogger()
+
+def set_logger(l: LoggingPort):
+    """Inject a concrete logger adapter from the composition root.
+    Also prints settings once when the first real logger is set.
+    """
+    global logger
+    logger = l
+    try:
+        app_settings.print_settings(logger)
+    except Exception:
+        # Never fail startup due to printing issues
+        logging.getLogger("UMP").warning("Failed printing settings with injected logger")
