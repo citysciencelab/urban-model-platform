@@ -1,29 +1,31 @@
 """JobManager: orchestrates local job creation and remote execution forwarding.
 
-Step 1 implementation:
- - Always creates a local Job with status 'accepted'.
- - Forwards execution to provider.
- - Attempts to capture provider statusInfo directly from body; otherwise follows Location header.
- - Updates Job.status_info and persists snapshot via JobRepository.
- - Returns (job, status_info) where status_info is the latest snapshot (may be failure fallback).
+Responsibilities (Step 1):
+1. Create local job with accepted snapshot.
+2. Forward execute request to remote provider.
+3. Extract initial statusInfo (direct body or via Location polling once).
+4. Persist job & status history.
+5. Schedule background polling until terminal state.
+6. Return 201 Created + Location + statusInfo body.
 """
 
 from __future__ import annotations
 
-import asyncio
 import uuid
-from datetime import datetime, timezone
+import asyncio
 from typing import Any, Dict, Optional, Set
+from datetime import datetime, timezone
 from urllib.parse import urljoin
 
-from ump.core.exceptions import OGCProcessException
 from ump.core.interfaces.http_client import HttpClientPort
-from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.interfaces.providers import ProvidersPort
+from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.models.job import Job, JobStatusInfo, StatusCode
+from ump.core.exceptions import OGCProcessException
 from ump.core.models.ogcp_exception import OGCExceptionResponse
-from ump.core.settings import app_settings, logger
+from ump.core.settings import logger, app_settings
+
 
 REQUIRED_STATUS_FIELDS = {"jobID", "status", "type"}
 
@@ -40,42 +42,60 @@ class JobManager:
         self._http = http_client
         self._validator = process_id_validator
         self._repo = job_repo
-        self._poll_interval = getattr(
-            app_settings, "UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL", 5
-        )
+        self._poll_interval = getattr(app_settings, "UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL", 5)
         self._poll_tasks: Set[asyncio.Task] = set()
         self._shutdown = False
 
     async def create_and_forward(
         self,
         process_id: str,
-        exec_body: Optional[Dict[str, Any]],
+        inputs: Optional[Dict[str, Any]],
         headers: Dict[str, str],
     ) -> Dict[str, Any]:
-        """Create local job, forward execute, update status, return API response dict.
-
-        Response dict keys: status (HTTP), headers, body (statusInfo payload)
-        """
+        """Primary orchestration entrypoint (see module docstring)."""
         provider_prefix, raw_id = await self._resolve_provider(process_id)
         provider = self._providers.get_provider(provider_prefix)
 
+        job = await self._init_job(process_id, provider_prefix, inputs)
+        accepted_si = await self._persist_accepted(job, process_id)
+
+        prefer = headers.get("Prefer") or headers.get("prefer")
+        forward_headers = {"Prefer": prefer} if prefer else {}
+        
+        exec_url = str(provider.url).rstrip("/") + f"/processes/{raw_id}/execution"
+
+        provider_resp = await self._safe_forward(job, exec_url, inputs or {}, forward_headers)
+        
+        if provider_resp is None:
+            failed_job = await self._repo.get(job.id)
+            return self._response(job.id, failed_job.status_info if failed_job and failed_job.status_info else None)
+
+        status_info, remote_status_url, remote_job_id, diagnostic = await self._derive_status_info(
+            job, process_id, provider, provider_resp, accepted_si
+        )
+
+        await self._finalize_job(job, status_info, remote_status_url, remote_job_id, diagnostic)
+        return self._response(job.id, status_info)
+
+    # ----------------- Helper methods -----------------
+    async def _init_job(
+        self, process_id: str, provider_prefix: str, inputs: Optional[Dict[str, Any]]
+    ) -> Job:
+        # Local UUID creation: we intentionally decouple local job identity from any remote job id.
+        # This guards against collisions across providers and allows stable user-facing references
+        # even if upstream retries or reassigns a different remote identifier.
         job_id = str(uuid.uuid4())
         job = Job(
             id=job_id,
             process_id=process_id,
             provider=provider_prefix,
             status=str(StatusCode.accepted),
-            inputs=exec_body if exec_body and self._is_inline_small(exec_body) else None,
-            inputs_storage=(
-                "inline"
-                if exec_body and self._is_inline_small(exec_body)
-                else "object"
-                if exec_body
-                else "inline"
-            ),
+            inputs=inputs if inputs and self._is_inline_small(inputs) else None,
+            inputs_storage="inline" if inputs and self._is_inline_small(inputs) else "object" if inputs else "inline",
         )
+        return job
 
-        # initial status snapshot (accepted)
+    async def _persist_accepted(self, job: Job, process_id: str) -> JobStatusInfo:
         accepted_si = JobStatusInfo(
             jobID=job.id,
             status=StatusCode.accepted,
@@ -86,62 +106,44 @@ class JobManager:
             message=None,
             progress=0,
         )
-
         job.apply_status_info(accepted_si)
-
-        # store job
         await self._repo.create(job)
         await self._repo.append_status(job.id, accepted_si)
+        return accepted_si
 
-        # Forward execute request to provider
-        prefer = headers.get("Prefer") or headers.get("prefer")
-        forward_headers = {}
-        if prefer:
-            forward_headers["Prefer"] = prefer
-
-        exec_url = f"{str(provider.url).rstrip('/')}/processes/{raw_id}/execution"
-
+    async def _safe_forward(
+        self, job: Job, exec_url: str, inputs: Dict[str, Any], headers: Dict[str, str]
+    ) -> Optional[Dict[str, Any]]:
         try:
-            provider_resp = await self._http.post(
-                exec_url, json=exec_body or {}, headers=forward_headers
-            )
+            return await self._http.post(exec_url, json=inputs, headers=headers)
         except OGCProcessException as exc:
-            # mark job failed and return failure snapshot
             await self._repo.mark_failed(
                 job.id, reason=exc.response.title, diagnostic=exc.response.detail
             )
-            failed_job = await self._repo.get(job.id)
-            return {
-                "status": 201,
-                "headers": {"Location": f"/jobs/{job_id}"},
-                "body": failed_job.status_info.model_dump()
-                if failed_job and failed_job.status_info
-                else {},
-            }
         except Exception as exc:
             await self._repo.mark_failed(
                 job.id, reason="Upstream Error", diagnostic=str(exc)
             )
-            failed_job = await self._repo.get(job.id)
-            return {
-                "status": 201,
-                "headers": {"Location": f"/jobs/{job_id}"},
-                "body": failed_job.status_info.model_dump()
-                if failed_job and failed_job.status_info
-                else {},
-            }
+        return None
 
-        # Parse provider response
-        provider_status = provider_resp.get("status")
+    async def _derive_status_info(
+        self,
+        job: Job,
+        process_id: str,
+        provider: Any,
+        provider_resp: Dict[str, Any],
+        accepted_si: JobStatusInfo,
+    ) -> tuple[JobStatusInfo, Optional[str], Optional[str], Optional[str]]:
         provider_headers = provider_resp.get("headers", {})
         provider_body = provider_resp.get("body")
+        provider_status = provider_resp.get("status")
 
         status_info = self._extract_status_info(provider_body)
         remote_status_url: Optional[str] = None
         remote_job_id: Optional[str] = None
+        diagnostic: Optional[str] = None
 
         if not status_info and provider_headers.get("Location"):
-            # Follow Location
             location = provider_headers["Location"]
             resolved = self._resolve_location(str(provider.url), location)
             remote_status_url = resolved
@@ -154,7 +156,6 @@ class JobManager:
                 )
 
         if not status_info:
-            # create failure snapshot if provider did not supply valid statusInfo
             status_info = JobStatusInfo(
                 jobID=job.id,
                 status=StatusCode.failed,
@@ -165,34 +166,42 @@ class JobManager:
                 created=accepted_si.created,
                 progress=None,
             )
-            job.diagnostic = (
-                f"provider_status={provider_status} body_type={type(provider_body).__name__}"
-            )
+            diagnostic = f"provider_status={provider_status} body_type={type(provider_body).__name__}"
         else:
-            # Ensure jobID consistency; capture remote job ID if different
+            # Remote job id capture: if provider supplies a different jobID we store it separately
+            # (remote_job_id) and normalize the user-facing statusInfo.jobID back to our local UUID.
+            # This maintains OGC statusInfo schema while keeping our route stable.
             if status_info.jobID and status_info.jobID != job.id:
                 remote_job_id = status_info.jobID
                 status_info.jobID = job.id
             status_info.processID = process_id
 
-        # Persist remote identifiers for polling if available
+        return status_info, remote_status_url, remote_job_id, diagnostic
+
+    async def _finalize_job(
+        self,
+        job: Job,
+        status_info: JobStatusInfo,
+        remote_status_url: Optional[str],
+        remote_job_id: Optional[str],
+        diagnostic: Optional[str],
+    ) -> None:
         if remote_status_url:
             job.remote_status_url = remote_status_url
         if remote_job_id:
             job.remote_job_id = remote_job_id
+        if diagnostic:
+            job.diagnostic = diagnostic
         job.apply_status_info(status_info)
         await self._repo.update(job)
         await self._repo.append_status(job.id, status_info)
-
-        # Schedule polling if not terminal and we have a status URL
+        
         if job.remote_status_url and not job.is_in_terminal_state():
             self._schedule_poll(job.id)
 
-        return {
-            "status": 201,
-            "headers": {"Location": f"/jobs/{job.id}"},
-            "body": status_info.model_dump(),
-        }
+    def _response(self, job_id: str, status_info: Optional[JobStatusInfo]) -> Dict[str, Any]:
+        body = status_info.model_dump() if status_info else {}
+        return {"status": 201, "headers": {"Location": f"/jobs/{job_id}"}, "body": body}
 
     async def _resolve_provider(self, process_id: str) -> tuple[str, str]:
         try:
@@ -249,12 +258,16 @@ class JobManager:
         try:
             while not self._shutdown:
                 job = await self._repo.get(job_id)
+                
                 if not job:
                     return
+                
                 if job.is_in_terminal_state():
                     return
+                
                 if not job.remote_status_url:
                     return
+                
                 try:
                     resp = await self._http.get(job.remote_status_url)
                     status_info = self._extract_status_info(resp)
@@ -265,9 +278,12 @@ class JobManager:
                                 job.remote_job_id = status_info.jobID
                             status_info.jobID = job.id
                         status_info.processID = job.process_id
+                        
                         job.apply_status_info(status_info)
+                        
                         await self._repo.update(job)
                         await self._repo.append_status(job.id, status_info)
+                        
                         if job.is_in_terminal_state():
                             return
                 except Exception as poll_err:
