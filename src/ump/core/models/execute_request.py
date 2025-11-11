@@ -153,3 +153,40 @@ class ExecuteRequest(BaseModel):
         if self.subscriber:
             payload["subscriber"] = self.subscriber.model_dump(exclude_none=True)
         return payload
+
+    # -------- Factory / normalization --------
+    @classmethod
+    def from_raw(cls, raw: Dict[str, Any]) -> "ExecuteRequest":
+        """Construct an ExecuteRequest from a loosely structured raw dict.
+
+        Coercion rules:
+        - inputs primitive -> InlineOrRef(value=primitive)
+        - inputs dict with keys 'value' or 'href' -> InlineOrRef(**fields)
+        - inputs dict without those keys -> InlineOrRef(value=dict)
+        - list values -> list[InlineOrRef] with same coercion
+        """
+        if not isinstance(raw, dict):
+            raw = {}
+        inputs = raw.get("inputs", {})
+        if isinstance(inputs, dict):
+            coerced: Dict[str, Any] = {}
+            for k, v in inputs.items():
+                if isinstance(v, list):
+                    coerced[k] = [cls._coerce_inline(item) for item in v]
+                else:
+                    coerced[k] = cls._coerce_inline(v)
+            raw["inputs"] = coerced
+        return cls(**raw)
+
+    @staticmethod
+    def _coerce_inline(value: Any) -> InlineOrRef:
+        if isinstance(value, InlineOrRef):
+            return value
+        if isinstance(value, dict) and ("value" in value or "href" in value):
+            return InlineOrRef(value=value.get("value"), href=value.get("href"), format=value.get("format"))
+        if not isinstance(value, (list, tuple, dict)):
+            return InlineOrRef(value=value, href=None, format=None)
+        if isinstance(value, dict):
+            return InlineOrRef(value=value, href=None, format=None)
+        # Fallback: treat as raw value (e.g. tuple)
+        return InlineOrRef(value=value, href=None, format=None)
