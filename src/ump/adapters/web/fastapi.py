@@ -215,39 +215,8 @@ def create_app(
         except Exception:
             raw = {}
 
-        # Allow clients to send simplified inputs like {"inputs":{"a":1}} without wrapping in InlineOrRef
-        def coerce_inline(value):
-            # If already an InlineOrRef instance
-            if isinstance(value, InlineOrRef):
-                return value
-            
-            # Dict with explicit value or href fields
-            if isinstance(value, dict) and ("value" in value or "href" in value):
-                return InlineOrRef(
-                    value=value.get("value"),
-                    href=value.get("href"),
-                    format=value.get("format"),
-                )
-            
-            # Primitive scalar -> inline value
-            if not isinstance(value, (list, tuple, dict)):
-                return InlineOrRef(value=value, href=None, format=None)
-            
-            # Unsupported complex dict without required keys -> treat whole dict as value
-            if isinstance(value, dict):
-                return InlineOrRef(value=value, href=None, format=None)
-            return value
-
-        if isinstance(raw, dict) and "inputs" in raw and isinstance(raw["inputs"], dict):
-            coerced_inputs = {}
-            for k, v in raw["inputs"].items():
-                if isinstance(v, list):
-                    coerced_inputs[k] = [coerce_inline(item) for item in v]
-                else:
-                    coerced_inputs[k] = coerce_inline(v)
-            raw["inputs"] = coerced_inputs
         try:
-            exec_req = ExecuteRequest(**raw)
+            exec_req = ExecuteRequest.from_raw(raw)
         except ValidationError as ve:
             return JSONResponse(status_code=400, content={"type":"about:blank","title":"Invalid Execute Request","detail":ve.errors()})
 
