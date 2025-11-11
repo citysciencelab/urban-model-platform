@@ -49,7 +49,7 @@ class JobManager:
     async def create_and_forward(
         self,
         process_id: str,
-        inputs: Optional[Dict[str, Any]],
+        exec_body: Optional[Dict[str, Any]],
         headers: Dict[str, str],
     ) -> Dict[str, Any]:
         """Create local job, forward execute, update status, return API response dict.
@@ -65,12 +65,12 @@ class JobManager:
             process_id=process_id,
             provider=provider_prefix,
             status=str(StatusCode.accepted),
-            inputs=inputs if inputs and self._is_inline_small(inputs) else None,
+            inputs=exec_body if exec_body and self._is_inline_small(exec_body) else None,
             inputs_storage=(
                 "inline"
-                if inputs and self._is_inline_small(inputs)
+                if exec_body and self._is_inline_small(exec_body)
                 else "object"
-                if inputs
+                if exec_body
                 else "inline"
             ),
         )
@@ -100,9 +100,10 @@ class JobManager:
             forward_headers["Prefer"] = prefer
 
         exec_url = f"{str(provider.url).rstrip('/')}/processes/{raw_id}/execution"
+
         try:
             provider_resp = await self._http.post(
-                exec_url, json=inputs or {}, headers=forward_headers
+                exec_url, json=exec_body or {}, headers=forward_headers
             )
         except OGCProcessException as exc:
             # mark job failed and return failure snapshot
