@@ -5,6 +5,24 @@ separate stdout/stderr sinks and injects a correlation id into all log
 records. Adapters or domain code never mutate global logging; they only
 emit via `LoggingPort` or standard module loggers. Uvicorn is prevented
 from stomping configuration by passing `log_config=None` in `main`.
+It is a pragmatic deviation: Logging has two viable patterns
+
+Pattern A (what we have now)
+
+Core: calls LoggingPort.info(...)
+Adapter: only translates calls to underlying logging API
+Composition root: configures handlers/sinks (stdout, stderr, file, remote) once
+Rationale: logging is inherently cross‑cutting; centralizing avoids multiple handlers, duplication, races, inconsistent formats.
+Pattern B (adapter owns sinks)
+
+Core: same
+Adapter: on init installs handlers (file, stdout, remote), filters, formatters
+Composition root: just instantiates chosen adapter variant (e.g. ConsoleLoggingAdapter, FileLoggingAdapter, RemoteLoggingAdapter)
+Rationale: consistent with “DB adapter owns SQL”; pluggable adapter selection moves all technical concerns behind the port.
+
+Choise guideline (for later):
+If we can anticipate multiple distinct logging strategies selectable via environment (e.g. FILE, CONSOLE, REMOTE) and minimal 3rd-party logger consistency needs: move sink setup into adapter subclasses.
+If we need both: keep a thin core adapter plus a “logging backend factory” invoked by composition root that returns an initialized adapter and does global handler setup.
 """
 
 from __future__ import annotations
