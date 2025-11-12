@@ -116,9 +116,9 @@ class ProviderConfig(BaseModel):
             "It should be a valid HTTP or HTTPS URL with path to the landing page."
         )
     )
-    timeout: int = Field(
-        default=60,
-        description=("Timeout in seconds for the model server. Default is 60 seconds."),
+    ttw_job_done: int = Field(
+        default=300,
+        description=("Time to wait until job is finished, in seconds."),
     )
     authentication: AuthConfig = Field(
         default_factory=NoAuthConfig,
