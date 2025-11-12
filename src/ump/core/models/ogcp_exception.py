@@ -7,4 +7,8 @@ class OGCExceptionResponse(BaseModel):
     status: int
     detail: str
     instance: Optional[str] = None
-    additional: Optional[Dict[str, Any]] = None
+    additional: Optional[AdditionalInfo] = None
+
+
+class AdditionalInfo(BaseModel):
+    requestId: Optional[str] = None

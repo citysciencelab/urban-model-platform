@@ -22,6 +22,8 @@ from ump.core.models.execute_request import ExecuteRequest, InlineOrRef
 from ump.core.models.job import JobList, JobStatusInfo
 from ump.core.models.process import Process, ProcessList
 from ump.core.settings import app_settings, logger, set_logger, NoOpLogger
+from ump.core.logging_config import correlation_id_var
+import uuid
 from ump.adapters.logging_adapter import LoggingAdapter
 from ump.core.logging_config import correlation_id_var
 import uuid
@@ -70,6 +72,22 @@ def create_app(
                     await job_manager.shutdown()
 
     app = FastAPI(lifespan=lifespan)
+
+    # Correlation ID middleware: assigns per-request id (header override) and exposes it to logging
+    @app.middleware("http")
+    async def correlation_id_middleware(request: Request, call_next):
+        incoming = request.headers.get("x-request-id") or request.headers.get("X-Request-ID")
+        cid = incoming or uuid.uuid4().hex[:12]
+        # set context var so logs include this id
+        correlation_id_var.set(cid)
+        try:
+            response = await call_next(request)
+        finally:
+            # ensure context is reset to avoid leak across reused worker tasks
+            correlation_id_var.set("-")
+        # always return id header for traceability
+        response.headers["X-Request-ID"] = cid
+        return response
 
     class CorrelationIdMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):  # pragma: no cover - thin wrapper
@@ -253,16 +271,23 @@ def create_app(
     # Exception handler for OGC Process exceptions
     @app.exception_handler(OGCProcessException)
     async def ogc_exception_handler(request: Request, exc: OGCProcessException):
-        return JSONResponse(
-            status_code=exc.response.status,
-            content={
-                "type": exc.response.type,
-                "title": exc.response.title,
-                "status": exc.response.status,
-                "detail": exc.response.detail,
-                "instance": exc.response.instance,
-            },
-        )
+        # Decide whether to surface requestId (only for unexpected / upstream server side errors)
+        status_code = exc.response.status
+        cid = correlation_id_var.get()
+        include_request_id = status_code >= 500
+        payload = {
+            "type": exc.response.type,
+            "title": exc.response.title,
+            "status": status_code,
+            "detail": exc.response.detail,
+            "instance": exc.response.instance,
+        }
+        if include_request_id:
+            payload["additional"] = {"requestId": cid}
+        response = JSONResponse(status_code=status_code, content=payload)
+        if include_request_id:
+            response.headers["X-Request-ID"] = cid
+        return response
 
     @app.get(
         "/processes",
