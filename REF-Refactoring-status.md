@@ -210,7 +210,7 @@ Rationale:
 - CQRS + event sourcing is powerful but adds significant complexity and infra cost; only migrate if you need advanced projections, strict event audit, or heavy read/write scaling.
 
 Immediate actionable checklist (updated):
-- [ ] Add `/jobs` (list) and `/jobs/{id}` (detail) endpoints.
+- [x] Add `/jobs` (list) and `/jobs/{id}` (detail) endpoints.
 - [ ] Implement inputs separation & `/jobs/{id}/inputs` (no inputs in statusInfo).
 - [ ] SQLModel JobRepository + Alembic migrations (jobs + status history).
 - [ ] Status history persistence (append snapshots) & optional events.
@@ -366,6 +366,8 @@ properties:
 ```
 
 - deferred: remote process execution: sync
+- deferred: remote transmission direct, local by ref
+- deferred: stream content to clients (for use cases where some resources take longer than others)
 
 #### Feature IV: JWT-based Auth
 - implement jwt based authentication
