@@ -21,7 +21,11 @@ from ump.core.managers.process_manager import ProcessManager
 from ump.core.models.execute_request import ExecuteRequest, InlineOrRef
 from ump.core.models.job import JobList, JobStatusInfo
 from ump.core.models.process import Process, ProcessList
-from ump.core.settings import app_settings
+from ump.core.settings import app_settings, logger, set_logger, NoOpLogger
+from ump.adapters.logging_adapter import LoggingAdapter
+from ump.core.logging_config import correlation_id_var
+import uuid
+from starlette.middleware.base import BaseHTTPMiddleware
 
 
 # Note: this a driver adapter, so it depends on the core interface (ProcessesPort)
@@ -41,6 +45,10 @@ def create_app(
     purely on HTTP concerns and lifecycle orchestration.
     """
     process_port: ProcessesPort | None = None
+
+    # We intentionally do NOT configure logging here. Composition root (main)
+    # must call configure_logging. If invoked directly without main, logging
+    # will remain minimal (NoOpLogger) which is acceptable for that edge case.
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -62,6 +70,19 @@ def create_app(
                     await job_manager.shutdown()
 
     app = FastAPI(lifespan=lifespan)
+
+    class CorrelationIdMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):  # pragma: no cover - thin wrapper
+            # Reuse id from inbound header or generate a short uuid4 segment
+            inbound = request.headers.get("x-correlation-id") or request.headers.get("X-Correlation-ID")
+            cid = inbound or uuid.uuid4().hex[:12]
+            # Set context var for logging filters
+            correlation_id_var.set(cid)
+            response = await call_next(request)
+            response.headers["X-Correlation-ID"] = cid
+            return response
+
+    app.add_middleware(CorrelationIdMiddleware)
 
     # Helper: create a versioned sub-app that mounts the same handlers but with its own openapi URL
     def create_versioned_app(version: str):
@@ -313,9 +334,9 @@ def create_app(
             headers["Prefer"] = prefer
 
         provider_payload = exec_req.as_provider_payload()
-        # We pass only normalized input values (provider_payload['inputs']) to JobManager for storage.
+        # Forward full normalized payload (includes inputs, outputs, response, subscriber)
         resp = await app.state.process_port.execute_process(
-            process_id, provider_payload.get("inputs", {}), headers
+            process_id, provider_payload, headers
         )
 
         # need to return location header to client when async execute

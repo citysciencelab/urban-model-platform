@@ -434,19 +434,26 @@ class ProcessManager(ProcessesPort):
         """Cleanup resources"""
         await self.http_client.close()
 
-    async def execute_process(self, process_id: str, body: dict, headers: dict) -> dict:
-        """Delegate execution to JobManager (always async semantics Step 1)."""
+    async def execute_process(self, process_id: str, payload: dict, headers: dict) -> dict:
+        """Delegate execution to JobManager (always async semantics Step 1).
+
+        `payload` is the full normalized ExecuteRequest provider payload (includes
+        inputs, outputs, response preferences, subscriber callbacks). JobManager
+        will decide which parts to persist locally (e.g., inputs metadata) while
+        forwarding the entire payload downstream.
+        """
         if not hasattr(self, "_job_manager") or self._job_manager is None:
+            logger.error("JobManager not attached to ProcessManager")
             raise OGCProcessException(
                 OGCExceptionResponse(
                     type="about:blank",
                     title="Server Error",
                     status=500,
-                    detail="JobManager not configured",
+                    detail="Contact admin",
                     instance=None,
                 )
             )
-        return await self._job_manager.create_and_forward(process_id, body or {}, headers)
+        return await self._job_manager.create_and_forward(process_id, payload or {}, headers)
 
     def attach_job_manager(self, job_manager: JobManager) -> None:
         self._job_manager = job_manager

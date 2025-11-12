@@ -152,6 +152,7 @@ class ExecuteRequest(BaseModel):
         payload["response"] = self.response.value
         if self.subscriber:
             payload["subscriber"] = self.subscriber.model_dump(exclude_none=True)
+        
         return payload
 
     # -------- Factory / normalization --------

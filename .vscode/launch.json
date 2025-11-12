@@ -9,8 +9,13 @@
             "name": "ump",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/ump/main.py",
+            "module": "ump.main",
+            // "program": "ump.main",
             "console": "integratedTerminal",
+            // "args": [
+            //     "-m",
+            //     "ump.main"
+            // ],
             // "envFile": "${workspaceFolder}/.env",
             // "env": {
             //     "FLASK_APP": "src/ump/main.py",

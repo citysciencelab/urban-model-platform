@@ -112,16 +112,45 @@ class NoOpLogger(LoggingPort):
         pass
 
 
-logger: LoggingPort = NoOpLogger()
+class DelegatingLogger(LoggingPort):
+    """Indirection layer preventing early-import freeze.
+
+    Modules may do `from ump.core.settings import logger` during import time.
+    If we later replace the global with a concrete adapter those modules still
+    hold the old object (NoOpLogger). This delegator keeps a stable reference
+    while swapping underlying implementation when `set_logger` is called.
+    """
+    def __init__(self):
+        self._delegate: LoggingPort = NoOpLogger()
+
+    def set_delegate(self, delegate: LoggingPort):
+        self._delegate = delegate
+
+    def info(self, msg: str, *args):
+        self._delegate.info(msg, *args)
+    def warning(self, msg: str, *args):
+        self._delegate.warning(msg, *args)
+    def error(self, msg: str, *args):
+        self._delegate.error(msg, *args)
+    def debug(self, msg: str, *args):
+        self._delegate.debug(msg, *args)
+
+
+_delegating_logger = DelegatingLogger()
+logger: LoggingPort = _delegating_logger
+
 
 def set_logger(l: LoggingPort):
     """Inject a concrete logger adapter from the composition root.
-    Also prints settings once when the first real logger is set.
+    Safe for modules that imported `logger` early: the delegator pointer updates.
     """
-    global logger
-    logger = l
+    _delegating_logger.set_delegate(l)
     try:
         app_settings.print_settings(logger)
     except Exception:
-        # Never fail startup due to printing issues
         logging.getLogger("UMP").warning("Failed printing settings with injected logger")
+
+
+def get_logger() -> LoggingPort:
+    """Preferred access pattern for runtime modules to avoid early binding."""
+    return logger

@@ -12,6 +12,7 @@ from ump.adapters.web.fastapi import create_app
 from ump.core.managers.process_manager import ProcessManager
 from ump.core.managers.job_manager import JobManager
 from ump.core.settings import set_logger, app_settings
+from ump.core.logging_config import configure_logging
 
 
 # main lives at the outermost layer (not in core)
@@ -31,8 +32,10 @@ def main():
     job_repo = InMemoryJobRepository()
     site_info_adapter = StaticSiteInfoAdapter()
 
-    # Inject logging adapter (decoupled from core)
-    set_logger(LoggingAdapter("UMP", app_settings.UMP_LOG_LEVEL))
+    # Central logging configuration BEFORE injecting adapter so uvicorn adopts level/format
+    configure_logging(app_settings.UMP_LOG_LEVEL)
+    # Inject logging adapter (decoupled from core) after root config
+    set_logger(LoggingAdapter("ump", app_settings.UMP_LOG_LEVEL))
 
     # Factories passed to web adapter keep composition here
     def process_manager_factory(client):
@@ -58,7 +61,14 @@ def main():
         site_info=site_info_adapter,
     )
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Let uvicorn inherit existing logging (separate sinks & correlation ids)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        log_config=None,
+        log_level=str(app_settings.UMP_LOG_LEVEL).lower(),
+    )
 
 
 if __name__ == "__main__":
