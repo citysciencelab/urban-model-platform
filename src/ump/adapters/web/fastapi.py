@@ -328,9 +328,13 @@ def create_app(
             status = resp.get("status") or 200
             content = resp.get("body") or {}
             location = None
+            
             if isinstance(resp.get("headers"), dict):
                 location = resp["headers"].get("Location")
-            response = JSONResponse(status_code=status, content=content)
+            
+            safe_content = jsonable_encoder(content)
+            response = JSONResponse(status_code=status, content=safe_content)
+            
             if location:
                 response.headers["Location"] = location
             return response
