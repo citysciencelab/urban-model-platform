@@ -11,21 +11,21 @@ Responsibilities (Step 1):
 
 from __future__ import annotations
 
-import uuid
 import asyncio
-from typing import Any, Dict, Optional, Set
+import uuid
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional, Set
 from urllib.parse import urljoin
 
+from ump.core.exceptions import OGCProcessException
 from ump.core.interfaces.http_client import HttpClientPort
+from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.interfaces.providers import ProvidersPort
-from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.models.job import Job, JobStatusInfo, StatusCode
-from ump.core.exceptions import OGCProcessException
+from ump.core.models.link import Link
 from ump.core.models.ogcp_exception import OGCExceptionResponse
-from ump.core.settings import logger, app_settings
-
+from ump.core.settings import app_settings, logger
 
 REQUIRED_STATUS_FIELDS = {"jobID", "status", "type"}
 
@@ -37,14 +37,20 @@ class JobManager:
         http_client: HttpClientPort,
         process_id_validator: ProcessIdValidatorPort,
         job_repo: JobRepositoryPort,
+        retry_port: Optional[
+            Any
+        ] = None,  # RetryPort protocol; kept generic to avoid tight coupling
     ) -> None:
         self._providers = providers
         self._http = http_client
         self._validator = process_id_validator
         self._repo = job_repo
-        self._poll_interval = getattr(app_settings, "UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL", 5)
+        self._poll_interval = getattr(
+            app_settings, "UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL", 5
+        )
         self._poll_tasks: Set[asyncio.Task] = set()
         self._shutdown = False
+        self._retry = retry_port
 
     async def create_and_forward(
         self,
@@ -61,57 +67,122 @@ class JobManager:
         the upstream body (JSON or text) and status code to the caller instead
         of collapsing to a generic 'missing statusInfo'.
         """
-        logger.info(f"[job:create] incoming execute request for process_id={process_id} headers_prefer={headers.get('Prefer') or headers.get('prefer')}")
+        logger.info(
+            f"[job:create] incoming execute request for process_id={process_id} headers_prefer={headers.get('Prefer') or headers.get('prefer')}"
+        )
         provider_prefix, raw_id = await self._resolve_provider(process_id)
         provider = self._providers.get_provider(provider_prefix)
-        logger.debug(f"[job:create] resolved provider prefix={provider_prefix} raw_id={raw_id} provider_url={getattr(provider, 'url', None)}")
+        logger.debug(
+            f"[job:create] resolved provider prefix={provider_prefix} raw_id={raw_id} provider_url={getattr(provider, 'url', None)}"
+        )
 
-        inputs = execute_payload.get("inputs") if isinstance(execute_payload, dict) else None
+        inputs = (
+            execute_payload.get("inputs") if isinstance(execute_payload, dict) else None
+        )
         if inputs:
-            logger.debug(f"[job:create] inputs keys={list(inputs.keys())[:8]} total_keys={len(inputs.keys())}")
+            logger.debug(
+                f"[job:create] inputs keys={list(inputs.keys())[:8]} total_keys={len(inputs.keys())}"
+            )
         job = await self._init_job(process_id, provider_prefix, inputs)
-        logger.debug(f"[job:create] initialized local job id={job.id} inline_inputs={'yes' if job.inputs else 'no'}")
+        logger.debug(
+            f"[job:create] initialized local job id={job.id} inline_inputs={'yes' if job.inputs else 'no'}"
+        )
         accepted_si = await self._persist_accepted(job, process_id)
-        logger.debug(f"[job:create] persisted accepted snapshot job_id={job.id} created={accepted_si.created}")
+        logger.debug(
+            f"[job:create] persisted accepted snapshot job_id={job.id} created={accepted_si.created}"
+        )
 
         prefer = headers.get("Prefer") or headers.get("prefer")
         forward_headers = {"Prefer": prefer} if prefer else {}
 
         exec_url = str(provider.url).rstrip("/") + f"/processes/{raw_id}/execution"
-        logger.debug(f"[job:forward] forwarding to exec_url={exec_url} prefer={prefer} payload_keys={list(execute_payload.keys()) if isinstance(execute_payload, dict) else 'n/a'}")
+        logger.debug(
+            f"[job:forward] forwarding to exec_url={exec_url} prefer={prefer} payload_keys={list(execute_payload.keys()) if isinstance(execute_payload, dict) else 'n/a'}"
+        )
 
-        provider_resp = await self._safe_forward(job, exec_url, execute_payload or {}, forward_headers)
+        provider_resp = await self._safe_forward(
+            job, exec_url, execute_payload or {}, forward_headers
+        )
 
         if provider_resp is None:
             failed_job = await self._repo.get(job.id)
-            logger.debug(f"[job:forward] upstream forward failed immediately job_id={job.id} returning failed status")
-            return self._response(job.id, failed_job.status_info if failed_job and failed_job.status_info else None)
+            logger.debug(
+                f"[job:forward] upstream forward failed immediately job_id={job.id} returning failed status"
+            )
+            return self._response(
+                job.id,
+                failed_job.status_info
+                if failed_job and failed_job.status_info
+                else None,
+            )
 
         # If upstream returned non-statusInfo body with error code (>=400), propagate directly
         upstream_status = provider_resp.get("status")
         upstream_body = provider_resp.get("body")
-        logger.debug(f"[job:forward] upstream response status={upstream_status} has_location={bool(provider_resp.get('headers', {}).get('Location'))} body_type={type(upstream_body).__name__}")
+        logger.debug(
+            f"[job:forward] upstream response status={upstream_status} has_location={bool(provider_resp.get('headers', {}).get('Location'))} body_type={type(upstream_body).__name__}"
+        )
         if upstream_status and upstream_status >= 400:
             si = self._extract_status_info(upstream_body)
             if not si:
                 # mark local job failed but return original upstream error body
-                await self._repo.mark_failed(job.id, reason=f"Upstream {upstream_status}")
-                logger.debug(f"[job:error-propagate] marking job failed job_id={job.id} upstream_status={upstream_status} returning raw upstream body")
+                await self._repo.mark_failed(
+                    job.id, reason=f"Upstream {upstream_status}"
+                )
+                logger.debug(
+                    f"[job:error-propagate] marking job failed job_id={job.id} upstream_status={upstream_status} returning raw upstream body"
+                )
                 return {
                     "status": upstream_status,
                     "headers": {"Location": f"/jobs/{job.id}"},
-                    "body": upstream_body if isinstance(upstream_body, (dict, list)) else {"error": str(upstream_body)}
+                    "body": upstream_body
+                    if isinstance(upstream_body, (dict, list))
+                    else {"error": str(upstream_body)},
                 }
 
-        status_info, remote_status_url, remote_job_id, diagnostic = await self._derive_status_info(
+        (
+            status_info,
+            remote_status_url,
+            remote_job_id,
+            diagnostic,
+        ) = await self._derive_status_info(
             job, process_id, provider, provider_resp, accepted_si
         )
         logger.debug(
             f"[job:derive] job_id={job.id} derived_status={status_info.status if status_info else None} remote_status_url={remote_status_url} remote_job_id={remote_job_id} diagnostic_set={bool(diagnostic)}"
         )
 
-        await self._finalize_job(job, status_info, remote_status_url, remote_job_id, diagnostic)
-        return self._response(job.id, status_info)
+        # Inject local timestamps if remote snapshot omitted them
+        if status_info and status_info.created is None:
+            status_info.created = accepted_si.created
+        if status_info and status_info.updated is None:
+            status_info.updated = datetime.now(timezone.utc)
+
+        # If remote reports immediate success, verify results before accepting
+        if (
+            status_info
+            and status_info.status == StatusCode.successful
+            and remote_job_id
+        ):
+            logger.debug(
+                f"[job:verify] remote immediate success; verifying results job_id={job.id} remote_job_id={remote_job_id}"
+            )
+            verified = await self._verify_remote_results(
+                provider, process_id, remote_job_id
+            )
+            if not verified:
+                logger.warning(
+                    f"[job:verify] results fetch failed; downgrading to failed job_id={job.id}"
+                )
+                status_info.status = StatusCode.failed
+                status_info.message = "Result fetch failed after remote success"
+                diagnostic = (diagnostic or "") + " | result fetch failed"
+
+        await self._finalize_job(
+            job, status_info, remote_status_url, remote_job_id, diagnostic
+        )
+        # Return initial accepted snapshot (client can poll for transition)
+        return self._response(job.id, accepted_si)
 
     # ----------------- Helper methods -----------------
     async def _init_job(
@@ -127,7 +198,11 @@ class JobManager:
             provider=provider_prefix,
             status=str(StatusCode.accepted),
             inputs=inputs if inputs and self._is_inline_small(inputs) else None,
-            inputs_storage="inline" if inputs and self._is_inline_small(inputs) else "object" if inputs else "inline",
+            inputs_storage="inline"
+            if inputs and self._is_inline_small(inputs)
+            else "object"
+            if inputs
+            else "inline",
         )
         return job
 
@@ -151,20 +226,28 @@ class JobManager:
         self, job: Job, exec_url: str, payload: Dict[str, Any], headers: Dict[str, str]
     ) -> Optional[Dict[str, Any]]:
         try:
-            logger.debug(f"[job:forward] POST exec_url={exec_url} job_id={job.id} headers={list(headers.keys())} payload_size={len(str(payload))}")
+            logger.debug(
+                f"[job:forward] POST exec_url={exec_url} job_id={job.id} headers={list(headers.keys())} payload_size={len(str(payload))}"
+            )
             resp = await self._http.post(exec_url, json=payload, headers=headers)
-            logger.debug(f"[job:forward] POST completed job_id={job.id} status={resp.get('status')} keys={list(resp.keys())}")
+            logger.debug(
+                f"[job:forward] POST completed job_id={job.id} status={resp.get('status')} keys={list(resp.keys())}"
+            )
             return resp
         except OGCProcessException as exc:
             await self._repo.mark_failed(
                 job.id, reason=exc.response.title, diagnostic=exc.response.detail
             )
-            logger.warning(f"[job:forward] OGCProcessException job_id={job.id} title={exc.response.title}")
+            logger.warning(
+                f"[job:forward] OGCProcessException job_id={job.id} title={exc.response.title}"
+            )
         except Exception as exc:
             await self._repo.mark_failed(
                 job.id, reason="Upstream Error", diagnostic=str(exc)
             )
-            logger.error(f"[job:forward] unexpected exception job_id={job.id} error={exc}")
+            logger.error(
+                f"[job:forward] unexpected exception job_id={job.id} error={exc}"
+            )
         return None
 
     async def _derive_status_info(
@@ -189,7 +272,9 @@ class JobManager:
             resolved = self._resolve_location(str(provider.url), location)
             remote_status_url = resolved
             try:
-                logger.debug(f"[job:derive] following provider Location job_id={job.id} location={location} resolved={resolved}")
+                logger.debug(
+                    f"[job:derive] following provider Location job_id={job.id} location={location} resolved={resolved}"
+                )
                 follow_resp = await self._http.get(resolved)
                 status_info = self._extract_status_info(follow_resp)
             except Exception as follow_err:
@@ -198,7 +283,9 @@ class JobManager:
                 )
 
         if not status_info:
-            logger.debug(f"[job:derive] missing statusInfo, marking failed job_id={job.id}")
+            logger.debug(
+                f"[job:derive] missing statusInfo, marking failed job_id={job.id}"
+            )
             status_info = JobStatusInfo(
                 jobID=job.id,
                 status=StatusCode.failed,
@@ -209,7 +296,9 @@ class JobManager:
                 created=accepted_si.created,
                 progress=None,
             )
-            diagnostic = f"provider_status={provider_status} body_type={type(provider_body).__name__}"
+            diagnostic = (
+                f"provider_status={provider_status} body_type={type(provider_body).__name__}"
+            )
         else:
             # Remote job id capture: if provider supplies a different jobID we store it separately
             # (remote_job_id) and normalize the user-facing statusInfo.jobID back to our local UUID.
@@ -217,8 +306,36 @@ class JobManager:
             if status_info.jobID and status_info.jobID != job.id:
                 remote_job_id = status_info.jobID
                 status_info.jobID = job.id
-                logger.debug(f"[job:derive] captured remote_job_id={remote_job_id} mapped_to_local job_id={job.id}")
+                logger.debug(
+                    f"[job:derive] captured remote_job_id={remote_job_id} mapped_to_local job_id={job.id}"
+                )
             status_info.processID = process_id
+            # Adopt accepted created timestamp if remote omitted it
+            if status_info.created is None:
+                status_info.created = accepted_si.created
+            status_info.updated = datetime.now(timezone.utc)
+            # Enrich missing optional fields for better UX
+            if status_info.status == StatusCode.running:
+                if status_info.started is None:
+                    status_info.started = accepted_si.created
+                if status_info.progress is None:
+                    status_info.progress = 0
+                if not status_info.message:
+                    status_info.message = "Running"
+            elif status_info.status == StatusCode.successful:
+                if status_info.started is None:
+                    status_info.started = accepted_si.created
+                if status_info.finished is None:
+                    status_info.finished = datetime.now(timezone.utc)
+                if status_info.progress is None:
+                    status_info.progress = 100
+                if not status_info.message:
+                    status_info.message = "Completed"
+            elif status_info.status == StatusCode.failed:
+                if status_info.finished is None:
+                    status_info.finished = datetime.now(timezone.utc)
+                if not status_info.message:
+                    status_info.message = "Failed"
 
         return status_info, remote_status_url, remote_job_id, diagnostic
 
@@ -236,17 +353,69 @@ class JobManager:
             job.remote_job_id = remote_job_id
         if diagnostic:
             job.diagnostic = diagnostic
+        # Inject local results link if job already successful and link absent
+        if status_info and status_info.status == StatusCode.successful:
+            self._ensure_results_link(job.id, status_info)
         job.apply_status_info(status_info)
         await self._repo.update(job)
         await self._repo.append_status(job.id, status_info)
-        logger.debug(f"[job:finalize] job_id={job.id} status={status_info.status} remote_status_url={job.remote_status_url} remote_job_id={job.remote_job_id} terminal={job.is_in_terminal_state()}")
+        logger.debug(
+            f"[job:finalize] job_id={job.id} status={status_info.status} remote_status_url={job.remote_status_url} remote_job_id={job.remote_job_id} terminal={job.is_in_terminal_state()}"
+        )
 
         if job.remote_status_url and not job.is_in_terminal_state():
             self._schedule_poll(job.id)
 
-    def _response(self, job_id: str, status_info: Optional[JobStatusInfo]) -> Dict[str, Any]:
+    def _response(
+        self, job_id: str, status_info: Optional[JobStatusInfo]
+    ) -> Dict[str, Any]:
         body = status_info.model_dump() if status_info else {}
         return {"status": 201, "headers": {"Location": f"/jobs/{job_id}"}, "body": body}
+
+    async def _verify_remote_results(
+        self, provider: Any, process_id: str, remote_job_id: str
+    ) -> bool:
+        """Fetch remote results for terminal successful job; return True if fetched.
+
+        Failure to fetch indicates mismatch between remote status and availability; we
+        treat this as local failure to ensure clients don't assume success without outputs.
+        """
+        try:
+
+            base = str(provider.url).rstrip("/")
+            results_url = f"{base}/jobs/{remote_job_id}/results"
+            logger.debug(f"[job:verify] fetching results_url={results_url}")
+
+            async def fetch():
+                return await self._http.get(results_url)
+
+            # Use injected retry adapter if available (supports transient unavailability right after success)
+            if self._retry:
+                try:
+                    resp = await self._retry.execute(fetch)
+                except Exception as exc:
+                    logger.debug(
+                        f"[job:verify] retry exhausted job_id={remote_job_id} err={exc}"
+                    )
+                    return False
+            else:
+                # Fallback single attempt
+                resp = await fetch()
+
+            if isinstance(resp, dict):
+                logger.debug(
+                    f"[job:verify] results fetch ok keys={list(resp.keys())[:5]}"
+                )
+                return True
+            logger.debug(
+                f"[job:verify] results non-dict type={type(resp).__name__}; treating as success"
+            )
+            return True
+        except Exception as exc:
+            logger.debug(
+                f"[job:verify] results fetch exception job_id={remote_job_id} err={exc}"
+            )
+            return False
 
     async def _resolve_provider(self, process_id: str) -> tuple[str, str]:
         try:
@@ -310,11 +479,15 @@ class JobManager:
                     return
 
                 if job.is_in_terminal_state():
-                    logger.debug(f"[job:poll] terminal state reached job_id={job_id} status={job.status}")
+                    logger.debug(
+                        f"[job:poll] terminal state reached job_id={job_id} status={job.status}"
+                    )
                     return
 
                 if not job.remote_status_url:
-                    logger.debug(f"[job:poll] no remote_status_url job_id={job_id} stopping")
+                    logger.debug(
+                        f"[job:poll] no remote_status_url job_id={job_id} stopping"
+                    )
                     return
 
                 try:
@@ -326,15 +499,49 @@ class JobManager:
                             if not job.remote_job_id:
                                 job.remote_job_id = status_info.jobID
                             status_info.jobID = job.id
+                        prev_status = (
+                            job.status_info.status if job.status_info else None
+                        )
                         status_info.processID = job.process_id
-                        
+                        # Fill enrichment only on status change or missing fields
+                        if prev_status != status_info.status or any(
+                            getattr(status_info, f) is None
+                            for f in ["started", "progress", "message"]
+                        ):
+                            if status_info.status == StatusCode.running:
+                                if status_info.started is None:
+                                    status_info.started = job.created
+                                if status_info.progress is None:
+                                    status_info.progress = 0
+                                if not status_info.message:
+                                    status_info.message = "Running"
+                            elif status_info.status == StatusCode.successful:
+                                if status_info.started is None:
+                                    status_info.started = job.created
+                                if status_info.finished is None:
+                                    status_info.finished = datetime.now(timezone.utc)
+                                if status_info.progress is None:
+                                    status_info.progress = 100
+                                if not status_info.message:
+                                    status_info.message = "Completed"
+                            elif status_info.status == StatusCode.failed:
+                                if status_info.finished is None:
+                                    status_info.finished = datetime.now(timezone.utc)
+                                if not status_info.message:
+                                    status_info.message = "Failed"
+                        status_info.updated = datetime.now(timezone.utc)
+                        # Inject results link when successful
+                        if status_info.status == StatusCode.successful:
+                            self._ensure_results_link(job.id, status_info)
                         job.apply_status_info(status_info)
-                        
+
                         await self._repo.update(job)
                         await self._repo.append_status(job.id, status_info)
-                        
+
                         if job.is_in_terminal_state():
-                            logger.debug(f"[job:poll] reached terminal state job_id={job.id} status={job.status}")
+                            logger.debug(
+                                f"[job:poll] reached terminal state job_id={job.id} status={job.status}"
+                            )
                             return
                 except Exception as poll_err:
                     logger.debug(f"[job:poll] error job_id={job_id} err={poll_err}")
@@ -348,3 +555,55 @@ class JobManager:
             task.cancel()
         if self._poll_tasks:
             await asyncio.gather(*self._poll_tasks, return_exceptions=True)
+
+    # ---------------- Results Access -----------------
+    async def get_results(self, job_id: str) -> Dict[str, Any]:
+        """Fetch remote results for a terminal successful job.
+
+        We never persist results locally; every invocation proxies the provider.
+        Returns provider JSON (dict). Raises OGCProcessException for upstream
+        OGC errors; returns 404 style dict if job not found or not successful.
+        """
+        job = await self._repo.get(job_id)
+        if not job or not job.status_info:
+            return {"status": 404, "body": {"detail": "Job not found"}}
+        if job.status_info.status != StatusCode.successful:
+            return {"status": 404, "body": {"detail": "Results not available"}}
+        if not job.remote_job_id or not job.provider:
+            return {"status": 404, "body": {"detail": "Remote job id missing"}}
+        provider = self._providers.get_provider(job.provider)
+        base = str(provider.url).rstrip("/")
+        results_url = f"{base}/jobs/{job.remote_job_id}/results"
+        logger.debug(
+            f"[job:results] proxy fetch results_url={results_url} job_id={job.id}"
+        )
+        try:
+            resp = await self._http.get(results_url)
+            # Normalize into dict response
+            body = resp if isinstance(resp, dict) else {"raw": resp}
+            return {"status": 200, "body": body}
+        except OGCProcessException as exc:
+            # Bubble upstream OGC error (already structured) to adapter layer
+            raise exc
+        except Exception as exc:
+            logger.error(f"[job:results] unexpected error job_id={job.id} err={exc}")
+            return {
+                "status": 500,
+                "body": {"detail": "Unexpected error fetching results"},
+            }
+
+    # ---------------- Link Helpers -----------------
+    def _ensure_results_link(self, job_id: str, status_info: JobStatusInfo) -> None:
+        """Ensure a relative results link is present in statusInfo.links when successful."""
+        if status_info.status != StatusCode.successful:
+            return
+        existing = status_info.links or []
+        if any(l.rel == "results" for l in existing):
+            return
+        results_link = Link(
+            href=f"/jobs/{job_id}/results",
+            rel="results",
+            type="application/json",
+            title="Job results",
+        )
+        status_info.links = existing + [results_link]
