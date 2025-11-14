@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set
 from urllib.parse import urljoin
 
-from ump.core.exceptions import OGCProcessException
+from ump.core.config import JobManagerConfig
+from ump.core.exceptions import OGCProcessException, JobTimeoutError, ResultsFetchError
 from ump.core.interfaces.http_client import HttpClientPort
 from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
@@ -25,18 +26,25 @@ from ump.core.interfaces.providers import ProvidersPort
 from ump.core.models.job import Job, JobStatusInfo, StatusCode
 from ump.core.models.link import Link
 from ump.core.models.ogcp_exception import OGCExceptionResponse
-from ump.core.settings import app_settings, logger
+from ump.core.settings import logger
 
 REQUIRED_STATUS_FIELDS = {"jobID", "status", "type"}
 
 
 class JobManager:
+    """Orchestrates job lifecycle: creation, forwarding, status derivation, polling, results proxy.
+    
+    Attributes:
+        config: Immutable configuration for job behavior (poll intervals, timeouts, etc.)
+    """
+    
     def __init__(
         self,
         providers: ProvidersPort,
         http_client: HttpClientPort,
         process_id_validator: ProcessIdValidatorPort,
         job_repo: JobRepositoryPort,
+        config: JobManagerConfig,
         retry_port: Optional[Any] = None,  # RetryPort protocol; kept generic to avoid tight coupling
         result_storage_port: Optional[Any] = None,  # ResultStoragePort protocol
     ) -> None:
@@ -44,10 +52,7 @@ class JobManager:
         self._http = http_client
         self._validator = process_id_validator
         self._repo = job_repo
-        self._poll_interval = getattr(
-            app_settings, "UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL", 5
-        )
-        self._poll_timeout = getattr(app_settings, "UMP_REMOTE_JOB_TTW", None)
+        self.config = config
         self._poll_tasks: Set[asyncio.Task] = set()
         self._shutdown = False
         self._retry = retry_port
@@ -600,23 +605,23 @@ class JobManager:
         return urljoin(base.rstrip("/") + "/", location.lstrip("/"))
 
     def _is_inline_small(self, inputs: Dict[str, Any]) -> bool:
-        # simplistic size heuristic; refine later
-        return len(str(inputs)) < 1024 * 64
+        """Check if inputs are small enough for inline storage."""
+        return len(str(inputs)) < self.config.inline_inputs_size_limit
 
     async def _check_and_handle_timeout(self, job: Job) -> bool:
         """Check if job has exceeded timeout and mark as failed if so.
         
         Returns True if timeout was reached and job was marked failed.
         """
-        if self._poll_timeout is None or job.created is None:
+        if self.config.poll_timeout is None or job.created is None:
             return False
         
         elapsed = (datetime.now(timezone.utc) - job.created).total_seconds()
-        if elapsed <= self._poll_timeout:
+        if elapsed <= self.config.poll_timeout:
             return False
         
         logger.warning(
-            f"[job:poll] timeout reached job_id={job.id} elapsed={elapsed}s > {self._poll_timeout}s; marking failed"
+            f"[job:poll] timeout reached job_id={job.id} elapsed={elapsed}s > {self.config.poll_timeout}s; marking failed"
         )
         
         timeout_si = JobStatusInfo(
@@ -624,7 +629,7 @@ class JobManager:
             status=StatusCode.failed,
             type="process",
             processID=job.process_id,
-            message=f"Timed out after {self._poll_timeout}s waiting for remote completion",
+            message=f"Timed out after {self.config.poll_timeout}s waiting for remote completion",
             created=job.created,
             updated=datetime.now(timezone.utc),
             finished=datetime.now(timezone.utc),
@@ -717,7 +722,7 @@ class JobManager:
                 if await self._check_and_handle_timeout(job):
                     return
                 
-                await asyncio.sleep(self._poll_interval)
+                await asyncio.sleep(self.config.poll_interval)
         finally:
             pass
 
