@@ -23,6 +23,8 @@ from ump.core.interfaces.http_client import HttpClientPort
 from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.interfaces.providers import ProvidersPort
+from ump.core.interfaces.status_derivation import StatusDerivationContext
+from ump.core.managers.status_derivation_orchestrator import StatusDerivationOrchestrator
 from ump.core.models.job import Job, JobStatusInfo, StatusCode
 from ump.core.models.link import Link
 from ump.core.models.ogcp_exception import OGCExceptionResponse
@@ -57,6 +59,9 @@ class JobManager:
         self._shutdown = False
         self._retry = retry_port
         self._result_storage = result_storage_port
+        
+        # Initialize status derivation orchestrator
+        self._status_orchestrator = StatusDerivationOrchestrator(http_client)
 
     async def create_and_forward(
         self,
@@ -215,106 +220,6 @@ class JobManager:
             if not status_info.message:
                 status_info.message = "Failed"
 
-    def _handle_immediate_results_response(
-        self,
-        job: Job,
-        process_id: str,
-        provider_body: Dict[str, Any],
-        accepted_si: JobStatusInfo,
-    ) -> JobStatusInfo:
-        """Synthesize successful statusInfo when provider returns results directly."""
-        logger.debug(
-            f"[job:derive] provider returned results body without statusInfo; synthesizing terminal success job_id={job.id}"
-        )
-        return JobStatusInfo(
-            jobID=job.id,
-            status=StatusCode.successful,
-            type="process",
-            processID=process_id,
-            message="Completed (immediate results)",
-            created=accepted_si.created,
-            started=accepted_si.created,
-            finished=datetime.now(timezone.utc),
-            updated=datetime.now(timezone.utc),
-            progress=100,
-        )
-
-    def _create_fallback_failed_status(
-        self,
-        job: Job,
-        process_id: str,
-        accepted_si: JobStatusInfo,
-        provider_status: Optional[int],
-        provider_body: Any,
-    ) -> tuple[JobStatusInfo, str]:
-        """Create a failed statusInfo when provider response is unparseable."""
-        logger.debug(
-            f"[job:derive] missing statusInfo, marking failed job_id={job.id}"
-        )
-        status_info = JobStatusInfo(
-            jobID=job.id,
-            status=StatusCode.failed,
-            type="process",
-            processID=process_id,
-            message="Provider response missing statusInfo",
-            updated=datetime.now(timezone.utc),
-            created=accepted_si.created,
-            progress=None,
-        )
-        diagnostic = f"provider_status={provider_status} body_type={type(provider_body).__name__}"
-        return status_info, diagnostic
-
-    async def _fetch_status_from_location(
-        self, provider: Any, location: str
-    ) -> Optional[JobStatusInfo]:
-        """Follow Location header to fetch initial status snapshot."""
-        resolved = self._resolve_location(str(provider.url), location)
-        try:
-            logger.debug(
-                f"[job:derive] following provider Location location={location} resolved={resolved}"
-            )
-            follow_resp = await self._http.get(resolved)
-            return self._extract_status_info(follow_resp)
-        except Exception as follow_err:
-            logger.warning(
-                f"Failed to follow provider Location {location}: {follow_err}"
-            )
-            return None
-
-    def _extract_remote_job_id_and_urls(
-        self,
-        status_info: JobStatusInfo,
-        job: Job,
-        provider: Any,
-        provider_headers: Dict[str, Any],
-    ) -> tuple[Optional[str], Optional[str]]:
-        """Extract remote job ID and status URL from statusInfo and headers.
-        
-        Returns (remote_job_id, remote_status_url).
-        Normalizes statusInfo.jobID to local UUID.
-        """
-        remote_job_id: Optional[str] = None
-        remote_status_url: Optional[str] = None
-
-        # Capture remote job id while always exposing local UUID to clients
-        if status_info.jobID and status_info.jobID != job.id:
-            remote_job_id = status_info.jobID
-            status_info.jobID = job.id
-            logger.debug(f"[job:derive] remote_job_id={remote_job_id} local_job_id={job.id}")
-
-        # Capture Location header as remote status URL
-        if provider_headers.get("Location"):
-            location = provider_headers["Location"]
-            remote_status_url = self._resolve_location(str(provider.url), location)
-            logger.debug(f"[job:derive] captured remote_status_url via Location job_id={job.id} url={remote_status_url}")
-
-        # Synthesize remote status URL if we have remote_job_id but no explicit Location header
-        if remote_job_id and not remote_status_url:
-            remote_status_url = str(provider.url).rstrip("/") + f"/jobs/{remote_job_id}?f=json"
-            logger.debug(f"[job:derive] synthesized remote_status_url={remote_status_url} job_id={job.id}")
-
-        return remote_job_id, remote_status_url
-
     def _normalize_and_enrich_status_info(
         self,
         status_info: JobStatusInfo,
@@ -427,59 +332,41 @@ class JobManager:
         provider_resp: Dict[str, Any],
         accepted_si: JobStatusInfo,
     ) -> tuple[JobStatusInfo, Optional[str], Optional[str], Optional[str]]:
-        """Derive statusInfo from provider response, handling various response patterns.
+        """Derive statusInfo from provider response using Strategy pattern.
+        
+        Delegates to StatusDerivationOrchestrator which selects the appropriate
+        strategy based on response pattern (direct statusInfo, immediate results,
+        Location follow-up, or fallback failed).
         
         Returns (status_info, remote_status_url, remote_job_id, diagnostic).
         """
-        provider_headers = provider_resp.get("headers", {})
-        provider_body = provider_resp.get("body")
-        provider_status = provider_resp.get("status")
+        # Create context for strategy evaluation
+        context = StatusDerivationContext(
+            job=job,
+            process_id=process_id,
+            provider=provider,
+            provider_resp=provider_resp,
+            accepted_si=accepted_si,
+        )
         
-        # Try to extract statusInfo from response body
-        status_info = self._extract_status_info(provider_body)
-        remote_status_url: Optional[str] = None
-        diagnostic: Optional[str] = None
-
-        # Handle case: no statusInfo but body contains immediate results
-        if not status_info and isinstance(provider_body, dict) and "outputs" in provider_body:
-            status_info = self._handle_immediate_results_response(
-                job, process_id, provider_body, accepted_si
+        # Use orchestrator to derive status via appropriate strategy
+        result = await self._status_orchestrator.derive_status(context)
+        
+        # Normalize and enrich if we got valid statusInfo
+        if result.status_info and result.status_info.status != StatusCode.failed:
+            self._normalize_and_enrich_status_info(
+                result.status_info, job, process_id, accepted_si
             )
         
-        # Handle case: no statusInfo but Location header present
-        elif not status_info and provider_headers.get("Location"):
-            location = provider_headers["Location"]
-            remote_status_url = self._resolve_location(str(provider.url), location)
-            status_info = await self._fetch_status_from_location(provider, location)
-
-        # Handle case: statusInfo present but also capture Location
-        elif status_info and provider_headers.get("Location"):
-            location = provider_headers["Location"]
-            remote_status_url = self._resolve_location(str(provider.url), location)
-            logger.debug(f"[job:derive] captured remote_status_url via Location job_id={job.id} url={remote_status_url}")
-
-        # Fallback: create failed status if still no statusInfo
-        remote_job_id: Optional[str] = None
-        
-        if not status_info:
-            status_info, diagnostic = self._create_fallback_failed_status(
-                job, process_id, accepted_si, provider_status, provider_body
-            )
-        else:
-            # Extract remote identifiers and normalize statusInfo
-            remote_job_id, extracted_url = self._extract_remote_job_id_and_urls(
-                status_info, job, provider, provider_headers
-            )
-            if extracted_url and not remote_status_url:
-                remote_status_url = extracted_url
-            
-            # Normalize and enrich statusInfo with local context
-            self._normalize_and_enrich_status_info(status_info, job, process_id, accepted_si)
-
         # Ensure local self link consistency for any status
-        self._ensure_self_link(job.id, status_info)
+        self._ensure_self_link(job.id, result.status_info)
         
-        return status_info, remote_status_url, remote_job_id, diagnostic
+        return (
+            result.status_info,
+            result.remote_status_url,
+            result.remote_job_id,
+            result.diagnostic,
+        )
 
     async def _finalize_job(
         self,
