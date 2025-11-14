@@ -100,7 +100,11 @@ def make_app_with_factories(http_client: HttpClientPort, provider: FakeProvider 
 
 def test_forward_valid_statusinfo():
     """Provider returns statusInfo body + Location header.
-    Expect 201, local job creation, jobID rewritten to local UUID, status preserved.
+
+    Design: Endpoint always returns initial accepted snapshot (local job creation)
+    regardless of remote status; derived remote status becomes visible via
+    subsequent GET /jobs/{id}. Here remote reported 'accepted' already so both
+    initial and persisted statuses are accepted.
     """
     status_info = {"jobID": "remote-job-1", "status": "accepted", "type": "process"}
     provider_resp = {"status": 201, "headers": {"Location": "http://provider.local/jobs/remote-job-1"}, "body": status_info}
@@ -115,8 +119,10 @@ def test_forward_valid_statusinfo():
         assert "Location" in r.headers
 
 def test_location_followup_fetches_statusinfo():
-    """Provider returns only Location; server follows and obtains statusInfo.
-    Expect running status and rewritten local jobID.
+    """Provider returns only Location header; server follows to obtain remote statusInfo.
+
+    Response body: initial accepted snapshot (contract). After follow-up GET,
+    stored job status becomes 'running'. Test asserts both phases.
     """
     post_resp = {"status": 201, "headers": {"Location": "http://provider.local/jobs/remote-job-1"}, "body": None}
     job_status = {"jobID": "remote-job-1", "status": "running", "type": "process"}
@@ -126,13 +132,20 @@ def test_location_followup_fetches_statusinfo():
         r = client.post("/processes/infra:echo/execution", json={"inputs": {}}, headers={"Prefer": "respond-async"})
         assert r.status_code == 201
         body = r.json()
-        assert body.get("status") == "running"
+        # initial response always accepted snapshot
+        assert body.get("status") == "accepted"
         assert body.get("jobID") and body["jobID"] != "remote-job-1"
         assert "Location" in r.headers
+        # follow-up fetch reveals remote-derived running status
+        job_id = r.headers["Location"].split("/")[-1]
+        jr = client.get(f"/jobs/{job_id}")
+        assert jr.status_code == 200
+        assert jr.json().get("status") == "running"
 
 def test_no_statusinfo_no_location_returns_failed():
     """Provider returns non-statusInfo body and no Location header.
-    Expect failed statusInfo synthesized and Location for local job.
+
+    Initial response: accepted snapshot (contract). Persisted status becomes failed.
     """
     post_resp = {"status": 201, "headers": {}, "body": "not-a-status"}
     http_client = MultiFakeHttpClient(get_responses={}, post_responses={("POST", "http://provider.local/processes/echo/execution"): post_resp})
@@ -141,32 +154,53 @@ def test_no_statusinfo_no_location_returns_failed():
         r = client.post("/processes/infra:echo/execution", json={"inputs": {}}, headers={"Prefer": "respond-async"})
         assert r.status_code == 201
         body = r.json()
-        assert body.get("status") == "failed"
+        assert body.get("status") == "accepted"
         assert "Location" in r.headers
+        job_id = r.headers["Location"].split("/")[-1]
+        jr = client.get(f"/jobs/{job_id}")
+        assert jr.status_code == 200
+        assert jr.json().get("status") == "failed"
 
 def test_remote_provider_error_or_timeout():
-    """Upstream POST raises exception; server still creates local job and marks failed."""
+    """Upstream POST raises exception; server still creates local job.
+
+    Initial response: accepted snapshot; persisted status becomes failed.
+    """
     http_client = MultiFakeHttpClient(post_responses={("POST", "http://provider.local/processes/echo/execution"): RuntimeError("timeout")})
     app = make_app_with_factories(http_client)
     with TestClient(app) as client:
         r = client.post("/processes/infra:echo/execution", json={"inputs": {}}, headers={"Prefer": "respond-async"})
         assert r.status_code == 201
-        assert r.json().get("status") == "failed"
+        assert r.json().get("status") == "accepted"
         assert "Location" in r.headers
+        job_id = r.headers["Location"].split("/")[-1]
+        jr = client.get(f"/jobs/{job_id}")
+        assert jr.status_code == 200
+        assert jr.json().get("status") == "failed"
 
 def test_always_create_local_job():
-    """Provider returns successful terminal statusInfo; server responds 201 and rewrites jobID."""
+    """Provider returns successful terminal statusInfo.
+
+    Initial response: accepted snapshot; persisted status becomes successful (after immediate verification).
+    """
     post_resp = {"status": 200, "headers": {}, "body": {"jobID": "remote-job-2", "status": "successful", "type": "process"}}
     http_client = MultiFakeHttpClient(post_responses={("POST", "http://provider.local/processes/echo/execution"): post_resp})
     app = make_app_with_factories(http_client)
     with TestClient(app) as client:
         r = client.post("/processes/infra:echo/execution", json={"inputs": {}}, headers={"Prefer": "respond-async"})
         assert r.status_code == 201
-        assert r.json().get("status") == "successful"
+        assert r.json().get("status") == "accepted"
         assert "Location" in r.headers
+        job_id = r.headers["Location"].split("/")[-1]
+        jr = client.get(f"/jobs/{job_id}")
+        assert jr.status_code == 200
+        assert jr.json().get("status") == "successful"
 
 def test_relative_location_header_resolution():
-    """Provider returns relative Location; server resolves, polls and rewrites jobID."""
+    """Provider returns relative Location; server resolves, polls and rewrites jobID.
+
+    Initial response: accepted snapshot; persisted status becomes running.
+    """
     post_resp = {"status": 202, "headers": {"Location": "/jobs/rel-1"}, "body": None}
     job_status = {"jobID": "rel-1", "status": "running", "type": "process"}
     http_client = MultiFakeHttpClient(get_responses={"http://provider.local/jobs/rel-1": job_status}, post_responses={("POST", "http://provider.local/processes/echo/execution"): post_resp})
@@ -175,12 +209,19 @@ def test_relative_location_header_resolution():
         r = client.post("/processes/infra:echo/execution", json={"inputs": {}}, headers={"Prefer": "respond-async"})
         assert r.status_code == 201
         body = r.json()
-        assert body.get("status") == "running"
+        assert body.get("status") == "accepted"
         assert body.get("jobID") and body["jobID"] != "rel-1"
         assert "Location" in r.headers
+        job_id = r.headers["Location"].split("/")[-1]
+        jr = client.get(f"/jobs/{job_id}")
+        assert jr.status_code == 200
+        assert jr.json().get("status") == "running"
 
 def test_execute_endpoint_forwards_201():
-    """Provider returns statusInfo with relative Location; server responds 201 with rewritten jobID."""
+    """Provider returns statusInfo with relative Location.
+
+    Initial response: accepted snapshot; persisted status becomes accepted (remote also accepted).
+    """
     exec_url = "http://provider.local/processes/echo/execution"
     fake_response = {"status": 201, "headers": {"Location": "/jobs/1"}, "body": {"jobID": "1", "status": "accepted", "type": "process"}}
     http_client = MultiFakeHttpClient(post_responses={("POST", exec_url): fake_response})
@@ -189,5 +230,9 @@ def test_execute_endpoint_forwards_201():
         r = client.post("/processes/infra:echo/execution", json={"x":1}, headers={"Prefer": "respond-async"})
         assert r.status_code == 201
         body = r.json()
-        assert body.get("status") == "accepted"
+        assert body.get("status") == "accepted"  # initial snapshot
         assert body.get("jobID") and body["jobID"] != "1"
+        job_id = r.headers["Location"].split("/")[-1]
+        jr = client.get(f"/jobs/{job_id}")
+        assert jr.status_code == 200
+        assert jr.json().get("status") == "accepted"
