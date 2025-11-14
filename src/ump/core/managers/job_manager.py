@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional, Set
 from urllib.parse import urljoin
 
 from ump.core.config import JobManagerConfig
-from ump.core.exceptions import OGCProcessException, JobTimeoutError, ResultsFetchError
+from ump.core.exceptions import OGCProcessException, JobTimeoutError, ResultsFetchError, RemoteProviderError
 from ump.core.interfaces.http_client import HttpClientPort
 from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
@@ -31,6 +31,15 @@ from ump.core.models.ogcp_exception import OGCExceptionResponse
 from ump.core.settings import logger
 
 REQUIRED_STATUS_FIELDS = {"jobID", "status", "type"}
+
+
+class TransientOGCError(OGCProcessException):
+    """Wrapper for transient OGC errors that should be retried.
+    
+    Used to distinguish retryable errors (502, 503, 504) from
+    non-retryable client errors (4xx) in retry logic.
+    """
+    pass
 
 
 class JobManager:
@@ -288,6 +297,28 @@ class JobManager:
         await self._repo.append_status(job.id, accepted_si)
         return accepted_si
 
+    def _is_transient_error(self, exc: Exception) -> bool:
+        """Check if exception represents a transient error worth retrying.
+        
+        Transient errors include:
+        - Connection errors (server busy, connection refused, etc.)
+        - Timeout errors (server slow to respond)
+        - 502/503/504 gateway/service unavailable errors
+        
+        Non-transient errors that should fail immediately:
+        - 4xx client errors (bad request, not found, etc.)
+        - Authentication errors
+        """
+        if isinstance(exc, OGCProcessException):
+            # Retry on gateway/service unavailable errors
+            if exc.response.status in (502, 503, 504):
+                return True
+            # Don't retry client errors or auth errors
+            if 400 <= exc.response.status < 500:
+                return False
+        # Other exceptions might be transient connection issues
+        return True
+    
     async def _handle_forward_error(
         self, job: Job, exc: Exception
     ) -> None:
@@ -310,17 +341,78 @@ class JobManager:
     async def _safe_forward(
         self, job: Job, exec_url: str, payload: Dict[str, Any], headers: Dict[str, str]
     ) -> Optional[Dict[str, Any]]:
-        """Forward execution request to remote provider with error handling."""
+        """Forward execution request to remote provider with retry logic.
+        
+        Uses TenacityRetryAdapter (if available) for exponential backoff on transient
+        errors (connection errors, timeouts, 502/503/504). Non-transient errors (4xx)
+        fail immediately without retry by wrapping them in non-retryable exceptions.
+        """
+        async def do_forward_with_error_classification():
+            """Actual forward operation that classifies errors for retry logic."""
+            try:
+                logger.debug(
+                    f"[job:forward] POST exec_url={exec_url} job_id={job.id} headers={list(headers.keys())} payload_size={len(str(payload))}"
+                )
+                resp = await self._http.post(exec_url, json=payload, headers=headers)
+                logger.debug(
+                    f"[job:forward] POST completed job_id={job.id} status={resp.get('status')} keys={list(resp.keys())}"
+                )
+                return resp
+            except OGCProcessException as exc:
+                # Check if this is a transient error worth retrying
+                if self._is_transient_error(exc):
+                    # Wrap in TransientOGCError so retry adapter retries it
+                    logger.debug(
+                        f"[job:forward] transient error, will retry: status={exc.response.status} job_id={job.id}"
+                    )
+                    raise TransientOGCError(exc.response) from exc
+                else:
+                    # Non-transient error (4xx), re-raise as-is to fail immediately
+                    logger.debug(
+                        f"[job:forward] non-transient error, will not retry: status={exc.response.status} job_id={job.id}"
+                    )
+                    raise
+        
         try:
-            logger.debug(
-                f"[job:forward] POST exec_url={exec_url} job_id={job.id} headers={list(headers.keys())} payload_size={len(str(payload))}"
+            # Use retry adapter if available, with config-based retry settings
+            if self._retry:
+                logger.debug(f"[job:forward] using retry adapter job_id={job.id}")
+                resp = await self._retry.execute(
+                    do_forward_with_error_classification,
+                    attempts=self.config.forward_max_retries,
+                    wait_initial=self.config.forward_retry_base_wait,
+                    wait_max=self.config.forward_retry_max_wait,
+                    exception_types=(TransientOGCError,),  # Only retry transient errors
+                )
+                return resp
+            else:
+                # Fallback: single attempt without retry
+                logger.debug(f"[job:forward] no retry adapter, single attempt job_id={job.id}")
+                return await do_forward_with_error_classification()
+                
+        except TransientOGCError as exc:
+            # Transient error retry exhausted - unwrap original exception
+            logger.error(
+                f"[job:forward] transient error retry exhausted job_id={job.id} "
+                f"status={exc.response.status} title={exc.response.title}"
             )
-            resp = await self._http.post(exec_url, json=payload, headers=headers)
-            logger.debug(
-                f"[job:forward] POST completed job_id={job.id} status={resp.get('status')} keys={list(resp.keys())}"
+            await self._handle_forward_error(job, exc)
+            return None
+            
+        except OGCProcessException as exc:
+            # Non-transient error (no retry attempted)
+            logger.warning(
+                f"[job:forward] non-transient error job_id={job.id} "
+                f"status={exc.response.status} title={exc.response.title}"
             )
-            return resp
+            await self._handle_forward_error(job, exc)
+            return None
+            
         except Exception as exc:
+            # Unexpected non-OGC exception
+            logger.error(
+                f"[job:forward] unexpected exception job_id={job.id} error={exc}"
+            )
             await self._handle_forward_error(job, exc)
             return None
 

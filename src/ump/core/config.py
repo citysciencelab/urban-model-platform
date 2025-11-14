@@ -47,6 +47,25 @@ class JobManagerConfig(BaseModel):
         description="Maximum size in bytes for storing job inputs inline (larger inputs use object storage)"
     )
     
+    forward_max_retries: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum retry attempts for transient errors when forwarding to remote provider"
+    )
+    
+    forward_retry_base_wait: float = Field(
+        default=1.0,
+        gt=0,
+        description="Base wait time in seconds for exponential backoff between retries"
+    )
+    
+    forward_retry_max_wait: float = Field(
+        default=5.0,
+        gt=0,
+        description="Maximum wait time in seconds between retry attempts"
+    )
+    
     model_config = {
         "frozen": True,  # Immutable after creation for safety
         "extra": "forbid",  # Reject unknown fields
@@ -66,5 +85,6 @@ class JobManagerConfig(BaseModel):
             poll_interval=settings.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL,
             poll_timeout=settings.UMP_REMOTE_JOB_TTW,
             rewrite_remote_links=settings.UMP_REWRITE_REMOTE_LINKS,
-            # inline_inputs_size_limit uses default for now (no setting exists yet)
+            # inline_inputs_size_limit, forward_max_retries, forward_retry_base_wait, 
+            # forward_retry_max_wait all use defaults (no settings exist yet)
         )

@@ -49,9 +49,14 @@ def main():
         )
 
     def job_manager_factory(client, process_manager):
-        retry_adapter = TenacityRetryAdapter(attempts=4, wait_initial=0.15, wait_max=1.2)
         # Create config from app settings
         job_config = JobManagerConfig.from_app_settings(app_settings)
+        # Use config values for retry adapter
+        retry_adapter = TenacityRetryAdapter(
+            attempts=job_config.forward_max_retries,
+            wait_initial=job_config.forward_retry_base_wait,
+            wait_max=job_config.forward_retry_max_wait
+        )
         jm = JobManager(
             providers=providers_port,
             http_client=client,
