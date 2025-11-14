@@ -702,85 +702,134 @@ class JobManager:
 
     async def _poll_loop(self, job_id: str) -> None:
         """Continuously poll remote status until terminal or shutdown.
-
-        Uses fixed interval from settings; could be enhanced with exponential backoff.
+        
+        Main polling orchestrator that:
+        1. Checks termination conditions (shutdown, terminal state, timeout)
+        2. Fetches remote status
+        3. Processes status update
+        4. Sleeps until next poll
         """
+        while not self._shutdown:
+            # Check if we should continue polling
+            should_stop, reason = await self._should_stop_polling(job_id)
+            if should_stop:
+                logger.debug(f"[job:poll] stopping: {reason} job_id={job_id}")
+                return
+            
+            # Get fresh job state
+            job = await self._repo.get(job_id)
+            if not job:  # Job disappeared (should not happen, but defensive)
+                logger.debug(f"[job:poll] job disappeared job_id={job_id}")
+                return
+            
+            # Attempt to fetch and process remote status
+            terminal_reached = await self._poll_and_update_status(job)
+            if terminal_reached:
+                return
+            
+            # Sleep before next poll
+            await asyncio.sleep(self.config.poll_interval)
+    
+    async def _should_stop_polling(self, job_id: str) -> tuple[bool, str]:
+        """Check if polling should stop for a job.
+        
+        Returns (should_stop, reason) tuple.
+        """
+        job = await self._repo.get(job_id)
+        
+        if not job:
+            return True, "job not found"
+        
+        if job.is_in_terminal_state():
+            return True, f"terminal state {job.status}"
+        
+        if not job.remote_status_url:
+            return True, "no remote_status_url"
+        
+        # Check timeout
+        if await self._check_and_handle_timeout(job):
+            return True, "timeout exceeded"
+        
+        return False, ""
+    
+    async def _poll_and_update_status(self, job: Job) -> bool:
+        """Poll remote status and update job if status changed.
+        
+        Returns True if terminal state reached, False otherwise.
+        """
+        # Guard: must have remote status URL
+        if not job.remote_status_url:
+            return False
+        
         try:
-            while not self._shutdown:
-                job = await self._repo.get(job_id)
-
-                if not job:
-                    logger.debug(f"[job:poll] job disappeared job_id={job_id} stopping")
-                    return
-
-                if job.is_in_terminal_state():
-                    logger.debug(
-                        f"[job:poll] terminal state reached job_id={job_id} status={job.status}"
-                    )
-                    return
-
-                if not job.remote_status_url:
-                    logger.debug(
-                        f"[job:poll] no remote_status_url job_id={job_id} stopping"
-                    )
-                    return
-
-                try:
-                    resp = await self._http.get(job.remote_status_url)
-                    status_info = self._extract_status_info(resp)
-                    
-                    if status_info:
-                        # Keep remote IDs consistent
-                        if status_info.jobID and status_info.jobID != job.id:
-                            if not job.remote_job_id:
-                                job.remote_job_id = status_info.jobID
-                            status_info.jobID = job.id
-                        
-                        prev_status = job.status_info.status if job.status_info else None
-                        status_info.processID = job.process_id
-                        
-                        # Enrich on status change or missing fields
-                        needs_enrichment = (
-                            prev_status != status_info.status or
-                            any(getattr(status_info, f) is None for f in ["started", "progress", "message"])
-                        )
-                        if needs_enrichment:
-                            created_time = job.created or datetime.now(timezone.utc)
-                            self._enrich_status_info(status_info, job, created_time)
-                        
-                        status_info.updated = datetime.now(timezone.utc)
-                        
-                        # Ensure local links
-                        self._ensure_self_link(job.id, status_info)
-                        if status_info.status == StatusCode.successful:
-                            self._ensure_results_link(job.id, status_info)
-                        
-                        old_status = JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
-                        
-                        job.apply_status_info(status_info)
-                        await self._repo.update(job)
-                        
-                        # Notify observers (includes status history recording)
-                        await self._notify_status_changed(job, old_status, status_info)
-
-                        if job.is_in_terminal_state():
-                            logger.debug(
-                                f"[job:poll] reached terminal state job_id={job.id} status={job.status}"
-                            )
-                            # Notify completion observers (includes results verification)
-                            await self._notify_job_completed(job, status_info)
-                            return
-                            
-                except Exception as poll_err:
-                    logger.debug(f"[job:poll] error job_id={job_id} err={poll_err}")
-                
-                # Check for timeout and mark failed if exceeded
-                if await self._check_and_handle_timeout(job):
-                    return
-                
-                await asyncio.sleep(self.config.poll_interval)
-        finally:
-            pass
+            # Fetch remote status
+            resp = await self._http.get(job.remote_status_url)
+            status_info = self._extract_status_info(resp)
+            
+            # Guard: skip if no valid status info
+            if not status_info:
+                logger.debug(f"[job:poll] no valid statusInfo job_id={job.id}")
+                return False
+            
+            # Process the status update
+            return await self._process_status_update(job, status_info)
+            
+        except Exception as exc:
+            logger.debug(f"[job:poll] fetch error job_id={job.id} err={exc}")
+            return False
+    
+    async def _process_status_update(self, job: Job, status_info: JobStatusInfo) -> bool:
+        """Process a status update from remote provider.
+        
+        Normalizes IDs, enriches fields, updates job, notifies observers.
+        Returns True if terminal state reached.
+        """
+        # Normalize remote job ID
+        if status_info.jobID and status_info.jobID != job.id:
+            if not job.remote_job_id:
+                job.remote_job_id = status_info.jobID
+            status_info.jobID = job.id
+        
+        # Ensure processID is set
+        status_info.processID = job.process_id
+        
+        # Enrich if status changed or fields missing
+        prev_status = job.status_info.status if job.status_info else None
+        if self._needs_enrichment(status_info, prev_status):
+            created_time = job.created or datetime.now(timezone.utc)
+            self._enrich_status_info(status_info, job, created_time)
+        
+        # Update timestamp
+        status_info.updated = datetime.now(timezone.utc)
+        
+        # Ensure local links
+        self._ensure_self_link(job.id, status_info)
+        if status_info.status == StatusCode.successful:
+            self._ensure_results_link(job.id, status_info)
+        
+        # Capture old status for observers
+        old_status = JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
+        
+        # Apply and persist
+        job.apply_status_info(status_info)
+        await self._repo.update(job)
+        
+        # Notify observers
+        await self._notify_status_changed(job, old_status, status_info)
+        
+        # Check if terminal
+        if job.is_in_terminal_state():
+            logger.debug(f"[job:poll] terminal state reached job_id={job.id} status={job.status}")
+            await self._notify_job_completed(job, status_info)
+            return True
+        
+        return False
+    
+    def _needs_enrichment(self, status_info: JobStatusInfo, prev_status: Optional[StatusCode]) -> bool:
+        """Check if status info needs enrichment (status changed or fields missing)."""
+        if prev_status != status_info.status:
+            return True
+        return any(getattr(status_info, f) is None for f in ["started", "progress", "message"])
 
     async def shutdown(self) -> None:
         self._shutdown = True
