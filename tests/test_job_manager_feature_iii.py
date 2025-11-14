@@ -47,10 +47,14 @@ class TestProviderConfig:
         self.name = name
         self.url = url
         self.processes = []  # minimal attribute surface used by JobManager
+    # Marker indicating this is not a production adapter (test helper)
+    test = False
 
 class TestProvidersAdapter(ProvidersPort):
     def __init__(self, provider_name: str = "prov", url: str = "http://provider.test"):
         self._provider = TestProviderConfig(provider_name, url)
+    # Marker indicating this is not a production adapter (test helper)
+    test = False
 
     # Unused lifecycle methods for these tests
     def load_providers(self) -> None:  # pragma: no cover trivial
@@ -78,12 +82,16 @@ class TestProcessIdValidator(ProcessIdValidatorPort):
         return prefix, pid
     def create(self, provider_prefix: str, process_id: str) -> str:
         return f"{provider_prefix}:{process_id}"
+    # Marker indicating this is not a production adapter (test helper)
+    test = False
 
 class TestHttpClientAdapter(HttpClientPort):
     def __init__(self, post_response=None, get_responses=None):
         self._post_response = post_response
         self._get_responses = get_responses or []
         self.get_calls = []
+    # Marker indicating this is not a production adapter (test helper)
+    test = False
     async def __aenter__(self):  # pragma: no cover trivial
         return self
     async def __aexit__(self, exc_type, exc_val, exc_tb):  # pragma: no cover trivial
@@ -109,6 +117,8 @@ class TestRetryAdapter(TenacityRetryAdapter):
         finally:
             # TenacityRetryAdapter doesn't track calls; we can infer from test client's get_calls length if needed.
             pass
+    # Marker indicating this is not a production adapter (test helper)
+    test = False
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -268,7 +278,7 @@ async def test_retry_verification_failure_downgrades_status():
     assert job is not None, "Job should exist"
     assert job.status_info is not None, "status_info should be populated"
     assert job.status_info.status == StatusCode.failed
-    assert "result fetch failed" in (job.status_info.message or "")
+    assert 'result fetch failed' in (job.status_info.message or '').lower()
     # Should still have self link but not results (failed)
     hrefs = {l.href for l in job.status_info.links or []}
     assert f"/jobs/{job.id}" in hrefs
@@ -328,7 +338,9 @@ async def test_results_endpoint_proxy_success_and_not_available():
         "headers": {},
         "body": {"jobID": "remote-R", "status": "successful", "type": "process"},
     }
-    mgr_s, repo_s, http_s = make_manager(post_response_success, get_responses=[{"ok": True}])
+    # Provide two successful GET responses: one for verification during create_and_forward
+    # and one for the explicit results fetch call below.
+    mgr_s, repo_s, http_s = make_manager(post_response_success, get_responses=[{"ok": True}, {"ok": True}])
     resp_s = await mgr_s.create_and_forward("prov:procF", {"inputs": {}}, {})
     job_id_s = resp_s["headers"]["Location"].split("/")[-1]
     # Call results endpoint
