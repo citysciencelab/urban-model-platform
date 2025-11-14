@@ -11,6 +11,7 @@ from ump.adapters.logging_adapter import LoggingAdapter
 from ump.adapters.web.fastapi import create_app
 from ump.core.managers.process_manager import ProcessManager
 from ump.core.managers.job_manager import JobManager
+from ump.adapters.retry_tenacity import TenacityRetryAdapter
 from ump.core.settings import set_logger, app_settings
 from ump.core.logging_config import configure_logging
 
@@ -29,7 +30,7 @@ def main():
     providers_port.start_file_watcher()
     http_client = AioHttpClientAdapter()
     process_id_validator = ColonProcessId()
-    job_repo = InMemoryJobRepository()
+    job_repo = InMemoryJobRepository("scratch/ump_jobs")
     site_info_adapter = StaticSiteInfoAdapter()
 
     # Central logging configuration BEFORE injecting adapter so uvicorn adopts level/format
@@ -47,12 +48,17 @@ def main():
         )
 
     def job_manager_factory(client, process_manager):
-        return JobManager(
+        retry_adapter = TenacityRetryAdapter(attempts=4, wait_initial=0.15, wait_max=1.2)
+        jm = JobManager(
             providers=providers_port,
             http_client=client,
             process_id_validator=process_id_validator,
             job_repo=job_repo,
+            retry_port=retry_adapter,
         )
+        # Attach here (composition root) so adapters remain pure HTTP concerns.
+        process_manager.attach_job_manager(jm)
+        return jm
 
     app = create_app(
         process_manager_factory=process_manager_factory,

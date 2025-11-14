@@ -57,14 +57,11 @@ def create_app(
         nonlocal process_port
         async with http_client as client:
             process_port = process_manager_factory(client)
-            job_manager = job_manager_factory(
-                client, process_port
-            )  # already wired externally
-
-            # Safe attach: ProcessManager defines attach_job_manager; guard via hasattr
-            if hasattr(process_port, "attach_job_manager"):
-                getattr(process_port, "attach_job_manager")(job_manager)
+            # JobManager already attached inside job_manager_factory (composition root)
+            job_manager = job_manager_factory(client, process_port)
             app.state.process_port = process_port
+            app.state.job_manager = job_manager
+            
             try:
                 yield
             finally:
@@ -169,6 +166,17 @@ def create_app(
                     status_code=404, content={"detail": "Job not found"}
                 )
             return job.status_info
+
+        @sub.get("/jobs/{job_id}/results")
+        async def get_job_results_sub(job_id: str):
+            repo = getattr(app.state.process_port, "job_repository", None)
+            if repo is None:
+                return JSONResponse(status_code=404, content={"detail": "Jobs not supported"})
+            jm = app.state.job_manager
+            if jm is None:
+                return JSONResponse(status_code=404, content={"detail": "Results not supported"})
+            resp = await jm.get_results(job_id)
+            return JSONResponse(status_code=resp.get("status", 200), content=resp.get("body", {}))
 
         return sub, ver_prefix
 
@@ -331,6 +339,17 @@ def create_app(
         if not job or not job.status_info:
             return JSONResponse(status_code=404, content={"detail": "Job not found"})
         return job.status_info
+
+    @app.get("/jobs/{job_id}/results")
+    async def get_job_results(job_id: str):
+        repo = getattr(app.state.process_port, "job_repository", None)
+        if repo is None:
+            return JSONResponse(status_code=404, content={"detail": "Jobs not supported"})
+        jm = app.state.job_manager
+        if jm is None:
+            return JSONResponse(status_code=404, content={"detail": "Results not supported"})
+        resp = await jm.get_results(job_id)
+        return JSONResponse(status_code=resp.get("status", 200), content=resp.get("body", {}))
 
     @app.post("/processes/{process_id}/execution")
     async def execute_process(request: Request, process_id: str):

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 from typing import Dict, Optional, Sequence, List
+import json
+import os
 from copy import deepcopy
 from datetime import datetime, timezone
 
@@ -15,11 +17,41 @@ from ump.core.models.job import Job, JobStatusInfo, StatusCode
 
 
 class InMemoryJobRepository(JobRepositoryPort):
-    def __init__(self) -> None:
+    def __init__(self, dump_dir: str | None = None) -> None:
         self._jobs: Dict[str, Job] = {}
         self._status_history: Dict[str, List[JobStatusInfo]] = {}
         self._events: Dict[str, List[dict]] = {}
         self._lock = asyncio.Lock()
+        self._dump_dir = dump_dir or os.environ.get("UMP_JOB_DUMP_DIR")
+        if self._dump_dir:
+            os.makedirs(self._dump_dir, exist_ok=True)
+
+    def _dump(self, job: Job) -> None:
+        if not self._dump_dir:
+            return
+        try:
+            latest = job.status_info.model_dump() if job.status_info else None
+            payload = {
+                "meta": {
+                    "dumped_at": datetime.now(timezone.utc).isoformat(),
+                    "repository": "in-memory",
+                    "version": 1,
+                },
+                "job": job.model_dump(exclude={"status_info"}),
+                "latest_status": latest,
+                "history": [s.model_dump() for s in self._status_history.get(job.id, [])],
+                "events": self._events.get(job.id, []),
+            }
+            if job.inputs is not None:
+                payload["inputs"] = job.inputs
+            elif job.inputs_storage == "object":
+                payload["inputs"] = {"omitted": True, "reason": "stored externally / too large"}
+            path = os.path.join(self._dump_dir, f"{job.id}.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+        except Exception:
+            # Never break repository operations due to dump errors
+            pass
 
     async def create(self, job: Job) -> Job:
         async with self._lock:
@@ -30,11 +62,10 @@ class InMemoryJobRepository(JobRepositoryPort):
                 job.created = datetime.now(timezone.utc)
             stored = deepcopy(job)
             self._jobs[job.id] = stored
-            if stored.status_info:
-                self._status_history.setdefault(job.id, []).append(deepcopy(stored.status_info))
-            else:
-                self._status_history.setdefault(job.id, [])
+            # Initialize empty history; accepted snapshot appended explicitly later
+            self._status_history.setdefault(job.id, [])
             self._events.setdefault(job.id, [])
+            self._dump(stored)
             return deepcopy(stored)
 
     async def get(self, job_id: str) -> Optional[Job]:
@@ -50,6 +81,7 @@ class InMemoryJobRepository(JobRepositoryPort):
             stored = deepcopy(job)
             self._jobs[job.id] = stored
             # status snapshot updated separately via append_status to avoid duplication
+            self._dump(stored)
             return deepcopy(stored)
 
     async def list(
@@ -87,6 +119,7 @@ class InMemoryJobRepository(JobRepositoryPort):
                 job.diagnostic = diagnostic
             self._status_history[job.id].append(deepcopy(status_info))
             self._jobs[job.id] = deepcopy(job)
+            self._dump(job)
             return deepcopy(job)
 
     async def append_status(self, job_id: str, status_info: JobStatusInfo) -> Optional[Job]:
@@ -97,6 +130,7 @@ class InMemoryJobRepository(JobRepositoryPort):
             job.apply_status_info(status_info)
             self._status_history[job_id].append(deepcopy(status_info))
             self._jobs[job_id] = deepcopy(job)
+            self._dump(job)
             return deepcopy(job)
 
     async def append_event(self, job_id: str, event: dict) -> None:

@@ -1,7 +1,8 @@
 # ump/core/managers/process_manager.py
+from __future__ import annotations
 import asyncio
 import time
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from ump.core.exceptions import OGCProcessException
 from ump.core.interfaces.http_client import HttpClientPort
@@ -39,6 +40,8 @@ class ProcessManager(ProcessesPort):
         self._process_cache_by_id = ProcessCache[Process](
             expiry_seconds=cache_expiry_seconds
         )
+        # Will be set by composition root after instantiation.
+        self.job_manager: Optional[JobManager] = None
 
     # A pipeline of handlers (functions) that transform a fetched process dict.
         # Each handler has signature: handler(provider_name: str, proc: Dict[str, Any]) -> Dict[str, Any]
@@ -442,7 +445,7 @@ class ProcessManager(ProcessesPort):
         will decide which parts to persist locally (e.g., inputs metadata) while
         forwarding the entire payload downstream.
         """
-        if not hasattr(self, "_job_manager") or self._job_manager is None:
+        if self.job_manager is None:
             logger.error("JobManager not attached to ProcessManager")
             raise OGCProcessException(
                 OGCExceptionResponse(
@@ -453,8 +456,9 @@ class ProcessManager(ProcessesPort):
                     instance=None,
                 )
             )
-        return await self._job_manager.create_and_forward(process_id, payload or {}, headers)
+        return await self.job_manager.create_and_forward(process_id, payload or {}, headers)
 
     def attach_job_manager(self, job_manager: JobManager) -> None:
-        self._job_manager = job_manager
+        """Attach the JobManager once; explicit wiring keeps type hints simple."""
+        self.job_manager = job_manager
 
