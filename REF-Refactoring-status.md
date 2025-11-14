@@ -132,7 +132,7 @@ Notes:
 
 Current status (Step 1 COMPLETE — async execution forwarding with local job lifecycle):
 
-Implemented pieces:
+Implemented pieces (updated Nov 14 2025):
 1. `Job` model (`src/ump/core/models/job.py`) including: `id` (UUID), `process_id`, `provider_name`, `remote_job_id`, `remote_status_url`, timestamps, `status_code`, `status_info` snapshot history, and helpers like `is_in_terminal_state()` plus documented ID separation rationale (local vs remote vs public id).
 2. `JobRepositoryPort` (`src/ump/core/interfaces/job_repository.py`) and in-memory adapter `InMemoryJobRepository` for fast TDD; ready to swap with SQLModel adapter later.
 3. `JobManager` (`src/ump/core/managers/job_manager.py`): orchestrates `create_and_forward` by:
@@ -145,10 +145,16 @@ Implemented pieces:
 4. `ExecuteRequest` model (`src/ump/core/models/execute_request.py`) with rich normalization (`from_raw`) moving coercion out of web adapter. Transmission modes, inline/ref inputs, outputs, response preference, subscriber callbacks all normalized centrally.
 5. Process execution delegation: `ProcessManager.execute_process` now delegates entirely to `JobManager.create_and_forward` (adapter route calls ProcessManager, which no longer contains forwarding logic itself).
 6. Link & metadata leniency: handler pipeline in `ProcessManager` now includes `_handle_fill_defaults` (injects `version`, `jobControlOptions`, `outputTransmission`, minimal self link) and `_handle_sanitize_metadata` (drops malformed metadata dicts). This ensures partially non-spec processes are still exposed.
-7. Per-process fetch strategy: `UMP_PER_PROCESS_FETCH` setting toggles between bulk `/processes` list filtering and individual `/processes/{id}` fetches for richer metadata.
+7. Per-process fetch strategy is now the default: the previous `UMP_PER_PROCESS_FETCH` toggle was removed; we always fetch each configured process individually for richer metadata.
 8. Logger decoupling: core no longer directly imports `LoggingAdapter`; `main.py` acts as composition root and injects logging via `set_logger` before building factories handed to the FastAPI adapter.
 9. Composition root refactor: `main.py` now wires all concrete adapters (providers, HTTP client, repository, process id validator, logging) and passes factories to `create_app`. Web adapter no longer instantiates infra objects.
 10. Remote status polling: background tasks query `remote_status_url` until terminal state (success/failed/ dismissed etc.) then stop; tasks are tracked for cleanup.
+11. Results endpoint `/jobs/{job_id}/results` added (remote-only proxy, no local persistence yet) returning provider results; 404 if job not successful.
+12. Retry adapter (Tenacity-based `RetryPort`) integrated into remote results verification for immediate-success jobs to handle transient availability gaps.
+13. Poll timeout via new setting `UMP_REMOTE_JOB_TTW`; jobs exceeding this total wait time are marked failed with a diagnostic message.
+14. Immediate results fallback: when provider ignores `Prefer` and returns a body containing `outputs` but no `statusInfo`, we synthesize a successful terminal `statusInfo` snapshot and skip polling.
+15. Link normalization: always inject a local `self` link with the stable local UUID; add `results` link only upon success; filter out remote self/results links containing foreign job identifiers.
+16. Local vs remote job ID handling simplified: remote job id captured (if present) but never exposed externally; all links and user-facing IDs use the local UUID.
 
 Lifecycle sequence (happy path):
 1. HTTP POST hits `/processes/{process_id}/execution` with raw body.
@@ -181,10 +187,11 @@ What is still pending for Feature III:
 2. `/jobs/{id}/inputs` or presigned URL strategy to expose stored inputs (ensuring they remain segregated from `statusInfo`).
 3. SQLModel-based repository + Alembic migrations (job table + status history table).
 4. Inputs large-object separation (object storage integration, checksum & size metadata fields).
-5. Test coverage: finalize unit tests for JobManager helpers, remote polling, ExecuteRequest normalization, ProcessManager handler pipeline, and integration tests for new /jobs endpoints.
-6. Optional minimal DDD scaffolding (commands/events/aggregate) – deferred unless complexity grows; current CRUD + snapshot history sufficient.
-7. Enhanced status history (append-only table) and event log optional.
-8. Authorization layer (JWT) to restrict job visibility (ties into Feature IV).
+5. Result storage abstraction: introduce `ResultStoragePort` (placeholder injected) and adapters (e.g., GeoServer, ldproxy) for optional persistence after success.
+6. Test coverage: finalize unit tests for JobManager helpers (including timeout & immediate results paths), remote polling, ExecuteRequest normalization, ProcessManager handler pipeline, `/jobs/{id}/results`, and future /jobs endpoints.
+7. Optional minimal DDD scaffolding (commands/events/aggregate) – deferred unless complexity grows; current CRUD + snapshot history sufficient.
+8. Enhanced status history (append-only table) and event log optional.
+9. Authorization layer (JWT) to restrict job visibility (ties into Feature IV).
 
 Removed or superseded tasks (were proposals, now done): Add Job model, JobRepositoryPort, in-memory repo, JobManager, execute delegation, normalization factory, polling loop, leniency handlers, composition root decoupling.
 
@@ -210,11 +217,13 @@ Rationale:
 - CQRS + event sourcing is powerful but adds significant complexity and infra cost; only migrate if you need advanced projections, strict event audit, or heavy read/write scaling.
 
 Immediate actionable checklist (updated):
-- [x] Add `/jobs` (list) and `/jobs/{id}` (detail) endpoints.
+Current focus has shifted with new capabilities; checklist re-aligned:
+- [ ] Add `/jobs` (list) and `/jobs/{id}` (detail) endpoints.
 - [ ] Implement inputs separation & `/jobs/{id}/inputs` (no inputs in statusInfo).
 - [ ] SQLModel JobRepository + Alembic migrations (jobs + status history).
 - [ ] Status history persistence (append snapshots) & optional events.
-- [ ] Tests: JobManager polling, ExecuteRequest normalization, handler pipeline, /jobs endpoints.
+- [ ] Integrate `ResultStoragePort` for optional persistence on success.
+- [ ] Tests: JobManager polling (including timeout), immediate results synthesis, retry verification, link normalization, /jobs results endpoint.
 - [ ] Optional: adaptive polling/backoff per provider.
 - [ ] Optional: auth rules (JWT) restricting job visibility.
 
@@ -291,11 +300,12 @@ Pointers for the assistant taking over the task:
 - Tests to run: `tests/test_fastapi_execute_async.py`, `tests/test_fastapi_execute_e2e.py`, `tests/test_aiohttp_adapter.py`, `tests/test_process_manager.py`.
 
 Quick prioritized checklist (for the next session):
-- [ ] Create `Job` model + in-memory job store.
-- [ ] Implement extended `execute_process` flow in `ProcessManager`.
-- [ ] Validate execute request bodies and return 400 on invalid input.
-- [ ] Update FastAPI route to return 201 + Location for async executes.
-- [ ] Run adapter, lightweight, and E2E tests and make code changes until green.
+Superseded (already implemented); new quick priorities:
+- [ ] `/jobs` list & detail endpoints
+- [ ] Inputs separation & endpoint
+- [ ] SQLModel repository & migrations
+- [ ] Result storage adapter integration
+- [ ] Expanded test coverage (retry, timeout, immediate results)
 
 ```yaml
 #JobControlOptions.yaml
