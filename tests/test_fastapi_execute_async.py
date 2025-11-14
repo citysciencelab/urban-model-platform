@@ -104,13 +104,26 @@ def make_app_with_factories(http_client: HttpClientPort, provider: FakeProvider 
         return ProcessManager(providers_service, client, process_id_validator=validator, job_repository=job_repo)
     
     def job_manager_factory(client: HttpClientPort, process_manager: ProcessManager):
+        from ump.core.managers.observers import StatusHistoryObserver, PollingSchedulerObserver, ResultsVerificationObserver
+        
+        # Create JobManager first
         jm = JobManager(
             providers=providers_service,
             http_client=client,
             process_id_validator=validator,
             job_repo=job_repo,
-            config=test_config
+            config=test_config,
+            observers=[]
         )
+        
+        # Create and wire observers
+        observers = [
+            StatusHistoryObserver(repository=job_repo),
+            PollingSchedulerObserver(schedule_callback=jm._schedule_poll),
+            ResultsVerificationObserver(http_client=client),
+        ]
+        jm._observers = observers
+        
         process_manager.attach_job_manager(jm)
         return jm
     

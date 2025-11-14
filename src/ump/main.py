@@ -12,6 +12,7 @@ from ump.adapters.web.fastapi import create_app
 from ump.core.config import JobManagerConfig
 from ump.core.managers.process_manager import ProcessManager
 from ump.core.managers.job_manager import JobManager
+from ump.core.managers.observers import StatusHistoryObserver, PollingSchedulerObserver, ResultsVerificationObserver
 from ump.adapters.retry_tenacity import TenacityRetryAdapter
 from ump.core.settings import set_logger, app_settings
 from ump.core.logging_config import configure_logging
@@ -57,6 +58,8 @@ def main():
             wait_initial=job_config.forward_retry_base_wait,
             wait_max=job_config.forward_retry_max_wait
         )
+        
+        # Create JobManager first (observers need reference to its methods)
         jm = JobManager(
             providers=providers_port,
             http_client=client,
@@ -64,7 +67,19 @@ def main():
             job_repo=job_repo,
             config=job_config,
             retry_port=retry_adapter,
+            observers=[],  # Will be set after creation
         )
+        
+        # Create observers with callback to JobManager's _schedule_poll
+        observers = [
+            StatusHistoryObserver(repository=job_repo),
+            PollingSchedulerObserver(schedule_callback=jm._schedule_poll),
+            ResultsVerificationObserver(http_client=client),
+        ]
+        
+        # Wire observers into JobManager
+        jm._observers = observers
+        
         # Attach here (composition root) so adapters remain pure HTTP concerns.
         process_manager.attach_job_manager(jm)
         return jm

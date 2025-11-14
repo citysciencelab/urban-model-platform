@@ -21,6 +21,7 @@ from ump.core.config import JobManagerConfig
 from ump.core.exceptions import OGCProcessException, JobTimeoutError, ResultsFetchError, RemoteProviderError
 from ump.core.interfaces.http_client import HttpClientPort
 from ump.core.interfaces.job_repository import JobRepositoryPort
+from ump.core.interfaces.observers import JobStateObserver
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.interfaces.providers import ProvidersPort
 from ump.core.interfaces.status_derivation import StatusDerivationContext
@@ -58,6 +59,7 @@ class JobManager:
         config: JobManagerConfig,
         retry_port: Optional[Any] = None,  # RetryPort protocol; kept generic to avoid tight coupling
         result_storage_port: Optional[Any] = None,  # ResultStoragePort protocol
+        observers: Optional[list[JobStateObserver]] = None,  # Observer pattern for state transitions
     ) -> None:
         self._providers = providers
         self._http = http_client
@@ -68,9 +70,48 @@ class JobManager:
         self._shutdown = False
         self._retry = retry_port
         self._result_storage = result_storage_port
+        self._observers = observers or []
         
         # Initialize status derivation orchestrator
         self._status_orchestrator = StatusDerivationOrchestrator(http_client)
+    
+    async def _notify_job_created(self, job: Job, status_info: JobStatusInfo) -> None:
+        """Notify all observers that a job was created."""
+        for observer in self._observers:
+            try:
+                await observer.on_job_created(job, status_info)
+            except Exception as exc:
+                logger.error(
+                    f"[observer:error] on_job_created failed observer={type(observer).__name__} "
+                    f"job_id={job.id} error={exc}"
+                )
+    
+    async def _notify_status_changed(
+        self,
+        job: Job,
+        old_status_info: Optional[JobStatusInfo],
+        new_status_info: JobStatusInfo
+    ) -> None:
+        """Notify all observers that job status changed."""
+        for observer in self._observers:
+            try:
+                await observer.on_status_changed(job, old_status_info, new_status_info)
+            except Exception as exc:
+                logger.error(
+                    f"[observer:error] on_status_changed failed observer={type(observer).__name__} "
+                    f"job_id={job.id} error={exc}"
+                )
+    
+    async def _notify_job_completed(self, job: Job, final_status_info: JobStatusInfo) -> None:
+        """Notify all observers that a job reached terminal state."""
+        for observer in self._observers:
+            try:
+                await observer.on_job_completed(job, final_status_info)
+            except Exception as exc:
+                logger.error(
+                    f"[observer:error] on_job_completed failed observer={type(observer).__name__} "
+                    f"job_id={job.id} error={exc}"
+                )
 
     async def create_and_forward(
         self,
@@ -294,7 +335,8 @@ class JobManager:
         ]
         job.apply_status_info(accepted_si)
         await self._repo.create(job)
-        await self._repo.append_status(job.id, accepted_si)
+        # Notify observers (includes status history recording)
+        await self._notify_job_created(job, accepted_si)
         return accepted_si
 
     def _is_transient_error(self, exc: Exception) -> bool:
@@ -468,6 +510,9 @@ class JobManager:
         remote_job_id: Optional[str],
         diagnostic: Optional[str],
     ) -> None:
+        # Capture old status for observer notification
+        old_status_info = JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
+        
         if remote_status_url:
             job.remote_status_url = remote_status_url
         if remote_job_id:
@@ -480,13 +525,16 @@ class JobManager:
             self._ensure_results_link(job.id, status_info)
         job.apply_status_info(status_info)
         await self._repo.update(job)
-        await self._repo.append_status(job.id, status_info)
+        
         logger.debug(
             f"[job:finalize] job_id={job.id} status={status_info.status} remote_status_url={job.remote_status_url} remote_job_id={job.remote_job_id} terminal={job.is_in_terminal_state()}"
         )
-
-        if job.remote_status_url and not job.is_in_terminal_state():
-            self._schedule_poll(job.id)
+        
+        # Notify observers (includes status history recording, polling scheduling, verification)
+        await self._notify_status_changed(job, old_status_info, status_info)
+        
+        if job.is_in_terminal_state():
+            await self._notify_job_completed(job, status_info)
 
     async def _handle_upstream_error_response(
         self, job: Job, upstream_status: int, upstream_body: Any
@@ -621,6 +669,8 @@ class JobManager:
             f"[job:poll] timeout reached job_id={job.id} elapsed={elapsed}s > {self.config.poll_timeout}s; marking failed"
         )
         
+        old_status = JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
+        
         timeout_si = JobStatusInfo(
             jobID=job.id,
             status=StatusCode.failed,
@@ -635,7 +685,10 @@ class JobManager:
         
         job.apply_status_info(timeout_si)
         await self._repo.update(job)
-        await self._repo.append_status(job.id, timeout_si)
+        
+        # Notify observers (includes status history recording)
+        await self._notify_status_changed(job, old_status, timeout_si)
+        await self._notify_job_completed(job, timeout_si)
         return True
 
     # ---------------- Polling -----------------
@@ -702,14 +755,20 @@ class JobManager:
                         if status_info.status == StatusCode.successful:
                             self._ensure_results_link(job.id, status_info)
                         
+                        old_status = JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
+                        
                         job.apply_status_info(status_info)
                         await self._repo.update(job)
-                        await self._repo.append_status(job.id, status_info)
+                        
+                        # Notify observers (includes status history recording)
+                        await self._notify_status_changed(job, old_status, status_info)
 
                         if job.is_in_terminal_state():
                             logger.debug(
                                 f"[job:poll] reached terminal state job_id={job.id} status={job.status}"
                             )
+                            # Notify completion observers (includes results verification)
+                            await self._notify_job_completed(job, status_info)
                             return
                             
                 except Exception as poll_err:

@@ -132,6 +132,8 @@ def make_manager(post_response, get_responses=None, retry_port=None, config_over
         retry_port: Optional retry adapter
         config_overrides: Dict of config overrides (e.g., {'poll_interval': 0.01})
     """
+    from ump.core.managers.observers import StatusHistoryObserver, PollingSchedulerObserver, ResultsVerificationObserver
+    
     providers_port = TestProvidersAdapter()
     validator = TestProcessIdValidator()
     repo = InMemoryJobRepository()
@@ -148,7 +150,18 @@ def make_manager(post_response, get_responses=None, retry_port=None, config_over
         config_params.update(config_overrides)
     
     config = JobManagerConfig(**config_params)
-    mgr = JobManager(providers_port, http_client, validator, repo, config=config, retry_port=retry_port)
+    
+    # Create JobManager first
+    mgr = JobManager(providers_port, http_client, validator, repo, config=config, retry_port=retry_port, observers=[])
+    
+    # Create observers with callback to manager's methods
+    observers = [
+        StatusHistoryObserver(repository=repo),
+        PollingSchedulerObserver(schedule_callback=mgr._schedule_poll),
+        ResultsVerificationObserver(http_client=http_client),
+    ]
+    mgr._observers = observers
+    
     return mgr, repo, http_client
 
 # --- Tests ------------------------------------------------------------------
