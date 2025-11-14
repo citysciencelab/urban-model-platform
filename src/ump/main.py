@@ -9,6 +9,7 @@ from ump.adapters.site_info_static_adapter import StaticSiteInfoAdapter
 from ump.adapters.job_repository_inmemory import InMemoryJobRepository
 from ump.adapters.logging_adapter import LoggingAdapter
 from ump.adapters.web.fastapi import create_app
+from ump.core.config import JobManagerConfig
 from ump.core.managers.process_manager import ProcessManager
 from ump.core.managers.job_manager import JobManager
 from ump.adapters.retry_tenacity import TenacityRetryAdapter
@@ -49,11 +50,14 @@ def main():
 
     def job_manager_factory(client, process_manager):
         retry_adapter = TenacityRetryAdapter(attempts=4, wait_initial=0.15, wait_max=1.2)
+        # Create config from app settings
+        job_config = JobManagerConfig.from_app_settings(app_settings)
         jm = JobManager(
             providers=providers_port,
             http_client=client,
             process_id_validator=process_id_validator,
             job_repo=job_repo,
+            config=job_config,
             retry_port=retry_adapter,
         )
         # Attach here (composition root) so adapters remain pure HTTP concerns.
