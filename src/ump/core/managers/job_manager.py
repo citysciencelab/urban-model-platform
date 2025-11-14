@@ -37,9 +37,8 @@ class JobManager:
         http_client: HttpClientPort,
         process_id_validator: ProcessIdValidatorPort,
         job_repo: JobRepositoryPort,
-        retry_port: Optional[
-            Any
-        ] = None,  # RetryPort protocol; kept generic to avoid tight coupling
+        retry_port: Optional[Any] = None,  # RetryPort protocol; kept generic to avoid tight coupling
+        result_storage_port: Optional[Any] = None,  # ResultStoragePort protocol
     ) -> None:
         self._providers = providers
         self._http = http_client
@@ -48,9 +47,11 @@ class JobManager:
         self._poll_interval = getattr(
             app_settings, "UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL", 5
         )
+        self._poll_timeout = getattr(app_settings, "UMP_REMOTE_JOB_TTW", None)
         self._poll_tasks: Set[asyncio.Task] = set()
         self._shutdown = False
         self._retry = retry_port
+        self._result_storage = result_storage_port
 
     async def create_and_forward(
         self,
@@ -217,6 +218,11 @@ class JobManager:
             message=None,
             progress=0,
         )
+        # Always include self link immediately for discoverability
+        from ump.core.models.link import Link
+        accepted_si.links = [
+            Link(href=f"/jobs/{job.id}", rel="self", type="application/json", title="Job status")
+        ]
         job.apply_status_info(accepted_si)
         await self._repo.create(job)
         await self._repo.append_status(job.id, accepted_si)
@@ -261,13 +267,30 @@ class JobManager:
         provider_headers = provider_resp.get("headers", {})
         provider_body = provider_resp.get("body")
         provider_status = provider_resp.get("status")
-
+        # Initial extraction attempt (body may already be a statusInfo structure)
         status_info = self._extract_status_info(provider_body)
         remote_status_url: Optional[str] = None
         remote_job_id: Optional[str] = None
         diagnostic: Optional[str] = None
 
-        if not status_info and provider_headers.get("Location"):
+        if not status_info and isinstance(provider_body, dict) and "outputs" in provider_body:
+            # Provider ignored Prefer and returned results directly; synthesize successful statusInfo
+            logger.debug(f"[job:derive] provider returned results body without statusInfo; synthesizing terminal success job_id={job.id}")
+            status_info = JobStatusInfo(
+                jobID=job.id,
+                status=StatusCode.successful,
+                type="process",
+                processID=process_id,
+                message="Completed (immediate results)",
+                created=accepted_si.created,
+                started=accepted_si.created,
+                finished=datetime.now(timezone.utc),
+                updated=datetime.now(timezone.utc),
+                progress=100,
+            )
+            # Remote job id may still be gleaned from headers later
+        elif not status_info and provider_headers.get("Location"):
+            # No statusInfo in body; follow Location to obtain initial snapshot
             location = provider_headers["Location"]
             resolved = self._resolve_location(str(provider.url), location)
             remote_status_url = resolved
@@ -281,6 +304,12 @@ class JobManager:
                 logger.warning(
                     f"Failed to follow provider Location {location}: {follow_err}"
                 )
+        elif status_info and provider_headers.get("Location"):
+            # Body already contained statusInfo; still record Location for polling
+            location = provider_headers["Location"]
+            resolved = self._resolve_location(str(provider.url), location)
+            remote_status_url = resolved
+            logger.debug(f"[job:derive] captured remote_status_url via Location job_id={job.id} url={resolved}")
 
         if not status_info:
             logger.debug(
@@ -300,15 +329,15 @@ class JobManager:
                 f"provider_status={provider_status} body_type={type(provider_body).__name__}"
             )
         else:
-            # Remote job id capture: if provider supplies a different jobID we store it separately
-            # (remote_job_id) and normalize the user-facing statusInfo.jobID back to our local UUID.
-            # This maintains OGC statusInfo schema while keeping our route stable.
+            # Capture remote job id while always exposing local UUID to clients
             if status_info.jobID and status_info.jobID != job.id:
                 remote_job_id = status_info.jobID
                 status_info.jobID = job.id
-                logger.debug(
-                    f"[job:derive] captured remote_job_id={remote_job_id} mapped_to_local job_id={job.id}"
-                )
+                logger.debug(f"[job:derive] remote_job_id={remote_job_id} local_job_id={job.id}")
+            # Synthesize remote status URL if we have remote_job_id but no explicit Location header
+            if remote_job_id and not remote_status_url:
+                remote_status_url = str(provider.url).rstrip("/") + f"/jobs/{remote_job_id}?f=json"
+                logger.debug(f"[job:derive] synthesized remote_status_url={remote_status_url} job_id={job.id}")
             status_info.processID = process_id
             # Adopt accepted created timestamp if remote omitted it
             if status_info.created is None:
@@ -337,6 +366,9 @@ class JobManager:
                 if not status_info.message:
                     status_info.message = "Failed"
 
+        # Ensure local self link consistency for any status
+        if status_info:
+            self._ensure_self_link(job.id, status_info)
         return status_info, remote_status_url, remote_job_id, diagnostic
 
     async def _finalize_job(
@@ -355,6 +387,7 @@ class JobManager:
             job.diagnostic = diagnostic
         # Inject local results link if job already successful and link absent
         if status_info and status_info.status == StatusCode.successful:
+            self._ensure_self_link(job.id, status_info)
             self._ensure_results_link(job.id, status_info)
         job.apply_status_info(status_info)
         await self._repo.update(job)
@@ -530,7 +563,8 @@ class JobManager:
                                 if not status_info.message:
                                     status_info.message = "Failed"
                         status_info.updated = datetime.now(timezone.utc)
-                        # Inject results link when successful
+                        # Always ensure self link uses local job id; add results link only on success
+                        self._ensure_self_link(job.id, status_info)
                         if status_info.status == StatusCode.successful:
                             self._ensure_results_link(job.id, status_info)
                         job.apply_status_info(status_info)
@@ -545,6 +579,26 @@ class JobManager:
                             return
                 except Exception as poll_err:
                     logger.debug(f"[job:poll] error job_id={job_id} err={poll_err}")
+                # Poll interval sleep with optional timeout enforcement
+                if self._poll_timeout is not None and job.created is not None:
+                    elapsed = (datetime.now(timezone.utc) - job.created).total_seconds()
+                    if elapsed > self._poll_timeout:
+                        logger.warning(f"[job:poll] timeout reached job_id={job.id} elapsed={elapsed}s > {self._poll_timeout}s; marking failed")
+                        timeout_si = JobStatusInfo(
+                            jobID=job.id,
+                            status=StatusCode.failed,
+                            type="process",
+                            processID=job.process_id,
+                            message=f"Timed out after {self._poll_timeout}s waiting for remote completion",
+                            created=job.created,
+                            updated=datetime.now(timezone.utc),
+                            finished=datetime.now(timezone.utc),
+                            progress=None,
+                        )
+                        job.apply_status_info(timeout_si)
+                        await self._repo.update(job)
+                        await self._repo.append_status(job.id, timeout_si)
+                        return
                 await asyncio.sleep(self._poll_interval)
         finally:
             pass
@@ -607,3 +661,22 @@ class JobManager:
             title="Job results",
         )
         status_info.links = existing + [results_link]
+    
+    def _ensure_self_link(self, job_id: str, status_info: JobStatusInfo) -> None:
+        """Guarantee a local self link (remove remote self/results with foreign job id)."""
+        existing = status_info.links or []
+        filtered = [
+            l
+            for l in existing
+            if not (l.rel in {"self", "results"} and f"/jobs/{job_id}" not in (l.href or ""))
+        ]
+        if any(l.rel == "self" for l in filtered):
+            status_info.links = filtered
+            return
+        self_link = Link(
+            href=f"/jobs/{job_id}",
+            rel="self",
+            type="application/json",
+            title="Job status",
+        )
+        status_info.links = filtered + [self_link]
