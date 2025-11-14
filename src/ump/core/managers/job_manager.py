@@ -105,6 +105,7 @@ class JobManager:
             job, exec_url, execute_payload or {}, forward_headers
         )
 
+        # Handle immediate forward failure
         if provider_resp is None:
             failed_job = await self._repo.get(job.id)
             logger.debug(
@@ -112,34 +113,22 @@ class JobManager:
             )
             return self._response(
                 job.id,
-                failed_job.status_info
-                if failed_job and failed_job.status_info
-                else None,
+                failed_job.status_info if failed_job and failed_job.status_info else None,
             )
 
-        # If upstream returned non-statusInfo body with error code (>=400), propagate directly
+        # Handle upstream error responses (>=400) with non-statusInfo bodies
         upstream_status = provider_resp.get("status")
         upstream_body = provider_resp.get("body")
         logger.debug(
             f"[job:forward] upstream response status={upstream_status} has_location={bool(provider_resp.get('headers', {}).get('Location'))} body_type={type(upstream_body).__name__}"
         )
-        if upstream_status and upstream_status >= 400:
-            si = self._extract_status_info(upstream_body)
-            if not si:
-                # mark local job failed but return original upstream error body
-                await self._repo.mark_failed(
-                    job.id, reason=f"Upstream {upstream_status}"
-                )
-                logger.debug(
-                    f"[job:error-propagate] marking job failed job_id={job.id} upstream_status={upstream_status} returning raw upstream body"
-                )
-                return {
-                    "status": upstream_status,
-                    "headers": {"Location": f"/jobs/{job.id}"},
-                    "body": upstream_body
-                    if isinstance(upstream_body, (dict, list))
-                    else {"error": str(upstream_body)},
-                }
+        
+        if upstream_status:
+            error_response = await self._handle_upstream_error_response(
+                job, upstream_status, upstream_body
+            )
+            if error_response:
+                return error_response
 
         (
             status_info,
@@ -186,6 +175,141 @@ class JobManager:
         return self._response(job.id, accepted_si)
 
     # ----------------- Helper methods -----------------
+    def _enrich_status_info(
+        self,
+        status_info: JobStatusInfo,
+        job: Job,
+        accepted_created: datetime,
+    ) -> None:
+        """Enrich status info with contextual fields based on current status.
+        
+        Fills in missing timestamps, progress, and messages for consistent UX.
+        Modifies status_info in place.
+        """
+        now = datetime.now(timezone.utc)
+        
+        if status_info.status == StatusCode.running:
+            if status_info.started is None:
+                status_info.started = accepted_created
+            if status_info.progress is None:
+                status_info.progress = 0
+            if not status_info.message:
+                status_info.message = "Running"
+        elif status_info.status == StatusCode.successful:
+            if status_info.started is None:
+                status_info.started = accepted_created
+            if status_info.finished is None:
+                status_info.finished = now
+            if status_info.progress is None:
+                status_info.progress = 100
+            if not status_info.message:
+                status_info.message = "Completed"
+        elif status_info.status == StatusCode.failed:
+            if status_info.finished is None:
+                status_info.finished = now
+            if not status_info.message:
+                status_info.message = "Failed"
+
+    def _handle_immediate_results_response(
+        self,
+        job: Job,
+        process_id: str,
+        provider_body: Dict[str, Any],
+        accepted_si: JobStatusInfo,
+    ) -> JobStatusInfo:
+        """Synthesize successful statusInfo when provider returns results directly."""
+        logger.debug(
+            f"[job:derive] provider returned results body without statusInfo; synthesizing terminal success job_id={job.id}"
+        )
+        return JobStatusInfo(
+            jobID=job.id,
+            status=StatusCode.successful,
+            type="process",
+            processID=process_id,
+            message="Completed (immediate results)",
+            created=accepted_si.created,
+            started=accepted_si.created,
+            finished=datetime.now(timezone.utc),
+            updated=datetime.now(timezone.utc),
+            progress=100,
+        )
+
+    def _create_fallback_failed_status(
+        self,
+        job: Job,
+        process_id: str,
+        accepted_si: JobStatusInfo,
+        provider_status: Optional[int],
+        provider_body: Any,
+    ) -> tuple[JobStatusInfo, str]:
+        """Create a failed statusInfo when provider response is unparseable."""
+        logger.debug(
+            f"[job:derive] missing statusInfo, marking failed job_id={job.id}"
+        )
+        status_info = JobStatusInfo(
+            jobID=job.id,
+            status=StatusCode.failed,
+            type="process",
+            processID=process_id,
+            message="Provider response missing statusInfo",
+            updated=datetime.now(timezone.utc),
+            created=accepted_si.created,
+            progress=None,
+        )
+        diagnostic = f"provider_status={provider_status} body_type={type(provider_body).__name__}"
+        return status_info, diagnostic
+
+    async def _fetch_status_from_location(
+        self, provider: Any, location: str
+    ) -> Optional[JobStatusInfo]:
+        """Follow Location header to fetch initial status snapshot."""
+        resolved = self._resolve_location(str(provider.url), location)
+        try:
+            logger.debug(
+                f"[job:derive] following provider Location location={location} resolved={resolved}"
+            )
+            follow_resp = await self._http.get(resolved)
+            return self._extract_status_info(follow_resp)
+        except Exception as follow_err:
+            logger.warning(
+                f"Failed to follow provider Location {location}: {follow_err}"
+            )
+            return None
+
+    def _extract_remote_job_id_and_urls(
+        self,
+        status_info: JobStatusInfo,
+        job: Job,
+        provider: Any,
+        provider_headers: Dict[str, Any],
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Extract remote job ID and status URL from statusInfo and headers.
+        
+        Returns (remote_job_id, remote_status_url).
+        Normalizes statusInfo.jobID to local UUID.
+        """
+        remote_job_id: Optional[str] = None
+        remote_status_url: Optional[str] = None
+
+        # Capture remote job id while always exposing local UUID to clients
+        if status_info.jobID and status_info.jobID != job.id:
+            remote_job_id = status_info.jobID
+            status_info.jobID = job.id
+            logger.debug(f"[job:derive] remote_job_id={remote_job_id} local_job_id={job.id}")
+
+        # Capture Location header as remote status URL
+        if provider_headers.get("Location"):
+            location = provider_headers["Location"]
+            remote_status_url = self._resolve_location(str(provider.url), location)
+            logger.debug(f"[job:derive] captured remote_status_url via Location job_id={job.id} url={remote_status_url}")
+
+        # Synthesize remote status URL if we have remote_job_id but no explicit Location header
+        if remote_job_id and not remote_status_url:
+            remote_status_url = str(provider.url).rstrip("/") + f"/jobs/{remote_job_id}?f=json"
+            logger.debug(f"[job:derive] synthesized remote_status_url={remote_status_url} job_id={job.id}")
+
+        return remote_job_id, remote_status_url
+
     async def _init_job(
         self, process_id: str, provider_prefix: str, inputs: Optional[Dict[str, Any]]
     ) -> Job:
@@ -228,9 +352,29 @@ class JobManager:
         await self._repo.append_status(job.id, accepted_si)
         return accepted_si
 
+    async def _handle_forward_error(
+        self, job: Job, exc: Exception
+    ) -> None:
+        """Handle exceptions during forward request, marking job as failed."""
+        if isinstance(exc, OGCProcessException):
+            await self._repo.mark_failed(
+                job.id, reason=exc.response.title, diagnostic=exc.response.detail
+            )
+            logger.warning(
+                f"[job:forward] OGCProcessException job_id={job.id} title={exc.response.title}"
+            )
+        else:
+            await self._repo.mark_failed(
+                job.id, reason="Upstream Error", diagnostic=str(exc)
+            )
+            logger.error(
+                f"[job:forward] unexpected exception job_id={job.id} error={exc}"
+            )
+
     async def _safe_forward(
         self, job: Job, exec_url: str, payload: Dict[str, Any], headers: Dict[str, str]
     ) -> Optional[Dict[str, Any]]:
+        """Forward execution request to remote provider with error handling."""
         try:
             logger.debug(
                 f"[job:forward] POST exec_url={exec_url} job_id={job.id} headers={list(headers.keys())} payload_size={len(str(payload))}"
@@ -240,21 +384,9 @@ class JobManager:
                 f"[job:forward] POST completed job_id={job.id} status={resp.get('status')} keys={list(resp.keys())}"
             )
             return resp
-        except OGCProcessException as exc:
-            await self._repo.mark_failed(
-                job.id, reason=exc.response.title, diagnostic=exc.response.detail
-            )
-            logger.warning(
-                f"[job:forward] OGCProcessException job_id={job.id} title={exc.response.title}"
-            )
         except Exception as exc:
-            await self._repo.mark_failed(
-                job.id, reason="Upstream Error", diagnostic=str(exc)
-            )
-            logger.error(
-                f"[job:forward] unexpected exception job_id={job.id} error={exc}"
-            )
-        return None
+            await self._handle_forward_error(job, exc)
+            return None
 
     async def _derive_status_info(
         self,
@@ -264,111 +396,66 @@ class JobManager:
         provider_resp: Dict[str, Any],
         accepted_si: JobStatusInfo,
     ) -> tuple[JobStatusInfo, Optional[str], Optional[str], Optional[str]]:
+        """Derive statusInfo from provider response, handling various response patterns.
+        
+        Returns (status_info, remote_status_url, remote_job_id, diagnostic).
+        """
         provider_headers = provider_resp.get("headers", {})
         provider_body = provider_resp.get("body")
         provider_status = provider_resp.get("status")
-        # Initial extraction attempt (body may already be a statusInfo structure)
+        
+        # Try to extract statusInfo from response body
         status_info = self._extract_status_info(provider_body)
         remote_status_url: Optional[str] = None
-        remote_job_id: Optional[str] = None
         diagnostic: Optional[str] = None
 
+        # Handle case: no statusInfo but body contains immediate results
         if not status_info and isinstance(provider_body, dict) and "outputs" in provider_body:
-            # Provider ignored Prefer and returned results directly; synthesize successful statusInfo
-            logger.debug(f"[job:derive] provider returned results body without statusInfo; synthesizing terminal success job_id={job.id}")
-            status_info = JobStatusInfo(
-                jobID=job.id,
-                status=StatusCode.successful,
-                type="process",
-                processID=process_id,
-                message="Completed (immediate results)",
-                created=accepted_si.created,
-                started=accepted_si.created,
-                finished=datetime.now(timezone.utc),
-                updated=datetime.now(timezone.utc),
-                progress=100,
+            status_info = self._handle_immediate_results_response(
+                job, process_id, provider_body, accepted_si
             )
-            # Remote job id may still be gleaned from headers later
+        
+        # Handle case: no statusInfo but Location header present
         elif not status_info and provider_headers.get("Location"):
-            # No statusInfo in body; follow Location to obtain initial snapshot
             location = provider_headers["Location"]
-            resolved = self._resolve_location(str(provider.url), location)
-            remote_status_url = resolved
-            try:
-                logger.debug(
-                    f"[job:derive] following provider Location job_id={job.id} location={location} resolved={resolved}"
-                )
-                follow_resp = await self._http.get(resolved)
-                status_info = self._extract_status_info(follow_resp)
-            except Exception as follow_err:
-                logger.warning(
-                    f"Failed to follow provider Location {location}: {follow_err}"
-                )
-        elif status_info and provider_headers.get("Location"):
-            # Body already contained statusInfo; still record Location for polling
-            location = provider_headers["Location"]
-            resolved = self._resolve_location(str(provider.url), location)
-            remote_status_url = resolved
-            logger.debug(f"[job:derive] captured remote_status_url via Location job_id={job.id} url={resolved}")
+            remote_status_url = self._resolve_location(str(provider.url), location)
+            status_info = await self._fetch_status_from_location(provider, location)
 
+        # Handle case: statusInfo present but also capture Location
+        elif status_info and provider_headers.get("Location"):
+            location = provider_headers["Location"]
+            remote_status_url = self._resolve_location(str(provider.url), location)
+            logger.debug(f"[job:derive] captured remote_status_url via Location job_id={job.id} url={remote_status_url}")
+
+        # Fallback: create failed status if still no statusInfo
+        remote_job_id: Optional[str] = None
+        
         if not status_info:
-            logger.debug(
-                f"[job:derive] missing statusInfo, marking failed job_id={job.id}"
-            )
-            status_info = JobStatusInfo(
-                jobID=job.id,
-                status=StatusCode.failed,
-                type="process",
-                processID=process_id,
-                message="Provider response missing statusInfo",
-                updated=datetime.now(timezone.utc),
-                created=accepted_si.created,
-                progress=None,
-            )
-            diagnostic = (
-                f"provider_status={provider_status} body_type={type(provider_body).__name__}"
+            status_info, diagnostic = self._create_fallback_failed_status(
+                job, process_id, accepted_si, provider_status, provider_body
             )
         else:
-            # Capture remote job id while always exposing local UUID to clients
-            if status_info.jobID and status_info.jobID != job.id:
-                remote_job_id = status_info.jobID
-                status_info.jobID = job.id
-                logger.debug(f"[job:derive] remote_job_id={remote_job_id} local_job_id={job.id}")
-            # Synthesize remote status URL if we have remote_job_id but no explicit Location header
-            if remote_job_id and not remote_status_url:
-                remote_status_url = str(provider.url).rstrip("/") + f"/jobs/{remote_job_id}?f=json"
-                logger.debug(f"[job:derive] synthesized remote_status_url={remote_status_url} job_id={job.id}")
+            # Normalize and enrich valid statusInfo
+            remote_job_id, extracted_url = self._extract_remote_job_id_and_urls(
+                status_info, job, provider, provider_headers
+            )
+            if extracted_url and not remote_status_url:
+                remote_status_url = extracted_url
+            
             status_info.processID = process_id
+            
             # Adopt accepted created timestamp if remote omitted it
             if status_info.created is None:
                 status_info.created = accepted_si.created
             status_info.updated = datetime.now(timezone.utc)
-            # Enrich missing optional fields for better UX
-            if status_info.status == StatusCode.running:
-                if status_info.started is None:
-                    status_info.started = accepted_si.created
-                if status_info.progress is None:
-                    status_info.progress = 0
-                if not status_info.message:
-                    status_info.message = "Running"
-            elif status_info.status == StatusCode.successful:
-                if status_info.started is None:
-                    status_info.started = accepted_si.created
-                if status_info.finished is None:
-                    status_info.finished = datetime.now(timezone.utc)
-                if status_info.progress is None:
-                    status_info.progress = 100
-                if not status_info.message:
-                    status_info.message = "Completed"
-            elif status_info.status == StatusCode.failed:
-                if status_info.finished is None:
-                    status_info.finished = datetime.now(timezone.utc)
-                if not status_info.message:
-                    status_info.message = "Failed"
+            
+            # Enrich missing optional fields
+            created_time = accepted_si.created or datetime.now(timezone.utc)
+            self._enrich_status_info(status_info, job, created_time)
 
         # Ensure local self link consistency for any status
-        if status_info:
-            self._ensure_self_link(job.id, status_info)
+        self._ensure_self_link(job.id, status_info)
+        
         return status_info, remote_status_url, remote_job_id, diagnostic
 
     async def _finalize_job(
@@ -398,6 +485,33 @@ class JobManager:
 
         if job.remote_status_url and not job.is_in_terminal_state():
             self._schedule_poll(job.id)
+
+    async def _handle_upstream_error_response(
+        self, job: Job, upstream_status: int, upstream_body: Any
+    ) -> Optional[Dict[str, Any]]:
+        """Handle error responses (>=400) from upstream provider.
+        
+        Returns propagated error response dict if body is not statusInfo, None otherwise.
+        """
+        if upstream_status < 400:
+            return None
+        
+        si = self._extract_status_info(upstream_body)
+        if si:
+            # Valid statusInfo in error response; will be handled normally
+            return None
+        
+        # Non-statusInfo error body; mark local job failed and propagate upstream response
+        await self._repo.mark_failed(job.id, reason=f"Upstream {upstream_status}")
+        logger.debug(
+            f"[job:error-propagate] marking job failed job_id={job.id} upstream_status={upstream_status} returning raw upstream body"
+        )
+        
+        return {
+            "status": upstream_status,
+            "headers": {"Location": f"/jobs/{job.id}"},
+            "body": upstream_body if isinstance(upstream_body, (dict, list)) else {"error": str(upstream_body)},
+        }
 
     def _response(
         self, job_id: str, status_info: Optional[JobStatusInfo]
@@ -489,6 +603,39 @@ class JobManager:
         # simplistic size heuristic; refine later
         return len(str(inputs)) < 1024 * 64
 
+    async def _check_and_handle_timeout(self, job: Job) -> bool:
+        """Check if job has exceeded timeout and mark as failed if so.
+        
+        Returns True if timeout was reached and job was marked failed.
+        """
+        if self._poll_timeout is None or job.created is None:
+            return False
+        
+        elapsed = (datetime.now(timezone.utc) - job.created).total_seconds()
+        if elapsed <= self._poll_timeout:
+            return False
+        
+        logger.warning(
+            f"[job:poll] timeout reached job_id={job.id} elapsed={elapsed}s > {self._poll_timeout}s; marking failed"
+        )
+        
+        timeout_si = JobStatusInfo(
+            jobID=job.id,
+            status=StatusCode.failed,
+            type="process",
+            processID=job.process_id,
+            message=f"Timed out after {self._poll_timeout}s waiting for remote completion",
+            created=job.created,
+            updated=datetime.now(timezone.utc),
+            finished=datetime.now(timezone.utc),
+            progress=None,
+        )
+        
+        job.apply_status_info(timeout_si)
+        await self._repo.update(job)
+        await self._repo.append_status(job.id, timeout_si)
+        return True
+
     # ---------------- Polling -----------------
     def _schedule_poll(self, job_id: str) -> None:
         if self._shutdown:
@@ -526,49 +673,34 @@ class JobManager:
                 try:
                     resp = await self._http.get(job.remote_status_url)
                     status_info = self._extract_status_info(resp)
+                    
                     if status_info:
                         # Keep remote IDs consistent
                         if status_info.jobID and status_info.jobID != job.id:
                             if not job.remote_job_id:
                                 job.remote_job_id = status_info.jobID
                             status_info.jobID = job.id
-                        prev_status = (
-                            job.status_info.status if job.status_info else None
-                        )
+                        
+                        prev_status = job.status_info.status if job.status_info else None
                         status_info.processID = job.process_id
-                        # Fill enrichment only on status change or missing fields
-                        if prev_status != status_info.status or any(
-                            getattr(status_info, f) is None
-                            for f in ["started", "progress", "message"]
-                        ):
-                            if status_info.status == StatusCode.running:
-                                if status_info.started is None:
-                                    status_info.started = job.created
-                                if status_info.progress is None:
-                                    status_info.progress = 0
-                                if not status_info.message:
-                                    status_info.message = "Running"
-                            elif status_info.status == StatusCode.successful:
-                                if status_info.started is None:
-                                    status_info.started = job.created
-                                if status_info.finished is None:
-                                    status_info.finished = datetime.now(timezone.utc)
-                                if status_info.progress is None:
-                                    status_info.progress = 100
-                                if not status_info.message:
-                                    status_info.message = "Completed"
-                            elif status_info.status == StatusCode.failed:
-                                if status_info.finished is None:
-                                    status_info.finished = datetime.now(timezone.utc)
-                                if not status_info.message:
-                                    status_info.message = "Failed"
+                        
+                        # Enrich on status change or missing fields
+                        needs_enrichment = (
+                            prev_status != status_info.status or
+                            any(getattr(status_info, f) is None for f in ["started", "progress", "message"])
+                        )
+                        if needs_enrichment:
+                            created_time = job.created or datetime.now(timezone.utc)
+                            self._enrich_status_info(status_info, job, created_time)
+                        
                         status_info.updated = datetime.now(timezone.utc)
-                        # Always ensure self link uses local job id; add results link only on success
+                        
+                        # Ensure local links
                         self._ensure_self_link(job.id, status_info)
                         if status_info.status == StatusCode.successful:
                             self._ensure_results_link(job.id, status_info)
+                        
                         job.apply_status_info(status_info)
-
                         await self._repo.update(job)
                         await self._repo.append_status(job.id, status_info)
 
@@ -577,28 +709,14 @@ class JobManager:
                                 f"[job:poll] reached terminal state job_id={job.id} status={job.status}"
                             )
                             return
+                            
                 except Exception as poll_err:
                     logger.debug(f"[job:poll] error job_id={job_id} err={poll_err}")
-                # Poll interval sleep with optional timeout enforcement
-                if self._poll_timeout is not None and job.created is not None:
-                    elapsed = (datetime.now(timezone.utc) - job.created).total_seconds()
-                    if elapsed > self._poll_timeout:
-                        logger.warning(f"[job:poll] timeout reached job_id={job.id} elapsed={elapsed}s > {self._poll_timeout}s; marking failed")
-                        timeout_si = JobStatusInfo(
-                            jobID=job.id,
-                            status=StatusCode.failed,
-                            type="process",
-                            processID=job.process_id,
-                            message=f"Timed out after {self._poll_timeout}s waiting for remote completion",
-                            created=job.created,
-                            updated=datetime.now(timezone.utc),
-                            finished=datetime.now(timezone.utc),
-                            progress=None,
-                        )
-                        job.apply_status_info(timeout_si)
-                        await self._repo.update(job)
-                        await self._repo.append_status(job.id, timeout_si)
-                        return
+                
+                # Check for timeout and mark failed if exceeded
+                if await self._check_and_handle_timeout(job):
+                    return
+                
                 await asyncio.sleep(self._poll_interval)
         finally:
             pass
