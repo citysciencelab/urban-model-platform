@@ -219,13 +219,11 @@ class ProcessManager(ProcessesPort):
     ) -> List[ProcessSummary]:
         """Fetch the process list for a single provider.
 
-        Selection rules:
-        - Only processes explicitly listed in `providers.yaml` (respecting `exclude=True`) are exposed.
-        - Remote processes not configured are ignored (future option `mirror_all_processes` could relax this).
-        - Provides curated visibility and avoids surfacing experimental upstream processes accidentally.
-        - If UMP_PER_PROCESS_FETCH is true we bypass the bulk list endpoint and fetch
-          each configured process individually to obtain richer metadata when list
-          responses are sparse.
+                Selection rules:
+                - Only processes explicitly listed in `providers.yaml` (respecting `exclude=True`) are exposed.
+                - Remote processes not configured are ignored (future option `mirror_all_processes` could relax this).
+                - Provides curated visibility and avoids surfacing experimental upstream processes accidentally.
+                - We always perform per-process fetch for configured process IDs to obtain richer metadata when list responses are sparse.
         """
         cached_processes = self._process_cache.get(provider_name)
         if cached_processes is not None:
@@ -245,60 +243,25 @@ class ProcessManager(ProcessesPort):
 
         processes: List[ProcessSummary] = []
 
-        if app_settings.UMP_PER_PROCESS_FETCH:
-            # Fetch each configured process individually
-            for cid in configured_ids:
-                raw_id = cid.split(":", 1)[1] if ":" in cid else cid
-                per_url = str(provider.url).rstrip("/") + f"/processes/{raw_id}"
-                try:
-                    data = await self.http_client.get(per_url)
-                    proc = dict(data)
-                    # handlers will rewrite id -> canonical provider-prefixed id
-                    for handler in self._process_handlers:
-                        proc = handler(provider_name, proc)
-                    processes.append(ProcessSummary(**proc))
-                except Exception as e:
-                    logger.warning(
-                        f"Failed per-process fetch for '{cid}' from provider '{provider_name}': {e}"
-                    )
-                    continue
-        else:
-            # Bulk list followed by filtering
-            list_url = str(provider.url).rstrip("/") + "/processes"
+        # Always perform per-process fetch for richer metadata
+        for cid in configured_ids:
+            raw_id = cid.split(":", 1)[1] if ":" in cid else cid
+            per_url = str(provider.url).rstrip("/") + f"/processes/{raw_id}"
             try:
-                data = await self.http_client.get(list_url)
-                remote_list = data.get("processes", [])
-            except Exception as fetch_error:
-                if cached_processes is not None:
-                    logger.warning(
-                        f"Using cached processes for provider {provider_name} due to error fetching list: {fetch_error}"
-                    )
-                    return cached_processes
-                return []
-
-            for raw_proc in remote_list:
-                raw_id = raw_proc.get("id")
-                if raw_id is None or raw_id not in configured_ids:
-                    continue
-                proc: Dict[str, Any] = dict(raw_proc)
-                try:
-                    for handler in self._process_handlers:
-                        proc = handler(provider_name, proc)
-                    processes.append(ProcessSummary(**proc))
-                except ValueError as e:
-                    logger.warning(
-                        f"Skipping process '{raw_id}' due to handler ValueError: {e}"
-                    )
-                    continue
-                except Exception as handler_error:
-                    logger.warning(
-                        f"Error processing configured process '{raw_id}' for provider {provider_name}: {handler_error}"
-                    )
-                    continue
+                data = await self.http_client.get(per_url)
+                proc = dict(data)
+                for handler in self._process_handlers:
+                    proc = handler(provider_name, proc)
+                processes.append(ProcessSummary(**proc))
+            except Exception as e:
+                logger.warning(
+                    f"Failed per-process fetch for '{cid}' from provider '{provider_name}': {e}"
+                )
+                continue
 
         self._process_cache.set(provider_name, processes)
         logger.debug(
-            f"Cached {len(processes)} configured processes for provider '{provider_name}' (strategy={'per-process' if app_settings.UMP_PER_PROCESS_FETCH else 'bulk-list'})"
+            f"Cached {len(processes)} configured processes for provider '{provider_name}' (strategy=per-process)"
         )
         return processes
 
