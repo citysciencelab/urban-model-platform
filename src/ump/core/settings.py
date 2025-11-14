@@ -31,6 +31,7 @@ class UmpSettings(BaseSettings):
     UMP_API_SERVER_URL: str = "http://localhost:3000"
     UMP_API_SERVER_WORKERS: int = 4
     UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL: int = 5
+    UMP_REMOTE_JOB_TTW: int | None = None  # Time-to-wait timeout for remote jobs (seconds)
     UMP_DATABASE_NAME: str = "ump"
     UMP_DATABASE_HOST: str = "postgres"
     UMP_DATABASE_PORT: int = 5432
