@@ -31,6 +31,7 @@ import asyncio
 from datetime import datetime, timezone
 import pytest
 
+from ump.core.config import JobManagerConfig
 from ump.core.managers.job_manager import JobManager
 from ump.core.models.job import StatusCode
 from ump.core.interfaces.providers import ProvidersPort
@@ -122,13 +123,32 @@ class TestRetryAdapter(TenacityRetryAdapter):
 
 # --- Helpers ----------------------------------------------------------------
 
-def make_manager(post_response, get_responses=None, retry_port=None):
+def make_manager(post_response, get_responses=None, retry_port=None, config_overrides=None):
+    """Create test JobManager with custom config.
+    
+    Args:
+        post_response: POST response for http client
+        get_responses: List of GET responses for http client
+        retry_port: Optional retry adapter
+        config_overrides: Dict of config overrides (e.g., {'poll_interval': 0.01})
+    """
     providers_port = TestProvidersAdapter()
     validator = TestProcessIdValidator()
     repo = InMemoryJobRepository()
     http_client = TestHttpClientAdapter(post_response=post_response, get_responses=get_responses)
-    mgr = JobManager(providers_port, http_client, validator, repo, retry_port=retry_port)
-    mgr._poll_interval = 0.01  # accelerate polling for tests
+    
+    # Create config with test-friendly defaults
+    config_params = {
+        'poll_interval': 0.01,  # Fast polling for tests
+        'poll_timeout': None,  # No timeout by default
+        'rewrite_remote_links': True,
+        'inline_inputs_size_limit': 64 * 1024,
+    }
+    if config_overrides:
+        config_params.update(config_overrides)
+    
+    config = JobManagerConfig(**config_params)
+    mgr = JobManager(providers_port, http_client, validator, repo, config=config, retry_port=retry_port)
     return mgr, repo, http_client
 
 # --- Tests ------------------------------------------------------------------
@@ -186,8 +206,7 @@ async def test_poll_timeout_marks_job_failed():
             "type": "process",
         },
     }
-    mgr, repo, _ = make_manager(post_response)
-    mgr._poll_timeout = 0.05  # seconds
+    mgr, repo, _ = make_manager(post_response, config_overrides={'poll_timeout': 0.05})
     resp = await mgr.create_and_forward("prov:procB", {"inputs": {"y": 2}}, {})
     job_id = resp["headers"]["Location"].split("/")[-1]
     # wait past timeout

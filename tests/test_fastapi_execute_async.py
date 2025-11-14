@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Tuple, cast
 import pytest
 
 from ump.adapters.web.fastapi import create_app
+from ump.core.config import JobManagerConfig
 from ump.core.interfaces.http_client import HttpClientPort
 from ump.core.interfaces.providers import ProvidersPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
@@ -90,12 +91,29 @@ def make_app_with_factories(http_client: HttpClientPort, provider: FakeProvider 
     providers_service = FakeProvidersService(provider)
     validator = FakeProcessIdValidator()
     job_repo = InMemoryJobRepository()
+    
+    # Test-friendly config: fast polling, no timeout
+    test_config = JobManagerConfig(
+        poll_interval=0.01,
+        poll_timeout=None,
+        rewrite_remote_links=True,
+        inline_inputs_size_limit=64 * 1024
+    )
+    
     def process_manager_factory(client: HttpClientPort):
         return ProcessManager(providers_service, client, process_id_validator=validator, job_repository=job_repo)
+    
     def job_manager_factory(client: HttpClientPort, process_manager: ProcessManager):
-        jm = JobManager(providers=providers_service, http_client=client, process_id_validator=validator, job_repo=job_repo)
+        jm = JobManager(
+            providers=providers_service,
+            http_client=client,
+            process_id_validator=validator,
+            job_repo=job_repo,
+            config=test_config
+        )
         process_manager.attach_job_manager(jm)
         return jm
+    
     return create_app(process_manager_factory=process_manager_factory, http_client=http_client, job_manager_factory=job_manager_factory, site_info=None)
 
 def test_forward_valid_statusinfo():
