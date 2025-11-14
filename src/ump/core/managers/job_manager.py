@@ -315,6 +315,32 @@ class JobManager:
 
         return remote_job_id, remote_status_url
 
+    def _normalize_and_enrich_status_info(
+        self,
+        status_info: JobStatusInfo,
+        job: Job,
+        process_id: str,
+        accepted_si: JobStatusInfo,
+    ) -> None:
+        """Normalize and enrich valid statusInfo with local context.
+        
+        Modifies status_info in place to:
+        - Ensure processID is set correctly
+        - Adopt accepted created timestamp if remote omitted it
+        - Update updated timestamp
+        - Enrich missing optional fields (started, finished, progress, message)
+        """
+        status_info.processID = process_id
+        
+        # Adopt accepted created timestamp if remote omitted it
+        if status_info.created is None:
+            status_info.created = accepted_si.created
+        status_info.updated = datetime.now(timezone.utc)
+        
+        # Enrich missing optional fields
+        created_time = accepted_si.created or datetime.now(timezone.utc)
+        self._enrich_status_info(status_info, job, created_time)
+
     async def _init_job(
         self, process_id: str, provider_prefix: str, inputs: Optional[Dict[str, Any]]
     ) -> Job:
@@ -440,23 +466,15 @@ class JobManager:
                 job, process_id, accepted_si, provider_status, provider_body
             )
         else:
-            # Normalize and enrich valid statusInfo
+            # Extract remote identifiers and normalize statusInfo
             remote_job_id, extracted_url = self._extract_remote_job_id_and_urls(
                 status_info, job, provider, provider_headers
             )
             if extracted_url and not remote_status_url:
                 remote_status_url = extracted_url
             
-            status_info.processID = process_id
-            
-            # Adopt accepted created timestamp if remote omitted it
-            if status_info.created is None:
-                status_info.created = accepted_si.created
-            status_info.updated = datetime.now(timezone.utc)
-            
-            # Enrich missing optional fields
-            created_time = accepted_si.created or datetime.now(timezone.utc)
-            self._enrich_status_info(status_info, job, created_time)
+            # Normalize and enrich statusInfo with local context
+            self._normalize_and_enrich_status_info(status_info, job, process_id, accepted_si)
 
         # Ensure local self link consistency for any status
         self._ensure_self_link(job.id, status_info)
