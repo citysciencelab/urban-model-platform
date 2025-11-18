@@ -216,7 +216,8 @@ class JobManager:
 
         # If remote reports immediate success, verify results before accepting
         if (
-            status_info
+            self.config.verify_remote_results
+            and status_info
             and status_info.status == StatusCode.successful
             and remote_job_id
         ):
