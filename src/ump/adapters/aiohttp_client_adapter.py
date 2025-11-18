@@ -104,6 +104,10 @@ class AioHttpClientAdapter(HttpClientPort):
 
                 return response_data
 
+        except OGCProcessException:
+            # Bubble up domain-specific errors generated earlier (e.g., invalid JSON)
+            raise
+
         except asyncio.TimeoutError:
             logger.error("Timeout when requesting remote service. URL: %s", url)
             raise OGCProcessException(
