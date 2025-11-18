@@ -110,7 +110,7 @@ class TestStatusHistoryObserver:
         await repo.create(test_job)
         await observer.on_job_created(test_job, accepted_status)
         
-        history = await repo.get_status_history(test_job.id)
+        history = await repo.history(test_job.id)
         assert len(history) == 1
         assert history[0].status == StatusCode.accepted
     
@@ -125,7 +125,7 @@ class TestStatusHistoryObserver:
         await repo.create(test_job)
         await observer.on_status_changed(test_job, accepted_status, running_status)
         
-        history = await repo.get_status_history(test_job.id)
+        history = await repo.history(test_job.id)
         assert len(history) == 1
         assert history[0].status == StatusCode.running
     
@@ -138,11 +138,11 @@ class TestStatusHistoryObserver:
         observer = StatusHistoryObserver(repository=repo)
         
         await repo.create(test_job)
-        initial_count = len(await repo.get_status_history(test_job.id))
+        initial_count = len(await repo.history(test_job.id))
         
         await observer.on_job_completed(test_job, success_status)
         
-        final_count = len(await repo.get_status_history(test_job.id))
+        final_count = len(await repo.history(test_job.id))
         assert final_count == initial_count  # No change
 
 
