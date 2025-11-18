@@ -47,6 +47,11 @@ class JobManagerConfig(BaseModel):
         description="Maximum size in bytes for storing job inputs inline (larger inputs use object storage)"
     )
     
+    verify_remote_results: bool = Field(
+        default=True,
+        description="Attempt to fetch remote results immediately when provider reports success"
+    )
+
     forward_max_retries: int = Field(
         default=3,
         ge=1,
@@ -85,6 +90,7 @@ class JobManagerConfig(BaseModel):
             poll_interval=settings.UMP_REMOTE_JOB_STATUS_REQUEST_INTERVAL,
             poll_timeout=settings.UMP_REMOTE_JOB_TTW,
             rewrite_remote_links=settings.UMP_REWRITE_REMOTE_LINKS,
+            verify_remote_results=settings.UMP_VERIFY_REMOTE_RESULTS,
             # inline_inputs_size_limit, forward_max_retries, forward_retry_base_wait, 
             # forward_retry_max_wait all use defaults (no settings exist yet)
         )
