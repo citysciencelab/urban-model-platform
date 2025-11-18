@@ -3,31 +3,31 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable
 
+import uuid
+
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
+from starlette.middleware.base import BaseHTTPMiddleware
 
+from ump.adapters.logging_adapter import LoggingAdapter
 from ump.core.exceptions import OGCProcessException
 from ump.core.interfaces.http_client import HttpClientPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.interfaces.processes import ProcessesPort
 from ump.core.interfaces.providers import ProvidersPort
 from ump.core.interfaces.site_info import SiteInfoPort
+from ump.core.logging_config import correlation_id_var
 from ump.core.managers.job_manager import JobManager
 from ump.core.managers.process_manager import ProcessManager
-from ump.core.models.execute_request import ExecuteRequest, InlineOrRef
+from ump.core.models.execute_request import ExecuteRequest
 from ump.core.models.job import JobList, JobStatusInfo
+from ump.core.models.ogcp_exception import OGCExceptionResponse
 from ump.core.models.process import Process, ProcessList
 from ump.core.settings import app_settings, logger, set_logger, NoOpLogger
-from ump.core.logging_config import correlation_id_var
-import uuid
-from ump.adapters.logging_adapter import LoggingAdapter
-from ump.core.logging_config import correlation_id_var
-import uuid
-from starlette.middleware.base import BaseHTTPMiddleware
 
 
 # Note: this a driver adapter, so it depends on the core interface (ProcessesPort)
@@ -69,6 +69,32 @@ def create_app(
                     await job_manager.shutdown()
 
     app = FastAPI(lifespan=lifespan)
+
+    def render_problem(
+        problem: OGCExceptionResponse,
+        *,
+        include_request_id: bool = False,
+    ) -> JSONResponse:
+        payload = jsonable_encoder(problem.model_dump(exclude_none=True))
+        response = JSONResponse(status_code=problem.status, content=payload)
+        if include_request_id and problem.additional and problem.additional.requestId:
+            response.headers["X-Request-ID"] = problem.additional.requestId
+        return response
+
+    def build_problem(
+        status: int,
+        title: str,
+        detail: str,
+        request: Request,
+        type_uri: str = "about:blank",
+    ) -> OGCExceptionResponse:
+        return OGCExceptionResponse(
+            type=type_uri,
+            title=title,
+            status=status,
+            detail=detail,
+            instance=str(request.url),
+        )
 
     # Correlation ID middleware: assigns per-request id (header override) and exposes it to logging
     @app.middleware("http")
@@ -154,27 +180,47 @@ def create_app(
             response_model=JobStatusInfo,
             response_model_exclude_none=True,
         )
-        async def get_job_sub(job_id: str):
+        async def get_job_sub(request: Request, job_id: str):
             repo = getattr(app.state.process_port, "job_repository", None)
             if repo is None:
-                return JSONResponse(
-                    status_code=404, content={"detail": "Jobs not supported"}
+                problem = build_problem(
+                    status=404,
+                    title="Jobs Not Supported",
+                    detail="Jobs not supported by this deployment",
+                    request=request,
                 )
+                return render_problem(problem)
             job = await repo.get(job_id)
             if not job or not job.status_info:
-                return JSONResponse(
-                    status_code=404, content={"detail": "Job not found"}
+                problem = build_problem(
+                    status=404,
+                    title="Job Not Found",
+                    detail=f"Job '{job_id}' not found",
+                    request=request,
                 )
+                return render_problem(problem)
             return job.status_info
 
         @sub.get("/jobs/{job_id}/results")
-        async def get_job_results_sub(job_id: str):
+        async def get_job_results_sub(request: Request, job_id: str):
             repo = getattr(app.state.process_port, "job_repository", None)
             if repo is None:
-                return JSONResponse(status_code=404, content={"detail": "Jobs not supported"})
+                problem = build_problem(
+                    status=404,
+                    title="Jobs Not Supported",
+                    detail="Jobs not supported by this deployment",
+                    request=request,
+                )
+                return render_problem(problem)
             jm = app.state.job_manager
             if jm is None:
-                return JSONResponse(status_code=404, content={"detail": "Results not supported"})
+                problem = build_problem(
+                    status=404,
+                    title="Results Not Supported",
+                    detail="Results endpoint not available",
+                    request=request,
+                )
+                return render_problem(problem)
             resp = await jm.get_results(job_id)
             return JSONResponse(status_code=resp.get("status", 200), content=resp.get("body", {}))
 
@@ -283,19 +329,10 @@ def create_app(
         status_code = exc.response.status
         cid = correlation_id_var.get()
         include_request_id = status_code >= 500
-        payload = {
-            "type": exc.response.type,
-            "title": exc.response.title,
-            "status": status_code,
-            "detail": exc.response.detail,
-            "instance": exc.response.instance,
-        }
+        problem = exc.response.model_copy()
         if include_request_id:
-            payload["additional"] = {"requestId": cid}
-        response = JSONResponse(status_code=status_code, content=payload)
-        if include_request_id:
-            response.headers["X-Request-ID"] = cid
-        return response
+            problem = problem.with_request_id(cid)
+        return render_problem(problem, include_request_id=include_request_id)
 
     @app.get(
         "/processes",
@@ -329,25 +366,47 @@ def create_app(
     @app.get(
         "/jobs/{job_id}", response_model=JobStatusInfo, response_model_exclude_none=True
     )
-    async def get_job(job_id: str):
+    async def get_job(job_id: str, request: Request):
         repo = getattr(app.state.process_port, "job_repository", None)
         if repo is None:
-            return JSONResponse(
-                status_code=404, content={"detail": "Jobs not supported"}
+            problem = build_problem(
+                status=404,
+                title="Jobs Not Supported",
+                detail="Jobs not supported by this deployment",
+                request=request,
             )
+            return render_problem(problem)
         job = await repo.get(job_id)
         if not job or not job.status_info:
-            return JSONResponse(status_code=404, content={"detail": "Job not found"})
+            problem = build_problem(
+                status=404,
+                title="Job Not Found",
+                detail=f"Job '{job_id}' not found",
+                request=request,
+            )
+            return render_problem(problem)
         return job.status_info
 
     @app.get("/jobs/{job_id}/results")
-    async def get_job_results(job_id: str):
+    async def get_job_results(job_id: str, request: Request):
         repo = getattr(app.state.process_port, "job_repository", None)
         if repo is None:
-            return JSONResponse(status_code=404, content={"detail": "Jobs not supported"})
+            problem = build_problem(
+                status=404,
+                title="Jobs Not Supported",
+                detail="Jobs not supported by this deployment",
+                request=request,
+            )
+            return render_problem(problem)
         jm = app.state.job_manager
         if jm is None:
-            return JSONResponse(status_code=404, content={"detail": "Results not supported"})
+            problem = build_problem(
+                status=404,
+                title="Results Not Supported",
+                detail="Results endpoint not available",
+                request=request,
+            )
+            return render_problem(problem)
         resp = await jm.get_results(job_id)
         return JSONResponse(status_code=resp.get("status", 200), content=resp.get("body", {}))
 
@@ -362,14 +421,19 @@ def create_app(
         try:
             exec_req = ExecuteRequest.from_raw(raw)
         except ValidationError as ve:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "type": "about:blank",
-                    "title": "Invalid Execute Request",
-                    "detail": ve.errors(),
-                },
+            detail_messages = []
+            for err in ve.errors():
+                loc = ".".join(str(part) for part in err.get("loc", []))
+                msg = err.get("msg", "invalid value")
+                detail_messages.append(f"{loc or 'body'}: {msg}")
+            detail_text = "; ".join(detail_messages) or "Invalid execute request payload"
+            problem = build_problem(
+                status=400,
+                title="Invalid Execute Request",
+                detail=detail_text,
+                request=request,
             )
+            return render_problem(problem)
 
         # Collect headers of interest (Prefer) and forward the rest if needed
         headers = {}
