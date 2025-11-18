@@ -189,7 +189,9 @@ async def test_execute_process_forwards_and_honors_prefer_header():
             process_id_validator=cast(ProcessIdValidatorPort, validator),
         )
         resp = await manager.execute_process(
-            "infra:echo", body={"x": 1}, headers={"Prefer": "respond-async"}
+            "infra:echo",
+            payload={"x": 1},
+            headers={"Prefer": "respond-async"}
         )
         assert isinstance(resp, dict)
         assert resp.get("status") == 202
