@@ -30,6 +30,7 @@ from ump.core.models.job import Job, JobStatusInfo, StatusCode
 from ump.core.models.link import Link
 from ump.core.models.ogcp_exception import OGCExceptionResponse
 from ump.core.settings import logger
+from ump.core.models.link import Link
 
 REQUIRED_STATUS_FIELDS = {"jobID", "status", "type"}
 
@@ -199,7 +200,12 @@ class JobManager:
             job, process_id, provider, provider_resp, accepted_si
         )
         logger.debug(
-            f"[job:derive] job_id={job.id} derived_status={status_info.status if status_info else None} remote_status_url={remote_status_url} remote_job_id={remote_job_id} diagnostic_set={bool(diagnostic)}"
+            (
+                f"[job:derive] job_id={job.id} "
+                f"derived_status={status_info.status if status_info else None} "
+                f"remote_status_url={remote_status_url} "
+                f"remote_job_id={remote_job_id} diagnostic_set={bool(diagnostic)}"
+            )
         )
 
         # Inject local timestamps if remote snapshot omitted them
@@ -309,11 +315,10 @@ class JobManager:
             provider=provider_prefix,
             status=str(StatusCode.accepted),
             inputs=inputs if inputs and self._is_inline_small(inputs) else None,
-            inputs_storage="inline"
-            if inputs and self._is_inline_small(inputs)
-            else "object"
-            if inputs
-            else "inline",
+            inputs_storage=(
+                "inline" if inputs and self._is_inline_small(inputs)
+                else "object" if inputs
+                else "inline"),
         )
         return job
 
@@ -328,8 +333,7 @@ class JobManager:
             message=None,
             progress=0,
         )
-        # Always include self link immediately for discoverability
-        from ump.core.models.link import Link
+
         accepted_si.links = [
             Link(href=f"/jobs/{job.id}", rel="self", type="application/json", title="Job status")
         ]
@@ -519,6 +523,7 @@ class JobManager:
             job.remote_job_id = remote_job_id
         if diagnostic:
             job.diagnostic = diagnostic
+
         # Inject local results link if job already successful and link absent
         if status_info and status_info.status == StatusCode.successful:
             self._ensure_self_link(job.id, status_info)
