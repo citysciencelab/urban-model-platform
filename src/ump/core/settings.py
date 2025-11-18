@@ -61,6 +61,8 @@ class UmpSettings(BaseSettings):
     UMP_SUPPORTED_API_VERSIONS: list[str] = ["1.0"]
     # When enabled, replace external links in fetched processes with local API links
     UMP_REWRITE_REMOTE_LINKS: bool = True
+    # When true, JobManager verifies remote results immediately for terminal success responses
+    UMP_VERIFY_REMOTE_RESULTS: bool = True
     # If true, fetch each configured process individually via /processes/{id} instead
     # of fetching the bulk /processes list and filtering. This is slower for large
     # catalogs but ensures we get full descriptions even if the list endpoint omits
