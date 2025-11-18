@@ -4,6 +4,7 @@ Tests the extracted polling helper methods and retry error classification.
 """
 
 import pytest
+import pytest_asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 
@@ -37,7 +38,7 @@ def test_repo():
     return InMemoryJobRepository()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_job(test_repo):
     """Create and persist test job."""
     job = Job(
@@ -170,7 +171,7 @@ class TestShouldStopPolling:
 class TestNeedsEnrichment:
     """Test _needs_enrichment logic."""
     
-    def test_needs_enrichment_when_status_changed(self, job_manager):
+    def test_needs_enrichment_when_status_changed(self, job_manager: JobManager):
         """Should need enrichment when status changes."""
         status_info = JobStatusInfo(
             jobID="test",
