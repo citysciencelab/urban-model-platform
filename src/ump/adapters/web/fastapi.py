@@ -191,6 +191,7 @@ def create_app(
                 )
                 return render_problem(problem)
             job = await repo.get(job_id)
+
             if not job or not job.status_info:
                 problem = build_problem(
                     status=404,

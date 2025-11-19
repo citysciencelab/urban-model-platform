@@ -18,39 +18,41 @@ from typing import Any, Dict, Optional, Set
 from urllib.parse import urljoin
 
 from ump.core.config import JobManagerConfig
-from ump.core.exceptions import OGCProcessException, JobTimeoutError, ResultsFetchError, RemoteProviderError
+from ump.core.exceptions import OGCProcessException
 from ump.core.interfaces.http_client import HttpClientPort
 from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.interfaces.observers import JobStateObserver
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.interfaces.providers import ProvidersPort
 from ump.core.interfaces.status_derivation import StatusDerivationContext
-from ump.core.managers.status_derivation_orchestrator import StatusDerivationOrchestrator
+from ump.core.managers.status_derivation_orchestrator import (
+    StatusDerivationOrchestrator,
+)
 from ump.core.models.job import Job, JobStatusInfo, StatusCode
 from ump.core.models.link import Link
 from ump.core.models.ogcp_exception import OGCExceptionResponse
 from ump.core.settings import logger
-from ump.core.models.link import Link
 
 REQUIRED_STATUS_FIELDS = {"jobID", "status", "type"}
 
 
 class TransientOGCError(OGCProcessException):
     """Wrapper for transient OGC errors that should be retried.
-    
+
     Used to distinguish retryable errors (502, 503, 504) from
     non-retryable client errors (4xx) in retry logic.
     """
+
     pass
 
 
 class JobManager:
     """Orchestrates job lifecycle: creation, forwarding, status derivation, polling, results proxy.
-    
+
     Attributes:
         config: Immutable configuration for job behavior (poll intervals, timeouts, etc.)
     """
-    
+
     def __init__(
         self,
         providers: ProvidersPort,
@@ -58,9 +60,13 @@ class JobManager:
         process_id_validator: ProcessIdValidatorPort,
         job_repo: JobRepositoryPort,
         config: JobManagerConfig,
-        retry_port: Optional[Any] = None,  # RetryPort protocol; kept generic to avoid tight coupling
+        retry_port: Optional[
+            Any
+        ] = None,  # RetryPort protocol; kept generic to avoid tight coupling
         result_storage_port: Optional[Any] = None,  # ResultStoragePort protocol
-        observers: Optional[list[JobStateObserver]] = None,  # Observer pattern for state transitions
+        observers: Optional[
+            list[JobStateObserver]
+        ] = None,  # Observer pattern for state transitions
     ) -> None:
         self._providers = providers
         self._http = http_client
@@ -72,10 +78,10 @@ class JobManager:
         self._retry = retry_port
         self._result_storage = result_storage_port
         self._observers = observers or []
-        
+
         # Initialize status derivation orchestrator
         self._status_orchestrator = StatusDerivationOrchestrator(http_client)
-    
+
     async def _notify_job_created(self, job: Job, status_info: JobStatusInfo) -> None:
         """Notify all observers that a job was created."""
         for observer in self._observers:
@@ -86,12 +92,12 @@ class JobManager:
                     f"[observer:error] on_job_created failed observer={type(observer).__name__} "
                     f"job_id={job.id} error={exc}"
                 )
-    
+
     async def _notify_status_changed(
         self,
         job: Job,
         old_status_info: Optional[JobStatusInfo],
-        new_status_info: JobStatusInfo
+        new_status_info: JobStatusInfo,
     ) -> None:
         """Notify all observers that job status changed."""
         for observer in self._observers:
@@ -102,8 +108,10 @@ class JobManager:
                     f"[observer:error] on_status_changed failed observer={type(observer).__name__} "
                     f"job_id={job.id} error={exc}"
                 )
-    
-    async def _notify_job_completed(self, job: Job, final_status_info: JobStatusInfo) -> None:
+
+    async def _notify_job_completed(
+        self, job: Job, final_status_info: JobStatusInfo
+    ) -> None:
         """Notify all observers that a job reached terminal state."""
         for observer in self._observers:
             try:
@@ -174,7 +182,9 @@ class JobManager:
             )
             return self._response(
                 job.id,
-                failed_job.status_info if failed_job and failed_job.status_info else None,
+                failed_job.status_info
+                if failed_job and failed_job.status_info
+                else None,
             )
 
         # Handle upstream error responses (>=400) with non-statusInfo bodies
@@ -183,7 +193,7 @@ class JobManager:
         logger.debug(
             f"[job:forward] upstream response status={upstream_status} has_location={bool(provider_resp.get('headers', {}).get('Location'))} body_type={type(upstream_body).__name__}"
         )
-        
+
         if upstream_status:
             error_response = await self._handle_upstream_error_response(
                 job, upstream_status, upstream_body
@@ -249,12 +259,12 @@ class JobManager:
         accepted_created: datetime,
     ) -> None:
         """Enrich status info with contextual fields based on current status.
-        
+
         Fills in missing timestamps, progress, and messages for consistent UX.
         Modifies status_info in place.
         """
         now = datetime.now(timezone.utc)
-        
+
         if status_info.status == StatusCode.running:
             if status_info.started is None:
                 status_info.started = accepted_created
@@ -285,7 +295,7 @@ class JobManager:
         accepted_si: JobStatusInfo,
     ) -> None:
         """Normalize and enrich valid statusInfo with local context.
-        
+
         Modifies status_info in place to:
         - Ensure processID is set correctly
         - Adopt accepted created timestamp if remote omitted it
@@ -293,12 +303,12 @@ class JobManager:
         - Enrich missing optional fields (started, finished, progress, message)
         """
         status_info.processID = process_id
-        
+
         # Adopt accepted created timestamp if remote omitted it
         if status_info.created is None:
             status_info.created = accepted_si.created
         status_info.updated = datetime.now(timezone.utc)
-        
+
         # Enrich missing optional fields
         created_time = accepted_si.created or datetime.now(timezone.utc)
         self._enrich_status_info(status_info, job, created_time)
@@ -317,9 +327,12 @@ class JobManager:
             status=str(StatusCode.accepted),
             inputs=inputs if inputs and self._is_inline_small(inputs) else None,
             inputs_storage=(
-                "inline" if inputs and self._is_inline_small(inputs)
-                else "object" if inputs
-                else "inline"),
+                "inline"
+                if inputs and self._is_inline_small(inputs)
+                else "object"
+                if inputs
+                else "inline"
+            ),
         )
         return job
 
@@ -336,7 +349,12 @@ class JobManager:
         )
 
         accepted_si.links = [
-            Link(href=f"/jobs/{job.id}", rel="self", type="application/json", title="Job status")
+            Link(
+                href=f"/jobs/{job.id}",
+                rel="self",
+                type="application/json",
+                title="Job status",
+            )
         ]
         job.apply_status_info(accepted_si)
         await self._repo.create(job)
@@ -346,12 +364,12 @@ class JobManager:
 
     def _is_transient_error(self, exc: Exception) -> bool:
         """Check if exception represents a transient error worth retrying.
-        
+
         Transient errors include:
         - Connection errors (server busy, connection refused, etc.)
         - Timeout errors (server slow to respond)
         - 502/503/504 gateway/service unavailable errors
-        
+
         Non-transient errors that should fail immediately:
         - 4xx client errors (bad request, not found, etc.)
         - Authentication errors
@@ -365,10 +383,8 @@ class JobManager:
                 return False
         # Other exceptions might be transient connection issues
         return True
-    
-    async def _handle_forward_error(
-        self, job: Job, exc: Exception
-    ) -> None:
+
+    async def _handle_forward_error(self, job: Job, exc: Exception) -> None:
         """Handle exceptions during forward request, marking job as failed."""
         if isinstance(exc, OGCProcessException):
             await self._repo.mark_failed(
@@ -389,11 +405,12 @@ class JobManager:
         self, job: Job, exec_url: str, payload: Dict[str, Any], headers: Dict[str, str]
     ) -> Optional[Dict[str, Any]]:
         """Forward execution request to remote provider with retry logic.
-        
+
         Uses TenacityRetryAdapter (if available) for exponential backoff on transient
         errors (connection errors, timeouts, 502/503/504). Non-transient errors (4xx)
         fail immediately without retry by wrapping them in non-retryable exceptions.
         """
+
         async def do_forward_with_error_classification():
             """Actual forward operation that classifies errors for retry logic."""
             try:
@@ -419,7 +436,7 @@ class JobManager:
                         f"[job:forward] non-transient error, will not retry: status={exc.response.status} job_id={job.id}"
                     )
                     raise
-        
+
         try:
             # Use retry adapter if available, with config-based retry settings
             if self._retry:
@@ -434,9 +451,11 @@ class JobManager:
                 return resp
             else:
                 # Fallback: single attempt without retry
-                logger.debug(f"[job:forward] no retry adapter, single attempt job_id={job.id}")
+                logger.debug(
+                    f"[job:forward] no retry adapter, single attempt job_id={job.id}"
+                )
                 return await do_forward_with_error_classification()
-                
+
         except TransientOGCError as exc:
             # Transient error retry exhausted - unwrap original exception
             logger.error(
@@ -445,7 +464,7 @@ class JobManager:
             )
             await self._handle_forward_error(job, exc)
             return None
-            
+
         except OGCProcessException as exc:
             # Non-transient error (no retry attempted)
             logger.warning(
@@ -454,7 +473,7 @@ class JobManager:
             )
             await self._handle_forward_error(job, exc)
             return None
-            
+
         except Exception as exc:
             # Unexpected non-OGC exception
             logger.error(
@@ -472,11 +491,11 @@ class JobManager:
         accepted_si: JobStatusInfo,
     ) -> tuple[JobStatusInfo, Optional[str], Optional[str], Optional[str]]:
         """Derive statusInfo from provider response using Strategy pattern.
-        
+
         Delegates to StatusDerivationOrchestrator which selects the appropriate
         strategy based on response pattern (direct statusInfo, immediate results,
         Location follow-up, or fallback failed).
-        
+
         Returns (status_info, remote_status_url, remote_job_id, diagnostic).
         """
         # Create context for strategy evaluation
@@ -487,19 +506,19 @@ class JobManager:
             provider_resp=provider_resp,
             accepted_si=accepted_si,
         )
-        
+
         # Use orchestrator to derive status via appropriate strategy
         result = await self._status_orchestrator.derive_status(context)
-        
+
         # Normalize and enrich if we got valid statusInfo
         if result.status_info and result.status_info.status != StatusCode.failed:
             self._normalize_and_enrich_status_info(
                 result.status_info, job, process_id, accepted_si
             )
-        
+
         # Ensure local self link consistency for any status
         self._ensure_self_link(job.id, result.status_info)
-        
+
         return (
             result.status_info,
             result.remote_status_url,
@@ -516,8 +535,10 @@ class JobManager:
         diagnostic: Optional[str],
     ) -> None:
         # Capture old status for observer notification
-        old_status_info = JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
-        
+        old_status_info = (
+            JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
+        )
+
         if remote_status_url:
             job.remote_status_url = remote_status_url
         if remote_job_id:
@@ -531,14 +552,14 @@ class JobManager:
             self._ensure_results_link(job.id, status_info)
         job.apply_status_info(status_info)
         await self._repo.update(job)
-        
+
         logger.debug(
             f"[job:finalize] job_id={job.id} status={status_info.status} remote_status_url={job.remote_status_url} remote_job_id={job.remote_job_id} terminal={job.is_in_terminal_state()}"
         )
-        
+
         # Notify observers (includes status history recording, polling scheduling, verification)
         await self._notify_status_changed(job, old_status_info, status_info)
-        
+
         if job.is_in_terminal_state():
             await self._notify_job_completed(job, status_info)
 
@@ -546,27 +567,29 @@ class JobManager:
         self, job: Job, upstream_status: int, upstream_body: Any
     ) -> Optional[Dict[str, Any]]:
         """Handle error responses (>=400) from upstream provider.
-        
+
         Returns propagated error response dict if body is not statusInfo, None otherwise.
         """
         if upstream_status < 400:
             return None
-        
+
         si = self._extract_status_info(upstream_body)
         if si:
             # Valid statusInfo in error response; will be handled normally
             return None
-        
+
         # Non-statusInfo error body; mark local job failed and propagate upstream response
         await self._repo.mark_failed(job.id, reason=f"Upstream {upstream_status}")
         logger.debug(
             f"[job:error-propagate] marking job failed job_id={job.id} upstream_status={upstream_status} returning raw upstream body"
         )
-        
+
         return {
             "status": upstream_status,
             "headers": {"Location": f"/jobs/{job.id}"},
-            "body": upstream_body if isinstance(upstream_body, (dict, list)) else {"error": str(upstream_body)},
+            "body": upstream_body
+            if isinstance(upstream_body, (dict, list))
+            else {"error": str(upstream_body)},
         }
 
     def _response(
@@ -584,7 +607,6 @@ class JobManager:
         treat this as local failure to ensure clients don't assume success without outputs.
         """
         try:
-
             base = str(provider.url).rstrip("/")
             results_url = f"{base}/jobs/{remote_job_id}/results"
             logger.debug(f"[job:verify] fetching results_url={results_url}")
@@ -661,22 +683,24 @@ class JobManager:
 
     async def _check_and_handle_timeout(self, job: Job) -> bool:
         """Check if job has exceeded timeout and mark as failed if so.
-        
+
         Returns True if timeout was reached and job was marked failed.
         """
         if self.config.poll_timeout is None or job.created is None:
             return False
-        
+
         elapsed = (datetime.now(timezone.utc) - job.created).total_seconds()
         if elapsed <= self.config.poll_timeout:
             return False
-        
+
         logger.warning(
             f"[job:poll] timeout reached job_id={job.id} elapsed={elapsed}s > {self.config.poll_timeout}s; marking failed"
         )
-        
-        old_status = JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
-        
+
+        old_status = (
+            JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
+        )
+
         timeout_si = JobStatusInfo(
             jobID=job.id,
             status=StatusCode.failed,
@@ -688,10 +712,10 @@ class JobManager:
             finished=datetime.now(timezone.utc),
             progress=None,
         )
-        
+
         job.apply_status_info(timeout_si)
         await self._repo.update(job)
-        
+
         # Notify observers (includes status history recording)
         await self._notify_status_changed(job, old_status, timeout_si)
         await self._notify_job_completed(job, timeout_si)
@@ -708,7 +732,7 @@ class JobManager:
 
     async def _poll_loop(self, job_id: str) -> None:
         """Continuously poll remote status until terminal or shutdown.
-        
+
         Main polling orchestrator that:
         1. Checks termination conditions (shutdown, terminal state, timeout)
         2. Fetches remote status
@@ -721,72 +745,74 @@ class JobManager:
             if should_stop:
                 logger.debug(f"[job:poll] stopping: {reason} job_id={job_id}")
                 return
-            
+
             # Get fresh job state
             job = await self._repo.get(job_id)
             if not job:  # Job disappeared (should not happen, but defensive)
                 logger.debug(f"[job:poll] job disappeared job_id={job_id}")
                 return
-            
+
             # Attempt to fetch and process remote status
             terminal_reached = await self._poll_and_update_status(job)
             if terminal_reached:
                 return
-            
+
             # Sleep before next poll
             await asyncio.sleep(self.config.poll_interval)
-    
+
     async def _should_stop_polling(self, job_id: str) -> tuple[bool, str]:
         """Check if polling should stop for a job.
-        
+
         Returns (should_stop, reason) tuple.
         """
         job = await self._repo.get(job_id)
-        
+
         if not job:
             return True, "job not found"
-        
+
         if job.is_in_terminal_state():
             return True, f"terminal state {job.status}"
-        
+
         if not job.remote_status_url:
             return True, "no remote_status_url"
-        
+
         # Check timeout
         if await self._check_and_handle_timeout(job):
             return True, "timeout exceeded"
-        
+
         return False, ""
-    
+
     async def _poll_and_update_status(self, job: Job) -> bool:
         """Poll remote status and update job if status changed.
-        
+
         Returns True if terminal state reached, False otherwise.
         """
         # Guard: must have remote status URL
         if not job.remote_status_url:
             return False
-        
+
         try:
             # Fetch remote status
             resp = await self._http.get(job.remote_status_url)
             status_info = self._extract_status_info(resp)
-            
+
             # Guard: skip if no valid status info
             if not status_info:
                 logger.debug(f"[job:poll] no valid statusInfo job_id={job.id}")
                 return False
-            
+
             # Process the status update
             return await self._process_status_update(job, status_info)
-            
+
         except Exception as exc:
             logger.debug(f"[job:poll] fetch error job_id={job.id} err={exc}")
             return False
-    
-    async def _process_status_update(self, job: Job, status_info: JobStatusInfo) -> bool:
+
+    async def _process_status_update(
+        self, job: Job, status_info: JobStatusInfo
+    ) -> bool:
         """Process a status update from remote provider.
-        
+
         Normalizes IDs, enriches fields, updates job, notifies observers.
         Returns True if terminal state reached.
         """
@@ -795,47 +821,55 @@ class JobManager:
             if not job.remote_job_id:
                 job.remote_job_id = status_info.jobID
             status_info.jobID = job.id
-        
+
         # Ensure processID is set
         status_info.processID = job.process_id
-        
+
         # Enrich if status changed or fields missing
         prev_status = job.status_info.status if job.status_info else None
         if self._needs_enrichment(status_info, prev_status):
             created_time = job.created or datetime.now(timezone.utc)
             self._enrich_status_info(status_info, job, created_time)
-        
+
         # Update timestamp
         status_info.updated = datetime.now(timezone.utc)
-        
+
         # Ensure local links
         self._ensure_self_link(job.id, status_info)
         if status_info.status == StatusCode.successful:
             self._ensure_results_link(job.id, status_info)
-        
+
         # Capture old status for observers
-        old_status = JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
-        
+        old_status = (
+            JobStatusInfo(**job.status_info.model_dump()) if job.status_info else None
+        )
+
         # Apply and persist
         job.apply_status_info(status_info)
         await self._repo.update(job)
-        
+
         # Notify observers
         await self._notify_status_changed(job, old_status, status_info)
-        
+
         # Check if terminal
         if job.is_in_terminal_state():
-            logger.debug(f"[job:poll] terminal state reached job_id={job.id} status={job.status}")
+            logger.debug(
+                f"[job:poll] terminal state reached job_id={job.id} status={job.status}"
+            )
             await self._notify_job_completed(job, status_info)
             return True
-        
+
         return False
-    
-    def _needs_enrichment(self, status_info: JobStatusInfo, prev_status: Optional[StatusCode]) -> bool:
+
+    def _needs_enrichment(
+        self, status_info: JobStatusInfo, prev_status: Optional[StatusCode]
+    ) -> bool:
         """Check if status info needs enrichment (status changed or fields missing)."""
         if prev_status != status_info.status:
             return True
-        return any(getattr(status_info, f) is None for f in ["started", "progress", "message"])
+        return any(
+            getattr(status_info, f) is None for f in ["started", "progress", "message"]
+        )
 
     async def shutdown(self) -> None:
         self._shutdown = True
@@ -895,14 +929,16 @@ class JobManager:
             title="Job results",
         )
         status_info.links = existing + [results_link]
-    
+
     def _ensure_self_link(self, job_id: str, status_info: JobStatusInfo) -> None:
         """Guarantee a local self link (remove remote self/results with foreign job id)."""
         existing = status_info.links or []
         filtered = [
             l
             for l in existing
-            if not (l.rel in {"self", "results"} and f"/jobs/{job_id}" not in (l.href or ""))
+            if not (
+                l.rel in {"self", "results"} and f"/jobs/{job_id}" not in (l.href or "")
+            )
         ]
         if any(l.rel == "self" for l in filtered):
             status_info.links = filtered
