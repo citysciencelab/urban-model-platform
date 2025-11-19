@@ -512,6 +512,12 @@ class JobManager:
 
         # Normalize and enrich if we got valid statusInfo
         if result.status_info and result.status_info.status != StatusCode.failed:
+            # Normalize remote job ID to local one, and retain remote id separately
+            if result.status_info.jobID and result.status_info.jobID != job.id:
+                if not job.remote_job_id:
+                    job.remote_job_id = result.status_info.jobID
+                result.status_info.jobID = job.id
+
             self._normalize_and_enrich_status_info(
                 result.status_info, job, process_id, accepted_si
             )
