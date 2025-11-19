@@ -298,10 +298,15 @@ class ProcessManager(ProcessesPort):
         provider_summaries: Dict[str, List[ProcessSummary]] = {}
         fetch_plan: List[tuple[str, str]] = []  # (provider_name, canonical_process_id)
 
+        # fetch plan for all configured processes of each provider
         for provider_name in provider_names:
+            
+            # lookup processed in cache for this provider
             cached = self._process_cache.get(provider_name)
             if cached is not None:
                 provider_summaries[provider_name] = list(cached)
+                
+                # if found in cache, skip fetching
                 continue
 
             configured_raw_ids = self._configured_process_ids(provider_name)
@@ -314,6 +319,7 @@ class ProcessManager(ProcessesPort):
         tasks = [self.get_process(canonical_id) for _, canonical_id in fetch_plan]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        # create processSummary for each fetched process, ignoring failed fetches
         for (provider_name, canonical_id), result in zip(fetch_plan, results):
             if isinstance(result, Exception):
                 logger.warning(
