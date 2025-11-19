@@ -16,6 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from ump.adapters.logging_adapter import LoggingAdapter
 from ump.core.exceptions import OGCProcessException
 from ump.core.interfaces.http_client import HttpClientPort
+from ump.core.interfaces.job_repository import JobRepositoryPort
 from ump.core.interfaces.process_id_validator import ProcessIdValidatorPort
 from ump.core.interfaces.processes import ProcessesPort
 from ump.core.interfaces.providers import ProvidersPort
@@ -181,7 +182,7 @@ def create_app(
             response_model_exclude_none=True,
         )
         async def get_job_sub(request: Request, job_id: str):
-            repo = getattr(app.state.process_port, "job_repository", None)
+            repo: JobRepositoryPort | None = getattr(app.state.process_port, "job_repository", None)
             if repo is None:
                 problem = build_problem(
                     status=404,
@@ -190,6 +191,7 @@ def create_app(
                     request=request,
                 )
                 return render_problem(problem)
+            
             job = await repo.get(job_id)
 
             if not job or not job.status_info:
@@ -368,7 +370,7 @@ def create_app(
         "/jobs/{job_id}", response_model=JobStatusInfo, response_model_exclude_none=True
     )
     async def get_job(job_id: str, request: Request):
-        repo = getattr(app.state.process_port, "job_repository", None)
+        repo: JobRepositoryPort | None = getattr(app.state.process_port, "job_repository", None)
         if repo is None:
             problem = build_problem(
                 status=404,
@@ -377,7 +379,9 @@ def create_app(
                 request=request,
             )
             return render_problem(problem)
+        
         job = await repo.get(job_id)
+        
         if not job or not job.status_info:
             problem = build_problem(
                 status=404,
