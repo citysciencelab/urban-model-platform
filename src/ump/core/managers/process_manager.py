@@ -1,8 +1,8 @@
 # ump/core/managers/process_manager.py
 from __future__ import annotations
+
 import asyncio
-import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from ump.core.exceptions import OGCProcessException
 from ump.core.interfaces.http_client import HttpClientPort
@@ -214,56 +214,80 @@ class ProcessManager(ProcessesPort):
             )
         return proc
 
-    async def fetch_processes_for_provider(
-        self, provider_name: str
-    ) -> List[ProcessSummary]:
-        """Fetch the process list for a single provider.
+    def _extract_raw_id(self, provider_name: str, configured_id: str) -> str:
+        """Strip our provider prefix while keeping any remote colon segments intact."""
+        try:
+            prefix, raw_id = self.process_id_validator.extract(configured_id)
+            if prefix == provider_name:
+                return raw_id
+        except ValueError:
+            pass
+        return configured_id
 
-                Selection rules:
-                - Only processes explicitly listed in `providers.yaml` (respecting `exclude=True`) are exposed.
-                - Remote processes not configured are ignored (future option `mirror_all_processes` could relax this).
-                - Provides curated visibility and avoids surfacing experimental upstream processes accidentally.
-                - We always perform per-process fetch for configured process IDs to obtain richer metadata when list responses are sparse.
-        """
-        cached_processes = self._process_cache.get(provider_name)
-        if cached_processes is not None:
-            logger.info(
-                f"Process list cache hit for provider '{provider_name}': {len(cached_processes)} processes"
-            )
-            return cached_processes
-        else:
-            logger.info(f"Process list cache miss for provider '{provider_name}'")
-
-        provider: ProviderConfig = self.provider_config_service.get_provider(
-            provider_name
-        )
-        # build set of explicitly configured ids (excluding those marked exclude)
-        configured = self.provider_config_service.get_provider(provider_name).processes
-        configured_ids = {p.id for p in configured if not getattr(p, "exclude", False)}
-
-        processes: List[ProcessSummary] = []
-
-        # Always perform per-process fetch for richer metadata
-        for cid in configured_ids:
-            raw_id = cid.split(":", 1)[1] if ":" in cid else cid
-            per_url = str(provider.url).rstrip("/") + f"/processes/{raw_id}"
-            try:
-                data = await self.http_client.get(per_url)
-                proc = dict(data)
-                for handler in self._process_handlers:
-                    proc = handler(provider_name, proc)
-                processes.append(ProcessSummary(**proc))
-            except Exception as e:
-                logger.warning(
-                    f"Failed per-process fetch for '{cid}' from provider '{provider_name}': {e}"
-                )
+    def _configured_process_ids(self, provider_name: str) -> List[str]:
+        provider = self.provider_config_service.get_provider(provider_name)
+        raw_ids: List[str] = []
+        for proc_cfg in provider.processes:
+            if getattr(proc_cfg, "exclude", False):
                 continue
+            raw_ids.append(self._extract_raw_id(provider_name, proc_cfg.id))
+        return raw_ids
 
-        self._process_cache.set(provider_name, processes)
-        logger.debug(
-            f"Cached {len(processes)} configured processes for provider '{provider_name}' (strategy=per-process)"
+    def _cache_process(self, model: Process) -> None:
+        self._process_cache_by_id.set(model.pid, model)
+        logger.debug(f"Cached process '{model.pid}' in per-process cache")
+        if ":" in model.pid:
+            bare = model.pid.split(":", 1)[1]
+            self._process_cache_by_id.set(bare, model)
+            logger.debug(f"Also cached process under bare id '{bare}'")
+
+    async def _fetch_process(self, provider_name: str, raw_id: str) -> Process:
+        provider = self.provider_config_service.get_provider(provider_name)
+        url = str(provider.url).rstrip("/") + f"/processes/{raw_id}"
+        try:
+            data = await self.http_client.get(url)
+            proc = dict(data)
+            for handler in self._process_handlers:
+                proc = handler(provider_name, proc)
+            model = Process(**proc)
+            self._cache_process(model)
+            return model
+        except OGCProcessException:
+            raise
+        except Exception as fetch_error:
+            logger.error(
+                f"Failed to fetch process '{raw_id}' from provider '{provider_name}': {fetch_error}"
+            )
+            raise OGCProcessException(
+                OGCExceptionResponse(
+                    type="about:blank",
+                    title="Upstream Error",
+                    status=502,
+                    detail=(
+                        f"Could not retrieve process '{raw_id}' from provider '{provider_name}'"
+                    ),
+                    instance=None,
+                )
+            )
+
+    def _resolve_provider_for_bare_id(self, process_id: str) -> tuple[str, str]:
+        for provider_name in self.provider_config_service.list_providers():
+            provider = self.provider_config_service.get_provider(provider_name)
+            for proc_cfg in provider.processes:
+                if getattr(proc_cfg, "exclude", False):
+                    continue
+                raw_id = self._extract_raw_id(provider_name, proc_cfg.id)
+                if raw_id == process_id:
+                    return provider_name, raw_id
+        raise OGCProcessException(
+            OGCExceptionResponse(
+                type="about:blank",
+                title="Not Found",
+                status=404,
+                detail=f"Process '{process_id}' not found",
+                instance=None,
+            )
         )
-        return processes
 
     async def get_all_processes(self) -> ProcessList:
         """
@@ -271,12 +295,39 @@ class ProcessManager(ProcessesPort):
         Aggregates all results into a single ProcessList.
         """
         provider_names = self.provider_config_service.list_providers()
-        # Create a coroutine for each provider
-        tasks = [self.fetch_processes_for_provider(name) for name in provider_names]
-        # Run all coroutines concurrently
-        results = await asyncio.gather(*tasks)
-        # Flatten the list of lists into a single list
-        all_processes = [proc for sublist in results for proc in sublist]
+        provider_summaries: Dict[str, List[ProcessSummary]] = {}
+        fetch_plan: List[tuple[str, str]] = []  # (provider_name, canonical_process_id)
+
+        for provider_name in provider_names:
+            cached = self._process_cache.get(provider_name)
+            if cached is not None:
+                provider_summaries[provider_name] = list(cached)
+                continue
+
+            configured_raw_ids = self._configured_process_ids(provider_name)
+            provider_summaries[provider_name] = []
+
+            for raw_id in configured_raw_ids:
+                canonical_id = self.process_id_validator.create(provider_name, raw_id)
+                fetch_plan.append((provider_name, canonical_id))
+
+        tasks = [self.get_process(canonical_id) for _, canonical_id in fetch_plan]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for (provider_name, canonical_id), result in zip(fetch_plan, results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    f"Failed to fetch process '{canonical_id}' from provider '{provider_name}': {result}"
+                )
+                continue
+            process = cast(Process, result)
+            summary = ProcessSummary(**process.model_dump())
+            provider_summaries.setdefault(provider_name, []).append(summary)
+
+        for provider_name, summaries in provider_summaries.items():
+            self._process_cache.set(provider_name, summaries)
+
+        all_processes = [proc for summaries in provider_summaries.values() for proc in summaries]
         return ProcessList(processes=all_processes)
 
     async def get_process(self, process_id: str) -> Process:
@@ -287,114 +338,19 @@ class ProcessManager(ProcessesPort):
         across configured providers for a matching process summary and, if
         possible, attempt to fetch the full description from the provider.
         """
-        # First check cache by full process id
         cached = self._process_cache_by_id.get(process_id)
         if cached is not None:
             logger.info(f"Process cache hit for id '{process_id}'")
             return cached
-        else:
-            logger.info(f"Process cache miss for id '{process_id}'")
 
-        # Try to detect provider prefix
+        logger.info(f"Process cache miss for id '{process_id}'")
+
         try:
-            provider_prefix, raw_id = self.process_id_validator.extract(process_id)
-            # If extract succeeded, attempt to fetch from that provider
-            provider = self.provider_config_service.get_provider(provider_prefix)
-            url = str(provider.url).rstrip("/") + f"/processes/{raw_id}"
-            try:
-                data = await self.http_client.get(url)
-                # run handlers on returned dict (if any) and return Process model
-                proc = dict(data)
-                for handler in self._process_handlers:
-                    proc = handler(provider_prefix, proc)
-                model = Process(**proc)
-                # cache under canonical id
-                self._process_cache_by_id.set(model.pid, model)
-                logger.debug(f"Cached process '{model.pid}' in per-process cache")
-                # also cache under bare id for convenience (e.g., 'echo')
-                if ":" in model.pid:
-                    bare = model.pid.split(":", 1)[1]
-                    self._process_cache_by_id.set(bare, model)
-                    logger.debug(f"Also cached process under bare id '{bare}'")
-                return model
-            except OGCProcessException:
-                # re-raise to be handled by the web adapter
-                raise
-            except Exception as fetch_error:
-                logger.error(
-                    f"Failed to fetch process {process_id} from provider {provider_prefix}: {fetch_error}"
-                )
-                raise OGCProcessException(
-                    OGCExceptionResponse(
-                        type="about:blank",
-                        title="Upstream Error",
-                        status=502,
-                        detail=f"Could not retrieve process {process_id} from provider {provider_prefix}",
-                        instance=None,
-                    )
-                )
+            provider_name, raw_id = self.process_id_validator.extract(process_id)
         except ValueError:
-            # No provider prefix — fall back to searching all providers
-            all_procs = await self.get_all_processes()
-            for proc_summary in all_procs.processes:
-                if (
-                    proc_summary.pid.endswith(f":{process_id}")
-                    or proc_summary.pid == process_id
-                ):
-                    # Try to fetch full description from provider if link available
-                    # Look for a 'self' link or processes/{id} link in summary
-                    provider_prefix, _ = self.process_id_validator.extract(
-                        proc_summary.pid
-                    )
-                    provider = self.provider_config_service.get_provider(
-                        provider_prefix
-                    )
-                    # attempt to fetch full description
-                    url = str(provider.url).rstrip("/") + f"/processes/{process_id}"
-                    try:
-                        data = await self.http_client.get(url)
-                        proc = dict(data)
-                        for handler in self._process_handlers:
-                            proc = handler(provider_prefix, proc)
-                        model = Process(**proc)
-                        self._process_cache_by_id.set(model.pid, model)
-                        logger.debug(
-                            f"Cached process '{model.pid}' in per-process cache"
-                        )
-                        if ":" in model.pid:
-                            bare = model.pid.split(":", 1)[1]
-                            self._process_cache_by_id.set(bare, model)
-                            logger.debug(f"Also cached process under bare id '{bare}'")
-                        return model
-                    except Exception as fetch_error:
-                        # If fetching full description fails, but summary has enough data,
-                        # construct a Process from the summary (no inputs/outputs)
-                        logger.debug(
-                            f"Fetching full description failed for '{proc_summary.pid}': {fetch_error} - falling back to summary"
-                        )
-                        model = Process(**proc_summary.model_dump())
-                        self._process_cache_by_id.set(model.pid, model)
-                        logger.debug(
-                            f"Cached process '{model.pid}' in per-process cache (from summary fallback)"
-                        )
-                        if ":" in model.pid:
-                            bare = model.pid.split(":", 1)[1]
-                            self._process_cache_by_id.set(bare, model)
-                            logger.debug(
-                                f"Also cached process under bare id '{bare}' (from summary fallback)"
-                            )
-                        return model
+            provider_name, raw_id = self._resolve_provider_for_bare_id(process_id)
 
-            # Not found
-            raise OGCProcessException(
-                OGCExceptionResponse(
-                    type="about:blank",
-                    title="Not Found",
-                    status=404,
-                    detail=f"Process '{process_id}' not found",
-                    instance=None,
-                )
-            )
+        return await self._fetch_process(provider_name, raw_id)
 
     async def cleanup(self) -> None:
         """Cleanup resources"""
