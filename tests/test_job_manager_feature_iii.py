@@ -356,7 +356,7 @@ async def test_link_normalization_replaces_remote_ids():
     assert job.status_info is not None, "status_info should be populated"
     assert job.status_info.jobID == job.id
     assert job.status_info.links is not None, "links should be present"
-    hrefs = {l.href for l in job.status_info.links}
+    hrefs = {link.href for link in job.status_info.links}
     assert f"/jobs/{job.id}" in hrefs
     assert f"/jobs/{job.id}/results" in hrefs
     # Ensure remote provider links are removed
