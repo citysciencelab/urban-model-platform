@@ -95,7 +95,7 @@ def make_app_with_factories(http_client: HttpClientPort, provider: FakeProvider 
     # Test-friendly config: fast polling, no timeout
     test_config = JobManagerConfig(
         poll_interval=0.01,
-        poll_timeout=None,
+        poll_timeout=1,
         rewrite_remote_links=True,
         inline_inputs_size_limit=64 * 1024,
         verify_remote_results=False,
