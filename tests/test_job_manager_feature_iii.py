@@ -292,17 +292,23 @@ async def test_retry_verification_failure_downgrades_status():
     # All GET attempts raise
     get_responses = [Exception("err1"), Exception("err2"), Exception("err3")]
     class AlwaysFailRetry(TestRetryAdapter):
-        async def execute(self, func):
+        async def execute(self, func, *args, **kwargs):
+            attempts = kwargs.pop("attempts", self.attempts)
+            wait_initial = kwargs.pop("wait_initial", self.wait_initial)
+            wait_max = kwargs.pop("wait_max", self.wait_max)
+            exception_types = kwargs.pop("exception_types", self.exception_types)
+            
             last: Exception | None = None
-            for _ in range(self.attempts):
+            for _ in range(attempts):
                 try:
-                    return await func()
+                    return await func(*args, **kwargs)
                 except Exception as exc:
                     last = exc
             if last is None:
                 raise AssertionError("Expected at least one failure in AlwaysFailRetry")
             raise last
-    retry_port = AlwaysFailRetry(attempts=3)
+
+    retry_port = AlwaysFailRetry(attempts=3, wait_initial=0, wait_max=0, exception_types=(Exception,))
     mgr, repo, http_client = make_manager(post_response, get_responses=get_responses, retry_port=retry_port)
     resp = await mgr.create_and_forward("prov:procD", {"inputs": {}}, {})
     job_id = resp["headers"]["Location"].split("/")[-1]
