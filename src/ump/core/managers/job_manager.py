@@ -46,6 +46,29 @@ class TransientOGCError(OGCProcessException):
     pass
 
 
+class JobExecutionPipeline:
+    def __init__(self, steps: List[PipelineStep]):
+        self.steps = steps
+    
+    async def execute(self, context: JobExecutionContext) -> ExecutionResult:
+        for step in self.steps:
+            if context.should_halt:
+                break
+            await step.process(context)
+        return context.to_result()
+
+class JobExecutionContext(BaseModel):
+    """Carries state through pipeline steps"""
+    job: Job
+    process_id: str
+    provider: Provider
+    execute_payload: Dict
+    headers: Dict
+    status_info: Optional[JobStatusInfo]
+    should_halt: bool = False
+    response: Optional[Dict] = None
+
+
 class JobManager:
     """Orchestrates job lifecycle: creation, forwarding, status derivation, polling, results proxy.
 
@@ -81,6 +104,39 @@ class JobManager:
 
         # Initialize status derivation orchestrator
         self._status_orchestrator = StatusDerivationOrchestrator(http_client)
+
+    def create_and_forward_ii(
+        self,
+        process_id: str,
+        execute_payload: Optional[Dict[str, Any]],
+        headers: Dict[str, str],
+    ) -> Dict[str, Any]:
+        
+        # Initialize execution context
+        context = JobExecutionContext(
+            process_id=process_id,
+            execute_payload=execute_payload,
+            headers=headers
+        )
+
+        # Create and run pipeline
+        pipeline = self._build_execution_pipeline()
+        result = await pipeline.execute(context)
+        
+        return result.to_response()
+
+    def _build_execution_pipeline(self) -> ExecutionPipeline:
+        """Factory method to construct the pipeline."""
+        return ExecutionPipeline([
+            ValidateAndResolveStep(self._validator, self._providers),
+            CreateLocalJobStep(self._repo),
+            PersistAcceptedStep(self._repo, self._observers),
+            ForwardToProviderStep(self._http, self._retry),
+            HandleProviderResponseStep(),
+            DeriveStatusInfoStep(self._status_orchestrator),
+            FinalizeJobStep(self._repo, self._observers),
+            InitiatePollingStep(self._poll_scheduler)
+        ])
 
     async def _notify_job_created(self, job: Job, status_info: JobStatusInfo) -> None:
         """Notify all observers that a job was created."""
