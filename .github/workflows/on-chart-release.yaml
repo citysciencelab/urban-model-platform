@@ -10,42 +10,74 @@ env:
   HELM_CHART_PATH: ./charts/urban-model-platform
 
 jobs:
-  release:
+  # package-and-publish-bitbucket:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout source
+  #       uses: actions/checkout@v3
+
+  #     - name: Setup Helm
+  #       uses: azure/setup-helm@v3
+  #       with:
+  #         version: v3.12.0
+
+  #     - name: Lint Chart
+  #       run: helm lint $HELM_CHART_PATH
+
+  #     - name: Package Chart
+  #       run: |
+  #         helm package $HELM_CHART_PATH
+
+  #     - name: Checkout helm repo
+  #       run: git clone https://x-token-auth:${{ secrets.BB_ACCESS_TOKEN }}@bitbucket.org/geowerkstatt-hamburg/urban-model-platform-helm-charts.git helm-repo
+
+  #     - name: Update Helm repo index
+  #       run: |
+  #         cp *.tgz helm-repo/
+  #         cd helm-repo
+  #         if [ -f index.yaml ]; then
+  #           helm repo index . --url $HELM_REPO_URL --merge index.yaml
+  #         else
+  #           helm repo index . --url $HELM_REPO_URL
+  #         fi
+
+  #     - name: Push changes
+  #       run: |
+  #         cd helm-repo
+  #         git config user.name "GitHub Actions Bot"
+  #         git config user.email "actions@github.com"
+  #         git add .
+  #         git commit -m "Update helm repository"
+  #         git push origin main
+  package-and-publish-gitlab:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Setup Helm
+      - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
-          version: v3.12.0
+          version: v3.14.0
 
-      - name: Lint Chart
-        run: helm lint $HELM_CHART_PATH
-
-      - name: Package Chart
+      - name: Package Helm chart
         run: |
-          helm package $HELM_CHART_PATH
-
-      - name: Checkout helm repo
-        run: git clone https://x-token-auth:${{ secrets.BB_ACCESS_TOKEN }}@bitbucket.org/geowerkstatt-hamburg/urban-model-platform-helm-charts.git helm-repo
-
-      - name: Update Helm repo index
+          cd charts/noise-modelling-v4
+          helm dependency update
+          helm package . -d ../../
+      - name: Upload Helm chart to GitLab Helm registry
+        env:
+          GITLAB_HELM_USERNAME: ${{ secrets.GITLAB_HELM_USERNAME }}
+          GITLAB_HELM_TOKEN: ${{ secrets.GITLAB_HELM_TOKEN }}
+          GITLAB_BASE_URL: https://gitlab.opencode.de
+          GITLAB_PROJECT_ID: "8655"
+          GITLAB_HELM_CHANNEL: stable
         run: |
-          cp *.tgz helm-repo/
-          cd helm-repo
-          if [ -f index.yaml ]; then
-            helm repo index . --url $HELM_REPO_URL --merge index.yaml
-          else
-            helm repo index . --url $HELM_REPO_URL
-          fi
-
-      - name: Push changes
-        run: |
-          cd helm-repo
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          git add .
-          git commit -m "Update helm repository"
-          git push origin main
+          ls -1 noise-modelling-v4-*.tgz
+          CHART_FILE="$(ls -1 noise-modelling-v4-*.tgz | head -n 1)"
+          UPLOAD_URL="${GITLAB_BASE_URL}/api/v4/projects/${GITLAB_PROJECT_ID}/packages/helm/api/${GITLAB_HELM_CHANNEL}/charts"
+          echo "Uploading chart to: ${UPLOAD_URL}"
+          curl --fail-with-body --request POST \
+               --form "chart=@${CHART_FILE}" \
+               --user "${GITLAB_HELM_USERNAME}:${GITLAB_HELM_TOKEN}" \
+               "${UPLOAD_URL}"
