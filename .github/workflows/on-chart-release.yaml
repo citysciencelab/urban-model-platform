@@ -62,7 +62,7 @@ jobs:
 
       - name: Package Helm chart
         run: |
-          cd charts/noise-modelling-v4
+          cd charts/urban-model-platform
           helm dependency update
           helm package . -d ../../
       - name: Upload Helm chart to GitLab Helm registry
@@ -73,8 +73,8 @@ jobs:
           GITLAB_PROJECT_ID: "8655"
           GITLAB_HELM_CHANNEL: stable
         run: |
-          ls -1 noise-modelling-v4-*.tgz
-          CHART_FILE="$(ls -1 noise-modelling-v4-*.tgz | head -n 1)"
+          ls -1 urban-model-platform-*.tgz
+          CHART_FILE="$(ls -1 urban-model-platform-*.tgz | head -n 1)"
           UPLOAD_URL="${GITLAB_BASE_URL}/api/v4/projects/${GITLAB_PROJECT_ID}/packages/helm/api/${GITLAB_HELM_CHANNEL}/charts"
           echo "Uploading chart to: ${UPLOAD_URL}"
           curl --fail-with-body --request POST \
