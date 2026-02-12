@@ -25,4 +25,14 @@ spec:
           kind: Service
           group: ''
           weight: 1
+      {{- if .Values.allowedOrigins }}
+      filters:
+        {{- range $.Values.allowedOrigins }}
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: ump-api-cors-{{ .name | lower }}
+        {{- end }}
+      {{- end }}
 {{- end -}}

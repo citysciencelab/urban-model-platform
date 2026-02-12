@@ -13,6 +13,21 @@ replicaCount: 1
 
 labels: {}
 
+allowedOrigins:
+  - name: "my-frontend"
+    hosts:
+      - https://MY-FRONTEND-DOMAIN
+    allowedMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+    allowedHeaders:
+      - Content-Type
+      - Authorization
+    allowCredentials: true
+
 tls:
   enabled: false
   issuer:

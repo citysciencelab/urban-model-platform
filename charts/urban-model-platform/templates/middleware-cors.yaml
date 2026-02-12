@@ -1,0 +1,24 @@
+{{- if .Values.allowedOrigins }}
+{{- range $.Values.allowedOrigins }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ump-api-cors-{{ .name | lower }}
+spec:
+  headers:
+    accessControlAllowOriginList:
+{{- range .hosts }}
+      - {{ . | quote }}
+{{- end }}
+    accessControlAllowMethods:
+{{- range .allowedMethods }}
+      - {{ . | upper }}
+{{- end }}
+    accessControlAllowHeaders:
+{{- range .allowedHeaders }}
+      - {{ . | quote }}
+{{- end }}
+    accessControlAllowCredentials: {{ .allowCredentials }}
+{{- end }}
+{{- end }}
